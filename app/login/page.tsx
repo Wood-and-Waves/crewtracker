@@ -1,9 +1,16 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import { useState } from 'react'
 
 export default function LoginPage() {
   const supabase = createClient()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isSignUp, setIsSignUp] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [magicSent, setMagicSent] = useState(false)
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -14,16 +21,62 @@ export default function LoginPage() {
     })
   }
 
+  async function handleEmailAuth() {
+    setError('')
+    setLoading(true)
+    if (isSignUp) {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      })
+      if (error) setError(error.message)
+      else setMagicSent(true)
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) setError(error.message)
+      else window.location.href = '/dashboard'
+    }
+    setLoading(false)
+  }
+
+  async function handleMagicLink() {
+    setError('')
+    setLoading(true)
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    })
+    if (error) setError(error.message)
+    else setMagicSent(true)
+    setLoading(false)
+  }
+
+  if (magicSent) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
+          <p className="text-zinc-400 text-sm">We sent a confirmation link to <span className="text-white">{email}</span>. Click it to continue.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950">
       <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold text-white">CrewTracker</h1>
-          <p className="mt-2 text-sm text-zinc-400">Sign in to your account</p>
+          <p className="mt-2 text-sm text-zinc-400">
+            {isSignUp ? 'Create your account' : 'Sign in to your account'}
+          </p>
         </div>
+
+        {/* Google SSO */}
         <button
           onClick={signInWithGoogle}
-          className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100"
+          className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 mb-6"
         >
           <svg width="18" height="18" viewBox="0 0 18 18">
             <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -33,6 +86,59 @@ export default function LoginPage() {
           </svg>
           Continue with Google
         </button>
+
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-px flex-1 bg-zinc-700" />
+          <span className="text-xs text-zinc-500">or</span>
+          <div className="h-px flex-1 bg-zinc-700" />
+        </div>
+
+        {/* Email/Password */}
+        <div className="flex flex-col gap-3">
+          <input
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
+            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+          />
+
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          <button
+            onClick={handleEmailAuth}
+            disabled={loading}
+            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+          >
+            {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+          </button>
+
+          <button
+            onClick={handleMagicLink}
+            disabled={loading || !email}
+            className="w-full rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+          >
+            Send magic link instead
+          </button>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-zinc-500">
+          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+          <button
+            onClick={() => { setIsSignUp(!isSignUp); setError('') }}
+            className="text-blue-400 hover:text-blue-300"
+          >
+            {isSignUp ? 'Sign in' : 'Sign up'}
+          </button>
+        </p>
       </div>
     </div>
   )
