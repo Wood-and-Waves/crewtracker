@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -35,11 +35,12 @@ export async function proxy(request: NextRequest) {
 
   if (
     !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
+    !request.nextUrl.pathname.startsWith("/login") &&
+    !request.nextUrl.pathname.startsWith("/auth") &&
+    !request.nextUrl.pathname.startsWith("/invite")
   ) {
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = "/login"
     return NextResponse.redirect(url)
   }
 
@@ -48,6 +49,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }
