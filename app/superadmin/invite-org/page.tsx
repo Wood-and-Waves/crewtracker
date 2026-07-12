@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 export default function InviteOrgPage() {
   const [orgName, setOrgName] = useState('')
@@ -14,40 +13,22 @@ export default function InviteOrgPage() {
     setError('')
     setLoading(true)
 
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('invitations')
-      .insert({
-        email: email || null,
-        is_new_organization: true,
-        organization_name: orgName,
-        base_role: 'admin',
-        can_manage_users: true,
-        can_manage_billing: true,
-        can_manage_crew_directory: true,
-        can_import_crew: true,
-        can_view_crew_contacts: true,
-        can_create_shows: true,
-        can_edit_all_shows: true,
-        can_archive_shows: true,
-        can_duplicate_shows: true,
-        can_edit_timecards: true,
-        can_approve_timecards: true,
-        can_view_pay_rates: true,
-        can_edit_pay_rates: true,
-        can_manage_rulesets: true,
-        can_view_reports: true,
-        can_export_reports: true,
-        can_send_reports: true,
-        view_only: false,
+    try {
+      const res = await fetch('/api/admin/create-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgName, email: email || null }),
       })
-      .select()
-      .single()
 
-    if (error) {
-      setError(error.message)
-    } else {
-      setInviteLink(`${window.location.origin}/invite/${data.token}`)
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Something went wrong')
+      } else {
+        setInviteLink(`${window.location.origin}/invite/${data.token}`)
+      }
+    } catch (err) {
+      setError('Network error — please try again')
     }
 
     setLoading(false)
