@@ -57,16 +57,6 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
       return
     }
 
-    const { error: rulesetError } = await supabase
-      .from('payroll_rulesets')
-      .insert({ show_id: show.id })
-
-    if (rulesetError) {
-      setError(rulesetError.message)
-      setLoading(false)
-      return
-    }
-
     const dates = datesBetween(startDate, endDate)
     const workDayRows = dates.map((date, i) => ({
       show_id: show.id,
@@ -74,12 +64,18 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
       day_number: i + 1,
     }))
 
-    const { error: daysError } = await supabase
-      .from('work_days')
-      .insert(workDayRows)
+    const [rulesetResult, daysResult] = await Promise.all([
+      supabase.from('payroll_rulesets').insert({ show_id: show.id }),
+      supabase.from('work_days').insert(workDayRows),
+    ])
 
-    if (daysError) {
-      setError(daysError.message)
+    if (rulesetResult.error) {
+      setError(rulesetResult.error.message)
+      setLoading(false)
+      return
+    }
+    if (daysResult.error) {
+      setError(daysResult.error.message)
       setLoading(false)
       return
     }

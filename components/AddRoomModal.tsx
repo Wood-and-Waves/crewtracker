@@ -25,7 +25,9 @@ export default function AddRoomModal({
     setError('')
     setLoading(true)
 
-    const targetDayIds = applyAll ? remainingWorkDayIds : [currentWorkDayId]
+    const targetDayIds = applyAll
+      ? [currentWorkDayId, ...remainingWorkDayIds]
+      : [currentWorkDayId]
     const rows = targetDayIds.map(workDayId => ({ work_day_id: workDayId, name }))
 
     const { error: insertError } = await supabase.from('rooms').insert(rows)
@@ -63,7 +65,7 @@ export default function AddRoomModal({
           onChange={e => setName(e.target.value)}
           className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500 mb-3"
         />
-        {remainingWorkDayIds.length > 1 && (
+        {remainingWorkDayIds.length > 0 && (
           <label className="flex items-center gap-2 text-sm text-zinc-400 mb-4">
             <input
               type="checkbox"
