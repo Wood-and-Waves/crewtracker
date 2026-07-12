@@ -11,6 +11,17 @@ const TIMEZONES = [
   { value: 'America/Los_Angeles', label: 'Pacific' },
 ]
 
+function datesBetween(start: string, end: string) {
+  const dates: string[] = []
+  const cur = new Date(start + 'T00:00:00')
+  const last = new Date(end + 'T00:00:00')
+  while (cur <= last) {
+    dates.push(cur.toISOString().slice(0, 10))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return dates
+}
+
 export default function NewShowModal({ organizationId }: { organizationId: string }) {
   const router = useRouter()
   const supabase = createClient()
@@ -56,9 +67,26 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
       return
     }
 
+    const dates = datesBetween(startDate, endDate)
+    const workDayRows = dates.map((date, i) => ({
+      show_id: show.id,
+      date,
+      day_number: i + 1,
+    }))
+
+    const { error: daysError } = await supabase
+      .from('work_days')
+      .insert(workDayRows)
+
+    if (daysError) {
+      setError(daysError.message)
+      setLoading(false)
+      return
+    }
+
     setLoading(false)
     setOpen(false)
-    router.refresh()
+    router.push(`/dashboard/shows/${show.id}`)
   }
 
   if (!open) {
