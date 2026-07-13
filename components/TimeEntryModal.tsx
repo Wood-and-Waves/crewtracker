@@ -61,12 +61,17 @@ export default function TimeEntryModal({
 
     setLoading(true)
     const existing = allPunches.find(p => p.punch_type === type)
-    if (existing) {
-      await supabase.from('punches').update({ punched_at: combined.toISOString() }).eq('id', existing.id)
-    } else {
-      await supabase.from('punches').insert({ timecard_id: timecardId, punch_type: type, punched_at: combined.toISOString() })
-    }
+    const result = existing
+      ? await supabase.from('punches').update({ punched_at: combined.toISOString() }).eq('id', existing.id)
+      : await supabase.from('punches').insert({ timecard_id: timecardId, punch_type: type, punched_at: combined.toISOString() })
+
     setLoading(false)
+
+    if (result.error) {
+      setError(result.error.message)
+      return
+    }
+
     router.refresh()
     onClose()
   }
