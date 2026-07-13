@@ -24,6 +24,26 @@ export async function acceptInvite(token: string, userId: string) {
 
     if (orgError || !org) return { error: 'Failed to create organization' }
     organizationId = org.id
+
+    // Seed default AV roles for the new org, matching iOS's seedAVRoles behavior.
+    // Guarded against re-seeding: if this org already has roles (e.g. invite
+    // token was reused, or accept ran twice), skip to avoid duplicates.
+    const { count: existingRoleCount } = await admin
+      .from('av_roles')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+
+    if (!existingRoleCount || existingRoleCount === 0) {
+      const defaultRoles = [
+        ['Production Manager', 1], ['Director', 2], ['A1', 3], ['A2', 4],
+        ['L1', 5], ['V1', 6], ['Camera Operator', 7], ['Graphics Operator', 8],
+        ['LD', 9], ['BO Tech', 10], ['Motors', 11], ['Riggers', 12], ['Stagehand', 13],
+      ] as const
+
+      await admin.from('av_roles').insert(
+        defaultRoles.map(([name, sort_order]) => ({ organization_id: organizationId, name, sort_order }))
+      )
+    }
   }
 
   const { error: profileError } = await admin
