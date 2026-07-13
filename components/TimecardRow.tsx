@@ -4,15 +4,20 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, Punch } from '@/lib/punches'
+import { straightTimeHours, overtimeHours, doubleTimeHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
 
 export default function TimecardRow({
   timecard,
   punches,
   timezone,
+  ruleset,
+  allTimecards,
 }: {
-  timecard: { id: string; crew_member_name: string; role: string; travel_in_day: boolean; travel_out_day: boolean }
+  timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean }
   punches: Punch[]
   timezone: string
+  ruleset: PayrollRuleset
+  allTimecards: TimecardLike[]
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -20,6 +25,21 @@ export default function TimecardRow({
 
   const next = nextPunchType(punches)
   const wrapped = isWrapped(punches)
+
+  const timecardInput: TimecardLike = {
+    id: timecard.id,
+    crew_member_id: timecard.crew_member_id,
+    day_rate: timecard.day_rate,
+    is_travel_day: timecard.is_travel_day,
+    travel_in_day: timecard.travel_in_day,
+    travel_out_day: timecard.travel_out_day,
+    pay_as_half_day: timecard.pay_as_half_day,
+    punches,
+  }
+
+  const st = wrapped ? straightTimeHours(timecardInput, allTimecards, ruleset) : 0
+  const ot = wrapped ? overtimeHours(timecardInput, allTimecards, ruleset) : 0
+  const dt = wrapped ? doubleTimeHours(timecardInput, allTimecards, ruleset) : 0
 
   async function punch(type: string) {
     setLoading(type)
@@ -54,15 +74,22 @@ export default function TimecardRow({
           <p className="text-sm font-medium text-white">{timecard.crew_member_name}</p>
           <p className="text-xs text-zinc-500">{timecard.role}</p>
         </div>
-        {punches.length > 0 && (
-          <button
-            onClick={undoLast}
-            disabled={loading === 'undo'}
-            className="text-xs text-zinc-500 hover:text-zinc-300"
-          >
-            ↶ Undo
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {wrapped && (
+            <p className="text-xs text-zinc-400">
+              {st.toFixed(2)} ST{ot > 0 && ` / ${ot.toFixed(2)} OT`}{dt > 0 && ` / ${dt.toFixed(2)} DT`}
+            </p>
+          )}
+          {punches.length > 0 && (
+            <button
+              onClick={undoLast}
+              disabled={loading === 'undo'}
+              className="text-xs text-zinc-500 hover:text-zinc-300"
+            >
+              ↶ Undo
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5 mb-2">

@@ -1,5 +1,15 @@
-// Ported from CrewTracker iOS PayrollCalculator (Models.swift)
-// Stateless functions, no DB dependency.
+// Faithful TypeScript port of the CrewTracker iOS PayrollCalculator
+// (Models.swift). Stateless functions, no DB dependency.
+//
+// NOTE: TravelRate raw values are assumed to be 'halfDay' / 'fullDay' in
+// the Postgres schema (per the web app brief), NOT the iOS raw strings
+// ("Half Day" / "Full Day"). This has not been verified against the actual
+// stored column values — confirm in Supabase if travel pay looks wrong.
+//
+// NOTE: iOS applies a user-configurable time-rounding setting (exact /
+// nearest 15 / nearest 30) via UserDefaults before computing net hours.
+// The web app has no equivalent setting yet, so calculateNetHours defaults
+// to exact-minute rounding (roundingMinutes = 1) until that setting exists.
 
 export type PunchRecord = { punch_type: string; punched_at: string }
 
@@ -18,7 +28,9 @@ export type PayrollRuleset = {
   short_turn_rest_hours: number
 }
 
-export type TimecardInput = {
+export type TimecardLike = {
+  id: string
+  crew_member_id: string | null
   day_rate: number
   is_travel_day: boolean
   travel_in_day: boolean
@@ -32,191 +44,255 @@ function getPunchTime(punches: PunchRecord[], type: string): Date | null {
   return p ? new Date(p.punched_at) : null
 }
 
-function minutesBetween(a: Date, b: Date): number {
-  return (b.getTime() - a.getTime()) / 60000
+function mealBreakPairs(tc: TimecardLike): [Date, Date][] {
+  const pairs: [Date, Date][] = []
+  const m1Out = getPunchTime(tc.punches, 'meal_out')
+  const m1In = getPunchTime(tc.punches, 'meal_in')
+  const m2Out = getPunchTime(tc.punches, 'meal2_out')
+  const m2In = getPunchTime(tc.punches, 'meal2_in')
+  if (m1Out && m1In) pairs.push([m1Out, m1In])
+  if (m2Out && m2In) pairs.push([m2Out, m2In])
+  return pairs
 }
 
-// Minutes actually deducted for one meal break, per ruleset rules.
-// Breaks under minimumMealBreakMinutes = no deduction (working lunch).
-// Breaks at/over that = deduct up to mealBreakDeductionCap.
-function deductedMinutesForBreak(rawMinutes: number, ruleset: PayrollRuleset): number {
-  if (rawMinutes <= 0) return 0
-  if (ruleset.minimum_meal_break_enabled && rawMinutes < ruleset.minimum_meal_break_minutes) {
-    return 0
-  }
-  return Math.min(rawMinutes, ruleset.meal_break_deduction_cap)
-}
+const DISTANT_PAST = new Date(-8640000000000000)
 
-// Raw (undeducted) meal break durations, for display purposes.
-export function rawMealBreakMinutes(timecard: TimecardInput): { m1: number; m2: number } {
-  const { punches } = timecard
-  const mealOut = getPunchTime(punches, 'meal_out')
-  const mealIn = getPunchTime(punches, 'meal_in')
-  const meal2Out = getPunchTime(punches, 'meal2_out')
-  const meal2In = getPunchTime(punches, 'meal2_in')
+// MARK: Net Hours
 
-  const m1 = mealOut && mealIn ? minutesBetween(mealOut, mealIn) : 0
-  const m2 = meal2Out && meal2In ? minutesBetween(meal2Out, meal2In) : 0
-  return { m1, m2 }
-}
-
-// Caps the meal-break duration shown in SMS timesheets/displays.
-export function displayMealBreakMinutes(rawMinutes: number, ruleset: PayrollRuleset): number {
-  return Math.min(rawMinutes, ruleset.meal_break_deduction_cap)
-}
-
-// Net hours worked for the day, after meal deductions.
-export function calculateNetHours(timecard: TimecardInput, ruleset: PayrollRuleset): number {
-  const start = getPunchTime(timecard.punches, 'start')
-  const end = getPunchTime(timecard.punches, 'end')
+export function calculateNetHours(tc: TimecardLike, ruleset: PayrollRuleset, roundingMinutes: number = 1): number {
+  const start = getPunchTime(tc.punches, 'start')
+  const end = getPunchTime(tc.punches, 'end')
   if (!start || !end) return 0
 
-  const totalMinutes = minutesBetween(start, end)
-  const { m1, m2 } = rawMealBreakMinutes(timecard)
-  const deducted = deductedMinutesForBreak(m1, ruleset) + deductedMinutesForBreak(m2, ruleset)
+  const grossSeconds = (end.getTime() - start.getTime()) / 1000
+  const minBreakSeconds = ruleset.minimum_meal_break_enabled ? ruleset.minimum_meal_break_minutes * 60 : 0
+  const capSeconds = ruleset.meal_break_deduction_cap * 60
 
-  return Math.max(0, (totalMinutes - deducted) / 60)
-}
-
-// Splits a day's net hours into ST/OT/DT, given ruleset thresholds.
-// forcedDoubleTime = true when a short-turnaround penalty applies (whole day at DT).
-function splitHours(netHours: number, ruleset: PayrollRuleset, forcedDoubleTime = false) {
-  if (forcedDoubleTime) {
-    return { st: 0, ot: 0, dt: netHours }
-  }
-
-  const otThreshold = ruleset.overtime_after_hours
-  const dtThreshold = ruleset.double_time_enabled ? ruleset.double_time_after_hours : Infinity
-
-  const st = Math.min(netHours, otThreshold)
-  const ot = Math.max(0, Math.min(netHours, dtThreshold) - otThreshold)
-  const dt = Math.max(0, netHours - dtThreshold)
-
-  return { st, ot, dt }
-}
-
-export function straightTimeHours(timecard: TimecardInput, ruleset: PayrollRuleset, forcedDoubleTime = false): number {
-  return splitHours(calculateNetHours(timecard, ruleset), ruleset, forcedDoubleTime).st
-}
-
-export function overtimeHours(timecard: TimecardInput, ruleset: PayrollRuleset, forcedDoubleTime = false): number {
-  return splitHours(calculateNetHours(timecard, ruleset), ruleset, forcedDoubleTime).ot
-}
-
-export function doubleTimeHours(timecard: TimecardInput, ruleset: PayrollRuleset, forcedDoubleTime = false): number {
-  return splitHours(calculateNetHours(timecard, ruleset), ruleset, forcedDoubleTime).dt
-}
-
-// "Paid" variant: ceiling-round net hours to the next full hour BEFORE
-// splitting into ST/OT/DT. This is the billable/payable figure.
-export function paidNetHours(timecard: TimecardInput, ruleset: PayrollRuleset): number {
-  const net = calculateNetHours(timecard, ruleset)
-  return net > 0 ? Math.ceil(net) : 0
-}
-
-export function paidStraightTimeHours(timecard: TimecardInput, ruleset: PayrollRuleset, forcedDoubleTime = false): number {
-  return splitHours(paidNetHours(timecard, ruleset), ruleset, forcedDoubleTime).st
-}
-
-export function paidOvertimeHours(timecard: TimecardInput, ruleset: PayrollRuleset, forcedDoubleTime = false): number {
-  return splitHours(paidNetHours(timecard, ruleset), ruleset, forcedDoubleTime).ot
-}
-
-export function paidDoubleTimeHours(timecard: TimecardInput, ruleset: PayrollRuleset, forcedDoubleTime = false): number {
-  return splitHours(paidNetHours(timecard, ruleset), ruleset, forcedDoubleTime).dt
-}
-
-// Meal penalty: triggered if crew exceed the grace period without a meal break.
-// Max 2 per day (one per meal period).
-export function mealPenaltyCount(timecard: TimecardInput, ruleset: PayrollRuleset): number {
-  if (!ruleset.meal_penalty_enabled) return 0
-
-  const start = getPunchTime(timecard.punches, 'start')
-  const end = getPunchTime(timecard.punches, 'end')
-  if (!start || !end) return 0
-
-  const mealOut = getPunchTime(timecard.punches, 'meal_out')
-  const mealIn = getPunchTime(timecard.punches, 'meal_in')
-  const meal2Out = getPunchTime(timecard.punches, 'meal2_out')
-
-  let count = 0
-  const graceMinutes = ruleset.meal_penalty_grace_period * 60
-
-  // Period 1: start -> first meal (or end, if no meal taken)
-  const period1End = mealOut || end
-  if (minutesBetween(start, period1End) > graceMinutes && !mealOut) {
-    count += 1
-  }
-
-  // Period 2: end of meal 1 -> second meal (or end, if no second meal taken)
-  if (mealIn) {
-    const period2End = meal2Out || end
-    if (minutesBetween(mealIn, period2End) > graceMinutes && !meal2Out) {
-      count += 1
+  let deductionSeconds = 0
+  for (const [outP, inP] of mealBreakPairs(tc)) {
+    const duration = (inP.getTime() - outP.getTime()) / 1000
+    if (duration >= minBreakSeconds) {
+      deductionSeconds += Math.min(duration, capSeconds)
     }
   }
 
-  return Math.min(count, 2)
+  const netSeconds = Math.max(0, grossSeconds - deductionSeconds)
+  const netMinutes = Math.round(netSeconds / 60)
+
+  const safeInterval = roundingMinutes > 0 ? roundingMinutes : 1
+  if (safeInterval === 1) return netMinutes / 60
+
+  const remainder = netMinutes % safeInterval
+  const roundedMinutes = remainder > 0 ? netMinutes - remainder + safeInterval : netMinutes
+  return roundedMinutes / 60
 }
 
-export function mealPenaltyTotal(timecard: TimecardInput, ruleset: PayrollRuleset): number {
-  const count = mealPenaltyCount(timecard, ruleset)
+// Public accessor for meal break durations, in seconds, completed breaks only.
+export function mealBreakDurations(tc: TimecardLike): number[] {
+  return mealBreakPairs(tc).map(([o, i]) => (i.getTime() - o.getTime()) / 1000)
+}
+
+// Duration to DISPLAY (reports/SMS), whole minutes, capped at the deduction cap.
+export function displayMealBreakMinutes(durationSeconds: number, ruleset: PayrollRuleset): number {
+  const minutes = Math.round(durationSeconds / 60)
+  const cap = Math.round(ruleset.meal_break_deduction_cap)
+  return Math.min(minutes, cap)
+}
+
+// MARK: Short Turnaround
+
+export function isShortTurnaround(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset): boolean {
+  if (!ruleset.short_turn_penalty_enabled) return false
+  const start = getPunchTime(tc.punches, 'start')
+  if (!start || !tc.crew_member_id) return false
+
+  const previousCards = allTimecards.filter(o => {
+    if (o.crew_member_id !== tc.crew_member_id || o.id === tc.id) return false
+    const end = getPunchTime(o.punches, 'end') ?? DISTANT_PAST
+    return end < start
+  })
+  if (previousCards.length === 0) return false
+
+  const lastCard = previousCards.reduce((a, b) => {
+    const aEnd = getPunchTime(a.punches, 'end') ?? DISTANT_PAST
+    const bEnd = getPunchTime(b.punches, 'end') ?? DISTANT_PAST
+    return aEnd < bEnd ? b : a
+  })
+  const lastEnd = getPunchTime(lastCard.punches, 'end')
+  if (!lastEnd) return false
+
+  const restSeconds = (start.getTime() - lastEnd.getTime()) / 1000
+  return restSeconds < ruleset.short_turn_rest_hours * 3600
+}
+
+// MARK: Worked Hours (raw, recordkeeping only — NOT used for pay)
+
+export function straightTimeHours(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  if (tc.is_travel_day) return 0
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
+  if (isShortTurnaround(tc, allTimecards, ruleset)) return 0
+  const net = calculateNetHours(tc, ruleset, roundingMinutes)
+  return Math.min(net, ruleset.overtime_after_hours)
+}
+
+export function overtimeHours(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  if (tc.is_travel_day) return 0
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
+  if (isShortTurnaround(tc, allTimecards, ruleset)) return 0
+  const net = calculateNetHours(tc, ruleset, roundingMinutes)
+  const otHours = net - ruleset.overtime_after_hours
+  if (otHours <= 0) return 0
+  if (ruleset.double_time_enabled) {
+    return Math.min(otHours, ruleset.double_time_after_hours - ruleset.overtime_after_hours)
+  }
+  return otHours
+}
+
+export function doubleTimeHours(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  if (tc.is_travel_day) return 0
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
+  const net = calculateNetHours(tc, ruleset, roundingMinutes)
+  if (isShortTurnaround(tc, allTimecards, ruleset)) return net
+  if (!ruleset.double_time_enabled) return 0
+  return Math.max(0, net - ruleset.double_time_after_hours)
+}
+
+// MARK: Paid Hours (1.3 — ceiling rounded, drives all pay)
+
+export function paidNetHours(tc: TimecardLike, ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  if (tc.is_travel_day) return 0
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
+  return Math.ceil(calculateNetHours(tc, ruleset, roundingMinutes))
+}
+
+export function paidStraightTimeHours(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  if (tc.is_travel_day) return 0
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
+  if (isShortTurnaround(tc, allTimecards, ruleset)) return 0
+  const paidNet = paidNetHours(tc, ruleset, roundingMinutes)
+  return Math.min(paidNet, ruleset.overtime_after_hours)
+}
+
+export function paidOvertimeHours(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  if (tc.is_travel_day) return 0
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
+  if (isShortTurnaround(tc, allTimecards, ruleset)) return 0
+  const paidNet = paidNetHours(tc, ruleset, roundingMinutes)
+  const otHours = paidNet - ruleset.overtime_after_hours
+  if (otHours <= 0) return 0
+  if (ruleset.double_time_enabled) {
+    return Math.min(otHours, ruleset.double_time_after_hours - ruleset.overtime_after_hours)
+  }
+  return otHours
+}
+
+export function paidDoubleTimeHours(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  if (tc.is_travel_day) return 0
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
+  const paidNet = paidNetHours(tc, ruleset, roundingMinutes)
+  if (isShortTurnaround(tc, allTimecards, ruleset)) return paidNet
+  if (!ruleset.double_time_enabled) return 0
+  return Math.max(0, paidNet - ruleset.double_time_after_hours)
+}
+
+// MARK: Meal Penalties
+
+export function mealPenaltyCount(tc: TimecardLike, ruleset: PayrollRuleset): number {
+  if (tc.is_travel_day) return 0
+  if (!ruleset.meal_penalty_enabled) return 0
+  const start = getPunchTime(tc.punches, 'start')
+  if (!start) return 0
+
+  const graceSeconds = ruleset.meal_penalty_grace_period * 3600
+  let penalties = 0
+
+  const m1Out = getPunchTime(tc.punches, 'meal_out')
+  const end = getPunchTime(tc.punches, 'end')
+
+  if (m1Out) {
+    if ((m1Out.getTime() - start.getTime()) / 1000 > graceSeconds) penalties += 1
+  } else if (end) {
+    if ((end.getTime() - start.getTime()) / 1000 > graceSeconds) penalties += 1
+  }
+
+  const m1In = getPunchTime(tc.punches, 'meal_in')
+  if (m1In) {
+    const m2Out = getPunchTime(tc.punches, 'meal2_out')
+    if (m2Out) {
+      if ((m2Out.getTime() - m1In.getTime()) / 1000 > graceSeconds) penalties += 1
+    } else if (end) {
+      if ((end.getTime() - m1In.getTime()) / 1000 > graceSeconds) penalties += 1
+    }
+  }
+
+  return penalties
+}
+
+export function mealPenaltyTotal(tc: TimecardLike, ruleset: PayrollRuleset): number {
+  const count = mealPenaltyCount(tc, ruleset)
   if (count === 0) return 0
-  const amount = ruleset.meal_penalty_amount > 0
-    ? ruleset.meal_penalty_amount
-    : hourlyRate(timecard.day_rate, ruleset) * 1.5 // defaults to OT hourly rate
-  return count * amount
+  const stThreshold = ruleset.overtime_after_hours > 0 ? ruleset.overtime_after_hours : 10
+  const hourlyRate = tc.day_rate / stThreshold
+  const otRate = hourlyRate * 1.5
+  const penaltyRate = ruleset.meal_penalty_amount > 0 ? ruleset.meal_penalty_amount : otRate
+  return count * penaltyRate
 }
 
-export function hourlyRate(dayRate: number, ruleset: PayrollRuleset): number {
-  return dayRate / ruleset.overtime_after_hours
+// MARK: Hybrid Travel Pay
+
+// Additive travel pay for a work day that ALSO includes a travel leg.
+// Returns 0 on pure travel days (is_travel_day) — those are paid entirely
+// through totalPay's travel branch instead.
+export function travelLegPay(tc: TimecardLike, ruleset: PayrollRuleset): number {
+  if (tc.is_travel_day) return 0
+  if (!tc.travel_in_day && !tc.travel_out_day) return 0
+  const legAmount = ruleset.travel_rate === 'fullDay' ? tc.day_rate : tc.day_rate / 2
+  const legs = (tc.travel_in_day ? 1 : 0) + (tc.travel_out_day ? 1 : 0)
+  return legs * legAmount
 }
 
-// Travel pay for a day: pure travel day (isTravelDay) or additive
-// travel-in/travel-out legs on a hybrid work+travel day.
-export function travelPayAmount(timecard: TimecardInput, ruleset: PayrollRuleset): number {
-  const multiplier = ruleset.travel_rate === 'halfDay' ? 0.5 : 1
-  let total = 0
+// MARK: Total Pay
 
-  if (timecard.is_travel_day) {
-    total += timecard.day_rate * multiplier
-  }
-  if (timecard.travel_in_day) {
-    total += timecard.day_rate * multiplier
-  }
-  if (timecard.travel_out_day) {
-    total += timecard.day_rate * multiplier
+export function totalPay(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  // Pure travel day (no work)
+  if (tc.is_travel_day) {
+    return ruleset.travel_rate === 'fullDay' ? tc.day_rate : tc.day_rate / 2
   }
 
-  return total
-}
+  // No punches
+  if (!getPunchTime(tc.punches, 'start') || !getPunchTime(tc.punches, 'end')) return 0
 
-// Whether the gap between previous day's end punch and this day's start
-// punch is short enough to trigger the forced-double-time rule.
-export function isShortTurnaround(
-  previousDayEnd: Date | null,
-  currentDayStart: Date | null,
-  ruleset: PayrollRuleset
-): boolean {
-  if (!ruleset.short_turn_penalty_enabled || !previousDayEnd || !currentDayStart) return false
-  const restHours = minutesBetween(previousDayEnd, currentDayStart) / 60
-  return restHours < ruleset.short_turn_rest_hours
-}
+  const stThreshold = ruleset.overtime_after_hours > 0 ? ruleset.overtime_after_hours : 10
+  const hourlyRate = tc.day_rate / stThreshold
+  const otRate = hourlyRate * 1.5
+  const dtRate = hourlyRate * 2
 
-// Total pay for a single day: worked hours + travel + meal penalties,
-// with a minimum-guarantee floor of the full day rate.
-export function totalPay(timecard: TimecardInput, ruleset: PayrollRuleset, forcedDoubleTime = false): number {
-  if (timecard.is_travel_day && timecard.punches.length === 0) {
-    return travelPayAmount(timecard, ruleset)
+  const isSTA = isShortTurnaround(tc, allTimecards, ruleset)
+  const travelPay = travelLegPay(tc, ruleset)
+
+  if (isSTA) {
+    const paidNet = paidNetHours(tc, ruleset, roundingMinutes)
+    const guaranteeHours = stThreshold
+    const actualDTHours = Math.max(paidNet, guaranteeHours)
+    const basePay = actualDTHours * dtRate
+    return basePay + mealPenaltyTotal(tc, ruleset) + travelPay
   }
 
-  const rate = hourlyRate(timecard.day_rate, ruleset)
-  const { st, ot, dt } = splitHours(calculateNetHours(timecard, ruleset), ruleset, forcedDoubleTime)
+  const st = paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+  const ot = paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
+  const dt = paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+  const netHours = calculateNetHours(tc, ruleset, roundingMinutes)
 
-  let pay = st * rate + ot * rate * 1.5 + dt * rate * 2
-  pay = Math.max(pay, timecard.day_rate) // minimum guarantee
-  pay += travelPayAmount(timecard, ruleset)
-  pay += mealPenaltyTotal(timecard, ruleset)
+  const workedAnyHours = st > 0 || ot > 0 || dt > 0
+  let dayBase: number
+  if (!workedAnyHours) {
+    dayBase = 0
+  } else if (tc.pay_as_half_day && netHours <= 5) {
+    dayBase = tc.day_rate / 2
+  } else {
+    dayBase = tc.day_rate
+  }
 
-  return pay
+  const total = dayBase + ot * otRate + dt * dtRate
+  return total + mealPenaltyTotal(tc, ruleset) + travelPay
 }
