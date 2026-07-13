@@ -153,6 +153,7 @@ export default function EditCrewMemberClient({
           <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-6 shadow-xl">
             <h2 className="text-lg font-bold text-white mb-4">New Role</h2>
             <select
+              key={availableRoles.map(r => r.id).join(',')}
               value={newRoleName}
               onChange={e => setNewRoleName(e.target.value)}
               className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500 mb-3"
