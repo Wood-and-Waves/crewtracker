@@ -125,7 +125,12 @@ export default async function ShowDetailPage({
   return (
     <div className="p-6 md:p-10">
       <Link href="/dashboard" className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Shows</Link>
-      <h1 className="text-2xl font-bold mt-2">{show.name}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold mt-2">{show.name}</h1>
+        <Link href={`/dashboard/shows/${id}/reports`} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
+          View Report
+        </Link>
+      </div>
 
       <div className="flex items-center justify-center gap-4 my-6">
         <Link
