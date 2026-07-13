@@ -134,7 +134,7 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
             className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
           >
             {TIMEZONES.map(tz => (
-              <option key={tz.value} value={tz.value}>{tz.label}</option>
+              <option key={tz.value} value={tz.value} className="bg-zinc-800 text-white">{tz.label}</option>
             ))}
           </select>
 

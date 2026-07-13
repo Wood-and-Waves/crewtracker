@@ -204,9 +204,9 @@ export default function CrewDirectoryClient({
             onChange={e => setSort(e.target.value as SortOption)}
             className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
           >
-            <option value="lastName">Sort: Last Name</option>
-            <option value="firstName">Sort: First Name</option>
-            <option value="role">Sort: Role</option>
+            <option value="lastName" className="bg-zinc-800 text-white">Sort: Last Name</option>
+            <option value="firstName" className="bg-zinc-800 text-white">Sort: First Name</option>
+            <option value="role" className="bg-zinc-800 text-white">Sort: Role</option>
           </select>
           <button onClick={() => setShowImport(true)} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
             Import

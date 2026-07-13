@@ -158,7 +158,7 @@ export default function EditCrewMemberClient({
               className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500 mb-3"
             >
               {availableRoles.map(r => (
-                <option key={r.id} value={r.name}>{r.name}</option>
+                <option key={r.id} value={r.name} className="bg-zinc-800 text-white">{r.name}</option>
               ))}
             </select>
             <input
