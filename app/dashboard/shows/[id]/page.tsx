@@ -3,6 +3,8 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
+import TimecardRow from '@/components/TimecardRow'
+import BatchPunchBar from '@/components/BatchPunchBar'
 
 export default async function ShowDetailPage({
   params,
@@ -30,6 +32,8 @@ export default async function ShowDetailPage({
     .single()
 
   if (!show) notFound()
+
+  const timezone = show.timezone_identifier || 'America/Chicago'
 
   const { data: workDays } = await supabase
     .from('work_days')
@@ -67,14 +71,24 @@ export default async function ShowDetailPage({
       .from('timecards')
       .select('*')
       .in('room_id', roomsList.map(r => r.id))
+
+    const timecardIds = (timecards || []).map(t => t.id)
+    const { data: punches } = timecardIds.length > 0
+      ? await supabase.from('punches').select('*').in('timecard_id', timecardIds)
+      : { data: [] }
+
     for (const room of roomsList) {
-      roomTimecards[room.id] = (timecards || []).filter(t => t.room_id === room.id)
+      roomTimecards[room.id] = (timecards || [])
+        .filter(t => t.room_id === room.id)
+        .map(tc => ({
+          ...tc,
+          punches: (punches || []).filter(p => p.timecard_id === tc.id),
+        }))
     }
   }
 
   const remainingWorkDayIds = workDays.slice(activeIndex + 1).map(d => d.id)
 
-  // Look up rooms with the same name on remaining days, per current room
   const remainingRoomsByName: Record<string, string[]> = {}
   if (roomsList.length > 0 && remainingWorkDayIds.length > 0) {
     const { data: futureRooms } = await supabase
@@ -125,15 +139,16 @@ export default async function ShowDetailPage({
           <div key={room.id} className="rounded-2xl bg-zinc-900 p-5">
             <h2 className="text-lg font-bold text-white mb-3">{room.name}</h2>
 
+            {roomTimecards[room.id]?.length > 0 && (
+              <BatchPunchBar timecards={roomTimecards[room.id]} />
+            )}
+
             <div className="flex flex-col gap-2 mb-4">
               {roomTimecards[room.id]?.length === 0 && (
                 <p className="text-sm text-zinc-500">No crew staffed yet.</p>
               )}
               {roomTimecards[room.id]?.map(tc => (
-                <div key={tc.id} className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-3 py-2">
-                  <span className="text-sm text-white">{tc.crew_member_name}</span>
-                  <span className="text-xs text-zinc-500">{tc.role}</span>
-                </div>
+                <TimecardRow key={tc.id} timecard={tc} punches={tc.punches} timezone={timezone} />
               ))}
             </div>
 
