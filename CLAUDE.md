@@ -30,6 +30,12 @@ Dan (the developer) has no professional dev background. Claude writes the code; 
 - Surface errors instead of failing silently. This has bitten the project before: RLS gaps that silently blocked saves, updates that "didn't take" with no visible error.
 - If a new table is added, don't assume RLS policies exist — check `pg_policies` before assuming a feature "should just work." The schema was originally built SELECT-only in several places and INSERT/UPDATE/DELETE policies had to be retrofitted per table as features hit walls.
 
+## Local tooling (set up — use it, don't ask Dan to paste things)
+
+- **git push** works directly from here — credentials are cached via `git config credential.helper store`. No need to hand commits to Dan for GitHub Desktop anymore.
+- **Direct SQL access**: `DATABASE_URL` is in `.env.local` (Supabase "Transaction pooler" connection string — the "Direct connection" host is IPv6-only and won't resolve here). Run SQL files with `npm run db:sql -- path/to/file.sql` (wraps `scripts/run-sql.mjs`, a thin `pg` client). Use this for RLS policies, schema migrations, one-off data checks — no more handing Dan copy-paste SQL for the Supabase SQL Editor.
+- **Vercel CLI**: `npx vercel inspect crewtracker-lime.vercel.app` / `npx vercel ls crewtracker` to check deployment status and build info directly after a push, instead of guessing whether a deploy succeeded.
+
 ## Design language
 
 Pure black background, zinc-900 cards with ~20px corner radius, no borders, iOS system blue accents, bold white headers, gray secondary text. Sidebar nav on desktop, collapses to a floating pill-shaped bottom tab bar on mobile. Intentionally mirrors the iOS app's visual language.
@@ -49,43 +55,50 @@ app/
     shows/[id]/page.tsx        — Show workspace: day nav, room columns, tracker console
     shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export
+    settings/page.tsx           — personal prefs, org settings, AV Roles editor
   api/
     admin/create-invite/route.ts — server-side invite creation (service role, bypasses RLS)
     invite/accept/route.ts       — finalizes invite acceptance for password sign-in path
   invite/[token]/page.tsx      — invite landing page
   invite/[token]/InviteAuthForm.tsx — client auth form for invite flow
-  login/page.tsx               — Google SSO + email/password + magic link
+  login/page.tsx               — Google SSO + email/password + magic link + forgot-password link
+  auth/reset-password/page.tsx — sets a new password after a recovery-link redirect
   superadmin/page.tsx          — super admin panel
   superadmin/invite-org/page.tsx — generate new org invite links
 components/
   AppShell.tsx                 — responsive sidebar/tab-bar nav
   NewShowModal.tsx              — create show, auto-generates work_days
-  AddRoomModal.tsx               — add room to a work day (optionally all remaining days)
-  StaffRoomModal.tsx             — bulk staff crew into a room
+  AddRoomModal.tsx               — add room to a work day (optionally all remaining days); blocks duplicate room names on the same day
+  RoomActionsMenu.tsx            — rename/delete a room (per-day, matches the room model)
+  StaffRoomModal.tsx             — bulk staff crew into a room ("apply to all remaining days" defaults checked)
   TimecardRow.tsx / TimeEntryModal.tsx — punch rows + manual time entry w/ chronology validation
   BatchPunchBar.tsx              — room-level batch punch actions
   CrewDirectoryClient.tsx / EditCrewMemberClient.tsx
-  EditShowClient.tsx             — all Edit Show fields batched into one Save button
+  EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode
   ExportCSVButton.tsx / ExportPDFButton.tsx — gated by financials permission
+  ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx
 lib/
   supabase/client.ts / server.ts / admin.ts
   payroll.ts    — TypeScript port of iOS PayrollCalculator
-  punches.ts    — punch ordering/labels + chronology validation
+  punches.ts    — punch ordering/labels + chronology validation; formatPunchTime takes a use24Hour flag
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
 proxy.ts        — auth middleware (protects all routes)
+scripts/
+  run-sql.mjs   — runs a .sql file against DATABASE_URL (npm run db:sql -- file.sql)
+  sql/          — one-off SQL scripts kept for reference (RLS policies, migrations, checks)
 ```
 
 ## Database schema
 
-- `organizations` — id, name, created_at
-- `profiles` — id (= auth.uid), organization_id, full_name, email, base_role, + permission booleans
+- `organizations` — id, name, created_at, timecard_rounding_minutes (default 1 = exact minute; 15/30 also valid), default_cc_email (nullable, unused until email delivery is built). Has an UPDATE policy gated to `can_manage_users`.
+- `profiles` — id (= auth.uid), organization_id, full_name, email, base_role, use_24_hour_time (bool), shoulder_surfer_mode (bool), + permission booleans
 - `subscriptions` — one per org, auto-created via `handle_new_organization()` trigger
 - `invitations` — token-based invites; `token`/`expires_at` have DB defaults
 - `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool, no UI yet), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), created_by
 - `show_assignments` — links users to specific shows
 - `payroll_rulesets` — one per show; fields match iOS `PayrollRuleset` exactly
 - `work_days` — id, show_id, date, day_number
-- `rooms` — id, work_day_id, name (scoped to a day, not persistent across the show)
+- `rooms` — id, work_day_id, name (scoped to a day, not persistent across the show). Has full SELECT/INSERT/UPDATE/DELETE policies (UPDATE/DELETE added when room rename/delete UI was built).
 - `timecards` — id, room_id, crew_member_id, crew_member_name, role, day_rate, is_travel_day, travel_in_day, travel_out_day, pay_as_half_day
 - `punches` — id, timecard_id, punch_type (`start|meal_out|meal_in|meal2_out|meal2_in|end`), punched_at
 - `crew_members` — id, organization_id, full_name, email, phone, notes
@@ -112,22 +125,23 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - Pay As Half Day: manual PM toggle, only shown for ≤5hr days — not automatic, since it's a negotiated/contractual call.
 - **Worked vs Paid**: Worked = raw hours actually clocked. Paid = per-day ceiling-rounded hours (each day's net hours rounded up before summing across days) — this is what's billed. Example: 0.25hr OT Monday + 0.25hr OT Tuesday = 2hr billable OT, not 0.5hr. Validated against a real client payroll spreadsheet.
 - Display convention: on-screen By Day/By Crew reports show raw **Worked** hours; Master Summary totals and PDF/CSV show **Paid** (ceiling-rounded); PDF/CSV show both explicitly.
-- Web has no rounding-preference setting yet — `calculateNetHours` hardcodes exact-minute rounding. iOS has a `timeRounding` UserDefaults toggle (exact/15/30 min) not yet ported.
+- Timecard rounding is org-wide (`organizations.timecard_rounding_minutes`, set on the Settings page), unlike iOS's per-device `timeRounding` UserDefaults toggle. Every payroll function that calls `calculateNetHours` takes a `roundingMinutes` param (default 1 = exact minute); every call site across the app threads the org's value through explicitly. If you add a new call site, don't let it silently fall back to the default — fetch and pass the real value.
 
 ## Known gaps / not yet built
 
-- Room delete/rename (exists on iOS via context menu)
-- App-level Settings page (`/dashboard/settings` 404s) — dark mode toggle, 24-hour time toggle, Shoulder Surfer Mode, Edit Global AV Roles, Default CC Email, Timecard Rounding all exist on iOS, none ported
-- Show archiving — `archived` column exists, no UI to toggle/filter
 - SMS/text timesheet delivery (iOS has native SMS composer, no web equivalent)
-- Email report delivery (iOS has native Mail composer; web would need something like Resend)
+- Email report delivery (iOS has native Mail composer; web would need something like Resend). `organizations.default_cc_email` already exists for this, just unused.
+- Dark mode — **intentionally dropped, not just deferred.** The web app was built pure-black-only from day one; there's no light theme anywhere in the CSS, unlike iOS which had both. Dan explicitly does not want a toggle bolted on — he wants a full UI redesign at some point and isn't attached to the current look. Don't build a light theme without that being the explicit ask.
 - Microsoft/Azure SSO, Capacitor iOS/Android wrapping, Stripe billing — all deferred
 - Crew app access (crew role) — schema ready, UI deferred
+- Room delete/rename, show archiving, and the Settings page (24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, default CC email, AV Roles editor) are all built — see File structure above.
 
 ## Past incidents worth remembering
 
 - Invite-seeding logic once fired twice for one org, creating duplicate `av_roles` rows — surfaced as doubled dropdown options on iPad Safari. Fixed via SQL cleanup + guarding on `existingRoleCount` before seeding.
 - `TimeEntryModal` used to default new punches to the browser's real-world "today" instead of the show-day being viewed — silently produced a 33.5-hour day and broke short-turnaround detection. Fixed (see [components/TimeEntryModal.tsx](components/TimeEntryModal.tsx)).
+- Same bug, different spot: the tracker console picked "today" via `new Date().toISOString()` (UTC), which rolls to tomorrow's date in the evening in any US timezone — opened the wrong day by default. Fixed by computing today's date via `Intl.DateTimeFormat('en-CA', { timeZone })`. **Any "what day is it" logic in this app must derive from the show's timezone, never from UTC or raw `Date()` — this class of bug has now recurred twice.**
+- `AddRoomModal` had zero uniqueness check, so the same room name could be added twice to one day. Fixed by checking existing room names (case-insensitive, per work_day_id) before inserting.
 - `totalPay` initially miscalculated by multiplying straight-time hourly instead of using the flat day-rate guarantee — corrected against the real Swift source.
 - RLS was originally SELECT-only on most tables; INSERT/UPDATE/DELETE policies were retrofitted per table as each feature hit a wall. **Do not assume a new table has full RLS coverage.**
 
