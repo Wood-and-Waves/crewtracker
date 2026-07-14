@@ -28,7 +28,7 @@ export default function ArchiveShowButton({
     <button
       onClick={toggle}
       disabled={loading}
-      className="absolute top-4 right-4 rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
+      className="absolute top-4 right-4 rounded-pill bg-surface-2 border border-line px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-50"
     >
       {loading ? '...' : archived ? 'Unarchive' : 'Archive'}
     </button>

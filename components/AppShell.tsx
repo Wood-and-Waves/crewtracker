@@ -2,36 +2,46 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { cn } from '@/lib/cn'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 const navItems = [
-  { href: '/dashboard', label: 'Shows', icon: 'briefcase' },
-  { href: '/dashboard/directory', label: 'Directory', icon: 'users' },
-  { href: '/dashboard/settings', label: 'Settings', icon: 'settings' },
+  { href: '/dashboard', label: 'Shows', icon: 'briefcase', match: (p: string) => p === '/dashboard' || p.startsWith('/dashboard/shows') },
+  { href: '/dashboard/directory', label: 'Directory', icon: 'users', match: (p: string) => p.startsWith('/dashboard/directory') },
+  { href: '/dashboard/settings', label: 'Settings', icon: 'settings', match: (p: string) => p.startsWith('/dashboard/settings') },
 ]
+
+function Logo() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <path d="M36 13H20l-7 7v8l7 7h16" stroke="currentColor" strokeWidth="5" strokeLinejoin="miter" />
+      <path d="M36 13l-5 6M36 42l-5-6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 function Icon({ name }: { name: string }) {
   if (name === 'briefcase') {
     return (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="2" y="7" width="20" height="14" rx="2" />
-        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+        <rect x="3" y="7" width="18" height="13" rx="2" />
+        <path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7" />
       </svg>
     )
   }
   if (name === 'users') {
     return (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        <circle cx="9" cy="8.5" r="3" />
+        <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+        <path d="M16 6a3 3 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-2.5-4.4" />
       </svg>
     )
   }
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M18.5 5.5l-2 2M7.5 16.5l-2 2" />
     </svg>
   )
 }
@@ -40,40 +50,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   return (
-    <div className="min-h-screen bg-black text-white md:flex">
-      <aside className="hidden md:flex md:w-56 md:flex-col md:border-r md:border-zinc-800 md:p-4">
-        <div className="mb-8 px-2 text-lg font-bold">CrewTracker</div>
-        <nav className="flex flex-col gap-1">
-          {navItems.map(item => {
-            const active = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  active ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
-                }`}
-              >
-                <Icon name={item.icon} />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-      </aside>
-
-      <main className="flex-1 pb-24 md:pb-0">{children}</main>
-
-      <nav className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full bg-zinc-900/90 p-1.5 shadow-xl backdrop-blur md:hidden">
+    <div className="flex min-h-screen flex-col bg-bg text-ink">
+      {/* Desktop / landscape-iPad: top nav for mouse navigation */}
+      <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-surface px-6 py-3 lg:flex">
+        <Link href="/dashboard" className="mr-5 flex items-center gap-2 text-[15px] font-extrabold">
+          <span className="text-accent"><Logo /></span>
+          CrewTracker
+        </Link>
         {navItems.map(item => {
-          const active = pathname === item.href
+          const active = item.match(pathname)
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-0.5 rounded-full px-4 py-2 text-xs font-medium transition ${
-                active ? 'text-blue-400' : 'text-zinc-400'
-              }`}
+              className={cn(
+                'rounded-field px-3.5 py-2 text-sm font-semibold transition-colors',
+                active ? 'bg-accent-wash text-accent' : 'text-muted hover:bg-surface-2 hover:text-ink',
+              )}
+            >
+              {item.label}
+            </Link>
+          )
+        })}
+        <ThemeToggle className="ml-auto" />
+      </header>
+
+      <main className="flex-1 pb-28 lg:pb-0">{children}</main>
+
+      {/* Portrait iPad / phone: fixed bottom tab-bar, app-style */}
+      <nav className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-0.5 rounded-[26px] border border-line bg-surface-2 p-1.5 shadow-xl lg:hidden">
+        {navItems.map(item => {
+          const active = item.match(pathname)
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex flex-col items-center gap-0.5 rounded-[20px] px-6 py-2 text-[11px] font-semibold transition-colors',
+                active ? 'text-accent' : 'text-muted',
+              )}
             >
               <Icon name={item.icon} />
               {item.label}

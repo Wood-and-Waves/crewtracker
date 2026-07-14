@@ -3,6 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Button from '@/components/ui/Button'
+
+const inputCls =
+  'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
 const TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern' },
@@ -86,74 +90,52 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
   }
 
   if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
-      >
-        + New Show
-      </button>
-    )
+    return <Button onClick={() => setOpen(true)}>+ New Show</Button>
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-zinc-900 p-6 shadow-xl">
-        <h2 className="text-xl font-bold text-white mb-4">New Show</h2>
+      <div className="w-full max-w-md rounded-card bg-surface border border-line p-6 shadow-xl">
+        <h2 className="text-xl font-bold text-ink mb-4">New Show</h2>
 
         <div className="flex flex-col gap-3">
           <input
             placeholder="Show name"
             value={name}
             onChange={e => setName(e.target.value)}
-            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
           />
           <input
             placeholder="Venue (optional)"
             value={venue}
             onChange={e => setVenue(e.target.value)}
-            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
           />
           <div className="flex gap-3">
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="date"
-              value={endDate}
-              onChange={e => setEndDate(e.target.value)}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
           </div>
           <select
             value={timezone}
             onChange={e => setTimezone(e.target.value)}
-            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
           >
             {TIMEZONES.map(tz => (
-              <option key={tz.value} value={tz.value} className="bg-zinc-800 text-white">{tz.label}</option>
+              <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
             ))}
           </select>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
 
           <div className="flex gap-3 mt-2">
-            <button
-              onClick={() => setOpen(false)}
-              className="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-500"
-            >
-              Cancel
-            </button>
-            <button
+            <Button variant="ghost" className="flex-1 py-3" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button
+              className="flex-1 py-3"
               onClick={createShow}
               disabled={loading || !name || !startDate || !endDate}
-              className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Show'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
