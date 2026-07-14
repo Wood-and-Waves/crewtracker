@@ -7,6 +7,7 @@ import {
   mealPenaltyCount, isShortTurnaround,
   TimecardLike, PayrollRuleset,
 } from '@/lib/payroll'
+import ExportCSVButton from '@/components/ExportCSVButton'
 
 function fmt(n: number): string {
   if (n === 0) return '0'
@@ -131,7 +132,18 @@ export default async function ShowReportPage({
   return (
     <div className="p-6 md:p-10">
       <Link href={`/dashboard/shows/${id}`} className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Show</Link>
-      <h1 className="text-2xl font-bold mt-2 mb-6">{show.name} — Report</h1>
+      <div className="flex items-center justify-between mt-2 mb-6">
+        <h1 className="text-2xl font-bold">{show.name} — Report</h1>
+        <ExportCSVButton
+          showName={show.name}
+          rooms={rooms || []}
+          workDays={workDays || []}
+          timecards={timecards || []}
+          punches={punches || []}
+          ruleset={ruleset}
+          timezone={timezone}
+        />
+      </div>
 
       <div className="flex gap-2 mb-6">
         <Link
