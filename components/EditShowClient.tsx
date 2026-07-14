@@ -20,6 +20,8 @@ export default function EditShowClient({
 }) {
   const router = useRouter()
   const supabase = createClient()
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const [name, setName] = useState(show.name)
   const [venue, setVenue] = useState(show.venue || '')
@@ -37,14 +39,61 @@ export default function EditShowClient({
   const [rateEntry, setRateEntry] = useState<any>(null)
   const [rateText, setRateText] = useState('')
 
-  async function saveField(field: string, value: any) {
-    await supabase.from('shows').update({ [field]: value }).eq('id', show.id)
+  function updateRuleset(field: string, value: any) {
+    setRs((prev: any) => ({ ...prev, [field]: value }))
   }
 
-  async function saveRuleset(field: string, value: any) {
-    const updated = { ...rs, [field]: value }
-    setRs(updated)
-    await supabase.from('payroll_rulesets').update({ [field]: value }).eq('show_id', show.id)
+  async function handleSave() {
+    setSaving(true)
+    setSaveError('')
+
+    const showResult = await supabase
+      .from('shows')
+      .update({
+        name,
+        venue,
+        client_company: clientCompany,
+        job_number: jobNumber,
+        show_notes: showNotes,
+        show_financials: showFinancials,
+        timezone_identifier: timezone,
+      })
+      .eq('id', show.id)
+
+    if (showResult.error) {
+      setSaving(false)
+      setSaveError(showResult.error.message)
+      return
+    }
+
+    if (rs) {
+      const rulesetResult = await supabase
+        .from('payroll_rulesets')
+        .update({
+          travel_rate: rs.travel_rate,
+          overtime_after_hours: rs.overtime_after_hours,
+          double_time_enabled: rs.double_time_enabled,
+          double_time_after_hours: rs.double_time_after_hours,
+          meal_penalty_enabled: rs.meal_penalty_enabled,
+          meal_penalty_grace_period: rs.meal_penalty_grace_period,
+          meal_penalty_amount: rs.meal_penalty_amount,
+          minimum_meal_break_enabled: rs.minimum_meal_break_enabled,
+          minimum_meal_break_minutes: rs.minimum_meal_break_minutes,
+          meal_break_deduction_cap: rs.meal_break_deduction_cap,
+          short_turn_penalty_enabled: rs.short_turn_penalty_enabled,
+          short_turn_rest_hours: rs.short_turn_rest_hours,
+        })
+        .eq('show_id', show.id)
+
+      if (rulesetResult.error) {
+        setSaving(false)
+        setSaveError(rulesetResult.error.message)
+        return
+      }
+    }
+
+    setSaving(false)
+    router.push(`/dashboard/shows/${show.id}`)
   }
 
   async function extendShow() {
@@ -141,16 +190,30 @@ export default function EditShowClient({
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-lg">
-      <Link href={`/dashboard/shows/${show.id}`} className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Show</Link>
+    <div className="p-6 md:p-10 max-w-lg pb-24">
+      <div className="flex items-center justify-between">
+        <Link href={`/dashboard/shows/${show.id}`} className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Show</Link>
+        <button
+          onClick={handleSave}
+          disabled={saving || !name.trim()}
+          className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
       <h1 className="text-2xl font-bold mt-2 mb-6">Edit Show Details</h1>
+
+      {saveError && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400 mb-4">
+          Save failed: {saveError}
+        </div>
+      )}
 
       <div className="rounded-2xl bg-zinc-900 p-5 mb-4">
         <p className="text-xs uppercase tracking-wide text-zinc-500 mb-3">Show Name (Required)</p>
         <input
           value={name}
           onChange={e => setName(e.target.value)}
-          onBlur={() => saveField('name', name)}
           className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -165,6 +228,7 @@ export default function EditShowClient({
             + Add Day
           </button>
         </div>
+        <p className="text-xs text-zinc-600 mt-2">Adding a day happens immediately — it isn\'t part of the Save button above.</p>
       </div>
 
       <div className="rounded-2xl bg-zinc-900 p-5 mb-4">
@@ -172,7 +236,7 @@ export default function EditShowClient({
         <select
           key={timezone}
           value={timezone}
-          onChange={e => { setTimezone(e.target.value); saveField('timezone_identifier', e.target.value) }}
+          onChange={e => setTimezone(e.target.value)}
           className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500 mt-2"
         >
           <option value="America/New_York" className="bg-zinc-800 text-white">Eastern (ET)</option>
@@ -191,14 +255,12 @@ export default function EditShowClient({
           placeholder="Client / Production Company"
           value={clientCompany}
           onChange={e => setClientCompany(e.target.value)}
-          onBlur={() => saveField('client_company', clientCompany)}
           className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500 mb-3"
         />
         <input
           placeholder="Job / PO Number"
           value={jobNumber}
           onChange={e => setJobNumber(e.target.value)}
-          onBlur={() => saveField('job_number', jobNumber)}
           className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -209,7 +271,6 @@ export default function EditShowClient({
           placeholder="Venue Name (e.g. McCormick Place)"
           value={venue}
           onChange={e => setVenue(e.target.value)}
-          onBlur={() => saveField('venue', venue)}
           className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -220,7 +281,6 @@ export default function EditShowClient({
           placeholder="Logistics, parking info, etc..."
           value={showNotes}
           onChange={e => setShowNotes(e.target.value)}
-          onBlur={() => saveField('show_notes', showNotes)}
           rows={4}
           className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -233,7 +293,7 @@ export default function EditShowClient({
           <input
             type="checkbox"
             checked={showFinancials}
-            onChange={e => { setShowFinancials(e.target.checked); saveField('show_financials', e.target.checked) }}
+            onChange={e => setShowFinancials(e.target.checked)}
             className="h-5 w-5 rounded"
           />
         </label>
@@ -262,7 +322,7 @@ export default function EditShowClient({
               ))}
             </div>
           )}
-          <p className="text-xs text-zinc-600 mt-3">Tap a rate to update it. Changes apply to all of that person\'s timecards on this show for that role.</p>
+          <p className="text-xs text-zinc-600 mt-3">Tap a rate to update it — this saves immediately, separate from the Save button above. Changes apply to all of that person\'s timecards on this show for that role.</p>
         </div>
       )}
 
@@ -275,7 +335,7 @@ export default function EditShowClient({
               <label className="text-sm text-zinc-300 block mb-1">Travel Day Pay</label>
               <select
                 value={rs.travel_rate}
-                onChange={e => saveRuleset('travel_rate', e.target.value)}
+                onChange={e => updateRuleset('travel_rate', e.target.value)}
                 className="w-full rounded-lg bg-zinc-800 px-4 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="halfDay" className="bg-zinc-800 text-white">Half Day</option>
@@ -289,7 +349,7 @@ export default function EditShowClient({
                 <input
                   type="number" step={0.5} min={0} max={24}
                   value={rs.overtime_after_hours}
-                  onChange={e => saveRuleset('overtime_after_hours', parseFloat(e.target.value) || 0)}
+                  onChange={e => updateRuleset('overtime_after_hours', parseFloat(e.target.value) || 0)}
                   className="w-20 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white text-right outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-sm text-zinc-500">hrs</span>
@@ -301,7 +361,7 @@ export default function EditShowClient({
               <input
                 type="checkbox"
                 checked={rs.double_time_enabled}
-                onChange={e => saveRuleset('double_time_enabled', e.target.checked)}
+                onChange={e => updateRuleset('double_time_enabled', e.target.checked)}
                 className="h-5 w-5 rounded"
               />
             </label>
@@ -313,7 +373,7 @@ export default function EditShowClient({
                   <input
                     type="number" step={0.5} min={0} max={24}
                     value={rs.double_time_after_hours}
-                    onChange={e => saveRuleset('double_time_after_hours', parseFloat(e.target.value) || 0)}
+                    onChange={e => updateRuleset('double_time_after_hours', parseFloat(e.target.value) || 0)}
                     className="w-20 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white text-right outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <span className="text-sm text-zinc-500">hrs</span>
@@ -332,7 +392,7 @@ export default function EditShowClient({
               <input
                 type="checkbox"
                 checked={rs.meal_penalty_enabled}
-                onChange={e => saveRuleset('meal_penalty_enabled', e.target.checked)}
+                onChange={e => updateRuleset('meal_penalty_enabled', e.target.checked)}
                 className="h-5 w-5 rounded"
               />
             </label>
@@ -345,7 +405,7 @@ export default function EditShowClient({
                     <input
                       type="number" step={0.5} min={0} max={12}
                       value={rs.meal_penalty_grace_period}
-                      onChange={e => saveRuleset('meal_penalty_grace_period', parseFloat(e.target.value) || 0)}
+                      onChange={e => updateRuleset('meal_penalty_grace_period', parseFloat(e.target.value) || 0)}
                       className="w-20 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white text-right outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-sm text-zinc-500">hrs</span>
@@ -358,7 +418,7 @@ export default function EditShowClient({
                       <input
                         type="number" step={5} min={0} max={500}
                         value={rs.meal_penalty_amount}
-                        onChange={e => saveRuleset('meal_penalty_amount', parseFloat(e.target.value) || 0)}
+                        onChange={e => updateRuleset('meal_penalty_amount', parseFloat(e.target.value) || 0)}
                         className="w-20 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white text-right outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <span className="text-sm text-zinc-500">{rs.meal_penalty_amount > 0 ? '$' : '(OT Rate)'}</span>
@@ -376,7 +436,7 @@ export default function EditShowClient({
               <input
                 type="checkbox"
                 checked={rs.minimum_meal_break_enabled}
-                onChange={e => saveRuleset('minimum_meal_break_enabled', e.target.checked)}
+                onChange={e => updateRuleset('minimum_meal_break_enabled', e.target.checked)}
                 className="h-5 w-5 rounded"
               />
             </label>
@@ -389,7 +449,7 @@ export default function EditShowClient({
                     <input
                       type="number" step={15} min={15} max={120}
                       value={rs.minimum_meal_break_minutes}
-                      onChange={e => saveRuleset('minimum_meal_break_minutes', parseFloat(e.target.value) || 0)}
+                      onChange={e => updateRuleset('minimum_meal_break_minutes', parseFloat(e.target.value) || 0)}
                       className="w-20 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white text-right outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-sm text-zinc-500">min</span>
@@ -401,7 +461,7 @@ export default function EditShowClient({
                     <input
                       type="number" step={15} min={15} max={120}
                       value={rs.meal_break_deduction_cap}
-                      onChange={e => saveRuleset('meal_break_deduction_cap', parseFloat(e.target.value) || 0)}
+                      onChange={e => updateRuleset('meal_break_deduction_cap', parseFloat(e.target.value) || 0)}
                       className="w-20 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white text-right outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-sm text-zinc-500">min</span>
@@ -424,7 +484,7 @@ export default function EditShowClient({
               <input
                 type="checkbox"
                 checked={rs.short_turn_penalty_enabled}
-                onChange={e => saveRuleset('short_turn_penalty_enabled', e.target.checked)}
+                onChange={e => updateRuleset('short_turn_penalty_enabled', e.target.checked)}
                 className="h-5 w-5 rounded"
               />
             </label>
@@ -436,7 +496,7 @@ export default function EditShowClient({
                   <input
                     type="number" step={0.5} min={0} max={24}
                     value={rs.short_turn_rest_hours}
-                    onChange={e => saveRuleset('short_turn_rest_hours', parseFloat(e.target.value) || 0)}
+                    onChange={e => updateRuleset('short_turn_rest_hours', parseFloat(e.target.value) || 0)}
                     className="w-20 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white text-right outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <span className="text-sm text-zinc-500">hrs</span>
@@ -497,6 +557,16 @@ export default function EditShowClient({
           </div>
         </div>
       )}
+
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+        <button
+          onClick={handleSave}
+          disabled={saving || !name.trim()}
+          className="rounded-full bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-xl hover:bg-blue-500 disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </div>
     </div>
   )
 }
