@@ -31,13 +31,21 @@ export default async function ShowReportPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('can_view_pay_rates')
-    .eq('id', user.id)
-    .single()
+  // profile/show/ruleset/workDays are independent of each other (none
+  // depend on another's result) so fetch them in one round trip instead
+  // of four sequential ones.
+  const [
+    { data: profile },
+    { data: show },
+    { data: rulesetRow },
+    { data: workDays },
+  ] = await Promise.all([
+    supabase.from('profiles').select('can_view_pay_rates').eq('id', user.id).single(),
+    supabase.from('shows').select('*').eq('id', id).single(),
+    supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
+    supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
+  ])
 
-  const { data: show } = await supabase.from('shows').select('*').eq('id', id).single()
   if (!show) notFound()
 
   // Financials only show in exports if BOTH the show tracks dollar amounts
@@ -45,18 +53,6 @@ export default async function ShowReportPage({
   const canSeeFinancials = (show.show_financials || false) && (profile?.can_view_pay_rates ?? false)
 
   const timezone = show.timezone_identifier || 'America/Chicago'
-
-  const { data: rulesetRow } = await supabase
-    .from('payroll_rulesets')
-    .select('*')
-    .eq('show_id', id)
-    .single()
-
-  const { data: workDays } = await supabase
-    .from('work_days')
-    .select('*')
-    .eq('show_id', id)
-    .order('day_number')
 
   const workDayIds = (workDays || []).map(d => d.id)
 

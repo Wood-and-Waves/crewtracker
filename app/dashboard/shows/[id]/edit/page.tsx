@@ -8,20 +8,19 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: show } = await supabase.from('shows').select('*').eq('id', id).single()
+  // show/ruleset/workDays are independent of each other (none depend on
+  // another's result) so fetch them in one round trip instead of three.
+  const [
+    { data: show },
+    { data: ruleset },
+    { data: workDays },
+  ] = await Promise.all([
+    supabase.from('shows').select('*').eq('id', id).single(),
+    supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
+    supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
+  ])
+
   if (!show) notFound()
-
-  const { data: ruleset } = await supabase
-    .from('payroll_rulesets')
-    .select('*')
-    .eq('show_id', id)
-    .single()
-
-  const { data: workDays } = await supabase
-    .from('work_days')
-    .select('*')
-    .eq('show_id', id)
-    .order('day_number')
 
   const workDayIds = (workDays || []).map(d => d.id)
 
