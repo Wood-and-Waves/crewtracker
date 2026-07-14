@@ -4,21 +4,13 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/cn'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import Logo from '@/components/Logo'
 
 const navItems = [
   { href: '/dashboard', label: 'Shows', icon: 'briefcase', match: (p: string) => p === '/dashboard' || p.startsWith('/dashboard/shows') },
   { href: '/dashboard/directory', label: 'Directory', icon: 'users', match: (p: string) => p.startsWith('/dashboard/directory') },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings', match: (p: string) => p.startsWith('/dashboard/settings') },
 ]
-
-function Logo() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-      <path d="M36 13H20l-7 7v8l7 7h16" stroke="currentColor" strokeWidth="5" strokeLinejoin="miter" />
-      <path d="M36 13l-5 6M36 42l-5-6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-    </svg>
-  )
-}
 
 function Icon({ name }: { name: string }) {
   if (name === 'briefcase') {
