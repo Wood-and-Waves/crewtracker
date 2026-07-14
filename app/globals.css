@@ -1,26 +1,120 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   CrewTracker — "Signal" design tokens
+   Change the look here, not in the components.
+   Default follows the OS (prefers-color-scheme); an explicit
+   data-theme="light|dark" on <html> overrides it both ways.
+   ============================================================ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  /* light ("paper") */
+  --bg: #eceef1;
+  --surface: #ffffff;
+  --surface-2: #f2f5f8;
+  --ink: #10141a;
+  --muted: #5d656e;
+  --line: #dce0e6;
+  --accent: #1275d8;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(18, 117, 216, 0.12);
+  --ot: #b7791f;
+  --good: #1f9d63;
+  --danger: #c8362b;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+  --font-sys: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #070809;
+    --surface: #141619;
+    --surface-2: #1c1f24;
+    --ink: #ffffff;
+    --muted: #99a0a8;
+    --line: #262a30;
+    --accent: #3aa0ff;
+    --accent-ink: #04121f;
+    --accent-wash: rgba(58, 160, 255, 0.14);
+    --ot: #f0b429;
+    --good: #3ecf8e;
+    --danger: #ff5c5c;
   }
 }
 
+/* explicit overrides win over the media query in both directions */
+:root[data-theme="light"] {
+  --bg: #eceef1;
+  --surface: #ffffff;
+  --surface-2: #f2f5f8;
+  --ink: #10141a;
+  --muted: #5d656e;
+  --line: #dce0e6;
+  --accent: #1275d8;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(18, 117, 216, 0.12);
+  --ot: #b7791f;
+  --good: #1f9d63;
+  --danger: #c8362b;
+}
+:root[data-theme="dark"] {
+  --bg: #070809;
+  --surface: #141619;
+  --surface-2: #1c1f24;
+  --ink: #ffffff;
+  --muted: #99a0a8;
+  --line: #262a30;
+  --accent: #3aa0ff;
+  --accent-ink: #04121f;
+  --accent-wash: rgba(58, 160, 255, 0.14);
+  --ot: #f0b429;
+  --good: #3ecf8e;
+  --danger: #ff5c5c;
+}
+
+/* Expose tokens as Tailwind utilities: bg-surface, text-ink, text-accent,
+   text-muted, border-line, rounded-card, etc. `inline` keeps them as
+   var() references so they still switch at runtime under data-theme. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-wash: var(--accent-wash);
+  --color-ot: var(--ot);
+  --color-good: var(--good);
+  --color-danger: var(--danger);
+
+  --radius-card: var(--radius);
+  --radius-field: var(--radius-sm);
+  --radius-pill: var(--radius-pill);
+
+  --font-sans: var(--font-sys);
+}
+
+html {
+  height: 100%;
+}
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sys);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide horizontal scrollbars on scrolling strips (still scrollable). */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
