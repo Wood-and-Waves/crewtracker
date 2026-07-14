@@ -29,7 +29,7 @@ export default async function ShowDetailPage({
     { data: ruleset },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id').eq('id', user.id).single(),
+    supabase.from('profiles').select('organization_id, use_24_hour_time').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -38,6 +38,11 @@ export default async function ShowDetailPage({
   if (!show) notFound()
 
   const timezone = show.timezone_identifier || 'America/Chicago'
+
+  const { data: organization } = profile?.organization_id
+    ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', profile.organization_id).single()
+    : { data: null }
+  const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
 
   if (!workDays || workDays.length === 0) {
     return (
@@ -180,6 +185,8 @@ export default async function ShowDetailPage({
                   ruleset={ruleset}
                   allTimecards={allTimecardsWithPunches}
                   dayDate={activeDay.date}
+                  use24Hour={profile?.use_24_hour_time || false}
+                  roundingMinutes={roundingMinutes}
                 />
               ))}
             </div>

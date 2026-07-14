@@ -14,6 +14,8 @@ export default function TimecardRow({
   ruleset,
   allTimecards,
   dayDate,
+  use24Hour = false,
+  roundingMinutes = 1,
 }: {
   timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean }
   punches: Punch[]
@@ -21,6 +23,8 @@ export default function TimecardRow({
   ruleset: PayrollRuleset
   allTimecards: TimecardLike[]
   dayDate: string
+  use24Hour?: boolean
+  roundingMinutes?: number
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -41,9 +45,9 @@ export default function TimecardRow({
     punches,
   }
 
-  const st = wrapped ? straightTimeHours(timecardInput, allTimecards, ruleset) : 0
-  const ot = wrapped ? overtimeHours(timecardInput, allTimecards, ruleset) : 0
-  const dt = wrapped ? doubleTimeHours(timecardInput, allTimecards, ruleset) : 0
+  const st = wrapped ? straightTimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
+  const ot = wrapped ? overtimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
+  const dt = wrapped ? doubleTimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
 
   async function undoLast() {
     if (punches.length === 0) return
@@ -122,7 +126,7 @@ export default function TimecardRow({
                     : 'bg-zinc-900 text-zinc-600 cursor-not-allowed'
                 }`}
               >
-                {done ? formatPunchTime(done.punched_at, timezone) : PUNCH_LABELS[type]}
+                {done ? formatPunchTime(done.punched_at, timezone, use24Hour) : PUNCH_LABELS[type]}
               </button>
             )
           })}

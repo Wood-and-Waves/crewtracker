@@ -23,6 +23,8 @@ export default function ExportPDFButton({
   punches,
   ruleset,
   timezone,
+  use24Hour = false,
+  roundingMinutes = 1,
 }: {
   showName: string
   showFinancials: boolean
@@ -34,6 +36,8 @@ export default function ExportPDFButton({
   punches: any[]
   ruleset: PayrollRuleset
   timezone: string
+  use24Hour?: boolean
+  roundingMinutes?: number
 }) {
   const [generating, setGenerating] = useState(false)
 
@@ -52,7 +56,7 @@ export default function ExportPDFButton({
 
   function timeLabel(iso: string | undefined) {
     if (!iso) return 'Missing'
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: timezone })
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: timezone, hour12: !use24Hour })
   }
 
   function dateLabel(dateStr: string | undefined) {
@@ -94,10 +98,10 @@ export default function ExportPDFButton({
       let totalPaidST = 0, totalPaidOT = 0, totalPaidDT = 0, totalLaborCost = 0
       for (const rawTc of timecards) {
         const tc = toTc(rawTc)
-        totalPaidST += paidStraightTimeHours(tc, allTimecards, ruleset)
-        totalPaidOT += paidOvertimeHours(tc, allTimecards, ruleset)
-        totalPaidDT += paidDoubleTimeHours(tc, allTimecards, ruleset)
-        totalLaborCost += totalPay(tc, allTimecards, ruleset)
+        totalPaidST += paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+        totalPaidOT += paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
+        totalPaidDT += paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+        totalLaborCost += totalPay(tc, allTimecards, ruleset, roundingMinutes)
       }
       const totalPaidHours = totalPaidST + totalPaidOT + totalPaidDT
 
@@ -113,12 +117,12 @@ export default function ExportPDFButton({
         let st = 0, ot = 0, dt = 0, pST = 0, pOT = 0, pDT = 0
         for (const rawTc of entries) {
           const tc = toTc(rawTc)
-          st += straightTimeHours(tc, allTimecards, ruleset)
-          ot += overtimeHours(tc, allTimecards, ruleset)
-          dt += doubleTimeHours(tc, allTimecards, ruleset)
-          pST += paidStraightTimeHours(tc, allTimecards, ruleset)
-          pOT += paidOvertimeHours(tc, allTimecards, ruleset)
-          pDT += paidDoubleTimeHours(tc, allTimecards, ruleset)
+          st += straightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+          ot += overtimeHours(tc, allTimecards, ruleset, roundingMinutes)
+          dt += doubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+          pST += paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+          pOT += paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
+          pDT += paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
         }
         return {
           name: entries[0].crew_member_name,
@@ -219,7 +223,7 @@ export default function ExportPDFButton({
                       }
 
                       const tc = toTc(rawTc)
-                      const dayTotal = straightTimeHours(tc, allTimecards, ruleset) + overtimeHours(tc, allTimecards, ruleset) + doubleTimeHours(tc, allTimecards, ruleset)
+                      const dayTotal = straightTimeHours(tc, allTimecards, ruleset, roundingMinutes) + overtimeHours(tc, allTimecards, ruleset, roundingMinutes) + doubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
                       const m1 = p('meal_out') && p('meal_in')
                       const m2 = p('meal2_out') && p('meal2_in')
 

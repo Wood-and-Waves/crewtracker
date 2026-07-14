@@ -24,11 +24,12 @@ export function isWrapped(punches: Punch[]): boolean {
   return punches.some(p => p.punch_type === 'end')
 }
 
-export function formatPunchTime(iso: string, timezone: string): string {
+export function formatPunchTime(iso: string, timezone: string, use24Hour: boolean = false): string {
   return new Date(iso).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
     timeZone: timezone,
+    hour12: !use24Hour,
   })
 }
 

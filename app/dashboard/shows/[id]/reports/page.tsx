@@ -40,7 +40,7 @@ export default async function ShowReportPage({
     { data: rulesetRow },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('can_view_pay_rates').eq('id', user.id).single(),
+    supabase.from('profiles').select('organization_id, can_view_pay_rates, use_24_hour_time').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -53,6 +53,11 @@ export default async function ShowReportPage({
   const canSeeFinancials = (show.show_financials || false) && (profile?.can_view_pay_rates ?? false)
 
   const timezone = show.timezone_identifier || 'America/Chicago'
+
+  const { data: organization } = profile?.organization_id
+    ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', profile.organization_id).single()
+    : { data: null }
+  const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
 
   const workDayIds = (workDays || []).map(d => d.id)
 
@@ -97,9 +102,9 @@ export default async function ShowReportPage({
   // Master Summary: PAID (ceiling-rounded) totals across the whole show.
   let totalPaidST = 0, totalPaidOT = 0, totalPaidDT = 0
   for (const tc of allTimecards) {
-    totalPaidST += paidStraightTimeHours(tc, allTimecards, ruleset)
-    totalPaidOT += paidOvertimeHours(tc, allTimecards, ruleset)
-    totalPaidDT += paidDoubleTimeHours(tc, allTimecards, ruleset)
+    totalPaidST += paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    totalPaidOT += paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    totalPaidDT += paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
   }
   const totalPaidHours = totalPaidST + totalPaidOT + totalPaidDT
 
@@ -125,9 +130,9 @@ export default async function ShowReportPage({
   // Matches iOS breakdownString(for:) exactly: raw ST/OT/DT + meal penalty count.
   function breakdownString(rawTc: any) {
     const tc = findTc(rawTc)
-    const st = straightTimeHours(tc, allTimecards, ruleset)
-    const ot = overtimeHours(tc, allTimecards, ruleset)
-    const dt = doubleTimeHours(tc, allTimecards, ruleset)
+    const st = straightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    const ot = overtimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    const dt = doubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
     const mp = mealPenaltyCount(tc, ruleset)
     const parts = [`${fmt(st)} ST`]
     if (ot > 0) parts.push(`${fmt(ot)} OT`)
@@ -151,6 +156,8 @@ export default async function ShowReportPage({
             punches={punches || []}
             ruleset={ruleset}
             timezone={timezone}
+            use24Hour={profile?.use_24_hour_time || false}
+            roundingMinutes={roundingMinutes}
           />
           <ExportPDFButton
             showName={show.name}
@@ -163,6 +170,8 @@ export default async function ShowReportPage({
             punches={punches || []}
             ruleset={ruleset}
             timezone={timezone}
+            use24Hour={profile?.use_24_hour_time || false}
+            roundingMinutes={roundingMinutes}
           />
         </div>
       </div>

@@ -8,13 +8,16 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // show/ruleset/workDays are independent of each other (none depend on
-  // another's result) so fetch them in one round trip instead of three.
+  // profile/show/ruleset/workDays are independent of each other (none
+  // depend on another's result) so fetch them in one round trip instead
+  // of four.
   const [
+    { data: profile },
     { data: show },
     { data: ruleset },
     { data: workDays },
   ] = await Promise.all([
+    supabase.from('profiles').select('shoulder_surfer_mode').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -51,6 +54,7 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       workDays={workDays || []}
       rooms={rooms || []}
       crewRateEntries={crewRateEntries}
+      shoulderSurferMode={profile?.shoulder_surfer_mode || false}
     />
   )
 }

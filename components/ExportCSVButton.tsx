@@ -24,6 +24,8 @@ export default function ExportCSVButton({
   punches,
   ruleset,
   timezone,
+  use24Hour = false,
+  roundingMinutes = 1,
 }: {
   showName: string
   rooms: any[]
@@ -33,10 +35,12 @@ export default function ExportCSVButton({
   ruleset: PayrollRuleset
   timezone: string
   showFinancials: boolean
+  use24Hour?: boolean
+  roundingMinutes?: number
 }) {
   function timeLabel(iso: string | undefined) {
     if (!iso) return ''
-    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: timezone })
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: timezone, hour12: !use24Hour })
   }
 
   function dateLabel(dateStr: string | undefined) {
@@ -82,17 +86,17 @@ export default function ExportCSVButton({
 
       const p = (type: string) => punches.find((pp: any) => pp.timecard_id === rawTc.id && pp.punch_type === type)?.punched_at
 
-      const st = straightTimeHours(tc, allTimecards, ruleset)
-      const ot = overtimeHours(tc, allTimecards, ruleset)
-      const dt = doubleTimeHours(tc, allTimecards, ruleset)
-      const pST = paidStraightTimeHours(tc, allTimecards, ruleset)
-      const pOT = paidOvertimeHours(tc, allTimecards, ruleset)
-      const pDT = paidDoubleTimeHours(tc, allTimecards, ruleset)
+      const st = straightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+      const ot = overtimeHours(tc, allTimecards, ruleset, roundingMinutes)
+      const dt = doubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+      const pST = paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+      const pOT = paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
+      const pDT = paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
       const mpCount = mealPenaltyCount(tc, ruleset)
       const mpTotal = mealPenaltyTotal(tc, ruleset)
       const shortTurn = isShortTurnaround(tc, allTimecards, ruleset)
       const travelPay = travelLegPay(tc, ruleset)
-      const pay = totalPay(tc, allTimecards, ruleset)
+      const pay = totalPay(tc, allTimecards, ruleset, roundingMinutes)
 
       totalST += st; totalOT += ot; totalDT += dt
       totalPaidST += pST; totalPaidOT += pOT; totalPaidDT += pDT

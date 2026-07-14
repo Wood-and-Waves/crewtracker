@@ -11,12 +11,14 @@ export default function EditShowClient({
   workDays,
   rooms,
   crewRateEntries,
+  shoulderSurferMode = false,
 }: {
   show: any
   ruleset: any
   workDays: any[]
   rooms: any[]
   crewRateEntries: any[]
+  shoulderSurferMode?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -317,7 +319,9 @@ export default function EditShowClient({
                     <p className="text-sm font-semibold text-white">{entry.name}</p>
                     <p className="text-xs text-zinc-500">{entry.role}</p>
                   </div>
-                  <span className="text-sm font-semibold text-blue-400">${Math.round(entry.dayRate)}</span>
+                  <span className="text-sm font-semibold text-blue-400">
+                    {shoulderSurferMode ? '•••' : `$${Math.round(entry.dayRate)}`}
+                  </span>
                 </button>
               ))}
             </div>
