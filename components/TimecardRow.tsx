@@ -13,12 +13,14 @@ export default function TimecardRow({
   timezone,
   ruleset,
   allTimecards,
+  dayDate,
 }: {
   timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean }
   punches: Punch[]
   timezone: string
   ruleset: PayrollRuleset
   allTimecards: TimecardLike[]
+  dayDate: string
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -155,6 +157,7 @@ export default function TimecardRow({
           timezone={timezone}
           showTravelToggle={editingType === 'start'}
           isTravelDay={timecard.is_travel_day}
+          dayDate={dayDate}
           onClose={() => setEditingType(null)}
         />
       )}

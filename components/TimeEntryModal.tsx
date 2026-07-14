@@ -13,6 +13,7 @@ export default function TimeEntryModal({
   timezone,
   showTravelToggle,
   isTravelDay,
+  dayDate,
   onClose,
 }: {
   timecardId: string
@@ -22,6 +23,7 @@ export default function TimeEntryModal({
   timezone: string
   showTravelToggle: boolean
   isTravelDay: boolean
+  dayDate: string
   onClose: () => void
 }) {
   const router = useRouter()
@@ -30,8 +32,12 @@ export default function TimeEntryModal({
   const [error, setError] = useState('')
   const [travelDay, setTravelDay] = useState(isTravelDay)
 
-  const base = existingTime ? new Date(existingTime) : new Date()
-  const [dateStr, setDateStr] = useState(base.toISOString().slice(0, 10))
+  // Default the date to the show-day being edited, NOT the browser's real
+  // "today" — this was the source of a bug where new punches silently got
+  // stamped on the wrong date, corrupting hour totals and short-turnaround
+  // detection.
+  const base = existingTime ? new Date(existingTime) : new Date(dayDate + 'T12:00:00')
+  const [dateStr, setDateStr] = useState(existingTime ? base.toISOString().slice(0, 10) : dayDate)
   const [timeStr, setTimeStr] = useState(
     `${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}`
   )

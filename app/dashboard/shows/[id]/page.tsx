@@ -177,6 +177,7 @@ export default async function ShowDetailPage({
                   timezone={timezone}
                   ruleset={ruleset}
                   allTimecards={allTimecardsWithPunches}
+                  dayDate={activeDay.date}
                 />
               ))}
             </div>
