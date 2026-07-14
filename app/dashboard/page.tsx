@@ -1,9 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import NewShowModal from '@/components/NewShowModal'
+import ArchiveShowButton from '@/components/ArchiveShowButton'
 import Link from 'next/link'
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ archived?: string }>
+}) {
+  const { archived } = await searchParams
+  const showingArchived = archived === '1'
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -28,11 +36,14 @@ export default async function DashboardPage() {
     )
   }
 
-  const { data: shows } = await supabase
+  const { data: allShows } = await supabase
     .from('shows')
     .select('*')
     .eq('organization_id', profile.organization_id)
     .order('start_date', { ascending: false })
+
+  const shows = (allShows || []).filter(s => !!s.archived === showingArchived)
+  const archivedCount = (allShows || []).filter(s => s.archived).length
 
   return (
     <div className="p-6 md:p-10">
@@ -41,27 +52,43 @@ export default async function DashboardPage() {
         <NewShowModal organizationId={profile.organization_id} />
       </div>
 
-      {!shows || shows.length === 0 ? (
-        <p className="text-zinc-500">No shows yet. Create your first one to get started.</p>
+      <div className="flex gap-2 mb-6">
+        <Link
+          href="?archived=0"
+          className={`rounded-full px-4 py-2 text-sm font-medium ${!showingArchived ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-400'}`}
+        >
+          Active
+        </Link>
+        <Link
+          href="?archived=1"
+          className={`rounded-full px-4 py-2 text-sm font-medium ${showingArchived ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-400'}`}
+        >
+          Archived{archivedCount > 0 && ` (${archivedCount})`}
+        </Link>
+      </div>
+
+      {shows.length === 0 ? (
+        <p className="text-zinc-500">
+          {showingArchived ? 'No archived shows.' : 'No shows yet. Create your first one to get started.'}
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {shows.map(show => (
-            <Link
-              key={show.id}
-              href={`/dashboard/shows/${show.id}`}
-              className="rounded-2xl bg-zinc-900 p-6 shadow-xl transition hover:bg-zinc-800"
-            >
-              <h2 className="text-xl font-bold text-white mb-1">{show.name}</h2>
-              <p className="text-sm text-zinc-400">
-                {new Date(show.start_date).toLocaleDateString()} – {new Date(show.end_date).toLocaleDateString()}
-              </p>
-              {show.venue && <p className="text-sm text-zinc-500 mt-1">{show.venue}</p>}
-              {show.archived && (
-                <span className="mt-3 inline-block rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400">
-                  Archived
-                </span>
+            <div key={show.id} className="relative">
+              <Link
+                href={`/dashboard/shows/${show.id}`}
+                className="block rounded-2xl bg-zinc-900 p-6 shadow-xl transition hover:bg-zinc-800"
+              >
+                <h2 className="text-xl font-bold text-white mb-1 pr-20">{show.name}</h2>
+                <p className="text-sm text-zinc-400">
+                  {new Date(show.start_date).toLocaleDateString()} – {new Date(show.end_date).toLocaleDateString()}
+                </p>
+                {show.venue && <p className="text-sm text-zinc-500 mt-1">{show.venue}</p>}
+              </Link>
+              {profile.can_archive_shows && (
+                <ArchiveShowButton showId={show.id} archived={!!show.archived} />
               )}
-            </Link>
+            </div>
           ))}
         </div>
       )}
