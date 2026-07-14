@@ -8,6 +8,7 @@ import {
   TimecardLike, PayrollRuleset,
 } from '@/lib/payroll'
 import ExportCSVButton from '@/components/ExportCSVButton'
+import ExportPDFButton from '@/components/ExportPDFButton'
 
 function fmt(n: number): string {
   if (n === 0) return '0'
@@ -134,15 +135,28 @@ export default async function ShowReportPage({
       <Link href={`/dashboard/shows/${id}`} className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Show</Link>
       <div className="flex items-center justify-between mt-2 mb-6">
         <h1 className="text-2xl font-bold">{show.name} — Report</h1>
-        <ExportCSVButton
-          showName={show.name}
-          rooms={rooms || []}
-          workDays={workDays || []}
-          timecards={timecards || []}
-          punches={punches || []}
-          ruleset={ruleset}
-          timezone={timezone}
-        />
+        <div className="flex gap-2">
+          <ExportCSVButton
+            showName={show.name}
+            rooms={rooms || []}
+            workDays={workDays || []}
+            timecards={timecards || []}
+            punches={punches || []}
+            ruleset={ruleset}
+            timezone={timezone}
+          />
+          <ExportPDFButton
+            showName={show.name}
+            startDate={show.start_date}
+            endDate={show.end_date}
+            rooms={rooms || []}
+            workDays={workDays || []}
+            timecards={timecards || []}
+            punches={punches || []}
+            ruleset={ruleset}
+            timezone={timezone}
+          />
+        </div>
       </div>
 
       <div className="flex gap-2 mb-6">
