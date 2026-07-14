@@ -31,8 +31,18 @@ export default async function ShowReportPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('can_view_pay_rates')
+    .eq('id', user.id)
+    .single()
+
   const { data: show } = await supabase.from('shows').select('*').eq('id', id).single()
   if (!show) notFound()
+
+  // Financials only show in exports if BOTH the show tracks dollar amounts
+  // AND the current user has permission to view pay rates.
+  const canSeeFinancials = (show.show_financials || false) && (profile?.can_view_pay_rates ?? false)
 
   const timezone = show.timezone_identifier || 'America/Chicago'
 
@@ -138,6 +148,7 @@ export default async function ShowReportPage({
         <div className="flex gap-2">
           <ExportCSVButton
             showName={show.name}
+            showFinancials={canSeeFinancials}
             rooms={rooms || []}
             workDays={workDays || []}
             timecards={timecards || []}
@@ -147,6 +158,7 @@ export default async function ShowReportPage({
           />
           <ExportPDFButton
             showName={show.name}
+            showFinancials={canSeeFinancials}
             startDate={show.start_date}
             endDate={show.end_date}
             rooms={rooms || []}

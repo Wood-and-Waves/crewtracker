@@ -14,6 +14,7 @@ function fmt2(n: number): string {
 
 export default function ExportPDFButton({
   showName,
+  showFinancials,
   startDate,
   endDate,
   rooms,
@@ -24,6 +25,7 @@ export default function ExportPDFButton({
   timezone,
 }: {
   showName: string
+  showFinancials: boolean
   startDate: string
   endDate: string
   rooms: any[]
@@ -147,10 +149,12 @@ export default function ExportPDFButton({
               <View style={styles.summaryRow}><Text>Straight Time:</Text><Text>{fmt2(totalPaidST)} hrs</Text></View>
               <View style={styles.summaryRow}><Text>Overtime:</Text><Text>{fmt2(totalPaidOT)} hrs</Text></View>
               {totalPaidDT > 0 && <View style={styles.summaryRow}><Text>Double Time:</Text><Text>{fmt2(totalPaidDT)} hrs</Text></View>}
-              <View style={[styles.summaryRow, { marginTop: 4, borderTopWidth: 1, borderTopColor: '#ccc', paddingTop: 4 }]}>
-                <Text style={{ fontWeight: 700 }}>Direct Labor Total:</Text>
-                <Text style={{ fontWeight: 700 }}>${fmt2(totalLaborCost)}</Text>
-              </View>
+              {showFinancials && (
+                <View style={[styles.summaryRow, { marginTop: 4, borderTopWidth: 1, borderTopColor: '#ccc', paddingTop: 4 }]}>
+                  <Text style={{ fontWeight: 700 }}>Direct Labor Total:</Text>
+                  <Text style={{ fontWeight: 700 }}>${fmt2(totalLaborCost)}</Text>
+                </View>
+              )}
             </View>
 
             <Text style={styles.sectionTitle}>Crew Summary</Text>
@@ -240,7 +244,7 @@ export default function ExportPDFButton({
 
                   <Text style={styles.workedLine}>Worked: {fmt2(c.st)} ST / {fmt2(c.ot)} OT / {fmt2(c.dt)} DT</Text>
                   <Text style={styles.paidLine}>Paid: {fmt2(c.pST)} ST / {fmt2(c.pOT)} OT / {fmt2(c.pDT)} DT</Text>
-                  {travelPay > 0 && <Text style={styles.workedLine}>Travel Pay: ${fmt2(travelPay)}</Text>}
+                  {showFinancials && travelPay > 0 && <Text style={styles.workedLine}>Travel Pay: ${fmt2(travelPay)}</Text>}
                 </View>
               )
             })}

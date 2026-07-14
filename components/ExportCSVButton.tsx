@@ -17,6 +17,7 @@ function fmt2(n: number): string {
 
 export default function ExportCSVButton({
   showName,
+  showFinancials,
   rooms,
   workDays,
   timecards,
@@ -31,6 +32,7 @@ export default function ExportCSVButton({
   punches: any[]
   ruleset: PayrollRuleset
   timezone: string
+  showFinancials: boolean
 }) {
   function timeLabel(iso: string | undefined) {
     if (!iso) return ''
@@ -124,10 +126,10 @@ export default function ExportCSVButton({
         csvField(fmt2(pOT)),
         csvField(fmt2(pDT)),
         csvField(String(mpCount)),
-        csvField(fmt2(mpTotal)),
+        csvField(showFinancials ? fmt2(mpTotal) : ''),
         csvField(shortTurn ? 'Yes' : 'No'),
-        csvField(fmt2(travelPay)),
-        csvField(fmt2(pay)),
+        csvField(showFinancials ? fmt2(travelPay) : ''),
+        csvField(showFinancials ? fmt2(pay) : ''),
       ].join(',')
 
       rows.push(row)
@@ -139,8 +141,8 @@ export default function ExportCSVButton({
       csvField(''), csvField(''), csvField(''), csvField(''), csvField(''), csvField(''),
       csvField(fmt2(totalST)), csvField(fmt2(totalOT)), csvField(fmt2(totalDT)),
       csvField(fmt2(totalPaidST)), csvField(fmt2(totalPaidOT)), csvField(fmt2(totalPaidDT)),
-      csvField(String(totalMealPenaltyCount)), csvField(fmt2(totalMealPenalty)),
-      csvField(String(shortTurnCount)), csvField(fmt2(totalTravelPay)), csvField(fmt2(totalLaborCost)),
+      csvField(String(totalMealPenaltyCount)), csvField(showFinancials ? fmt2(totalMealPenalty) : ''),
+      csvField(String(shortTurnCount)), csvField(showFinancials ? fmt2(totalTravelPay) : ''), csvField(showFinancials ? fmt2(totalLaborCost) : ''),
     ].join(',')
     rows.push(totalsRow)
 
