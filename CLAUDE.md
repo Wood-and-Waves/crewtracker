@@ -27,6 +27,7 @@ Dan (the developer) has no professional dev background. Claude writes the code; 
 - Always run `npm run build` before considering a change complete; fix errors before moving on.
 - Commit messages: clear, one line (e.g. `Fix invite RLS: move org invite creation to server-side admin API route.`).
 - Dan prefers concise, list-based responses during active coding — ask only when a real decision is needed.
+- When setting up multi-step infrastructure (auth, tooling, etc.), Dan prefers going one step at a time and confirming each works before moving to the next, rather than being handed a full checklist up front.
 - Surface errors instead of failing silently. This has bitten the project before: RLS gaps that silently blocked saves, updates that "didn't take" with no visible error.
 - If a new table is added, don't assume RLS policies exist — check `pg_policies` before assuming a feature "should just work." The schema was originally built SELECT-only in several places and INSERT/UPDATE/DELETE policies had to be retrofitted per table as features hit walls.
 
