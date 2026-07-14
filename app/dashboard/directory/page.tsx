@@ -16,7 +16,7 @@ export default async function DirectoryPage() {
   if (!profile?.organization_id) {
     return (
       <div className="p-6 md:p-10">
-        <p className="text-zinc-500">No organization linked to this account yet.</p>
+        <p className="text-muted">No organization linked to this account yet.</p>
       </div>
     )
   }

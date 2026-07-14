@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Button from '@/components/ui/Button'
 
 type RateCard = { id: string; role: string; day_rate: number }
 type CrewMember = { id: string; full_name: string; phone: string | null; email: string | null; rate_cards: RateCard[] }
@@ -29,6 +30,11 @@ function csvField(value: string) {
   return `"${value.replace(/"/g, '""')}"`
 }
 
+const inputCls =
+  'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
+const selectCls =
+  'rounded-field bg-surface-2 border border-line px-3 py-2 text-sm text-ink outline-none focus:border-accent'
+
 export default function CrewDirectoryClient({
   organizationId,
   initialCrew,
@@ -40,13 +46,23 @@ export default function CrewDirectoryClient({
   const supabase = createClient()
   const [crew, setCrew] = useState<CrewMember[]>(initialCrew)
   const [sort, setSort] = useState<SortOption>('lastName')
+  const [query, setQuery] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [importStatus, setImportStatus] = useState('')
   const [importing, setImporting] = useState(false)
 
-  const sorted = [...crew].sort((a, b) => {
+  const filtered = crew.filter(person => {
+    if (!query.trim()) return true
+    const q = query.trim().toLowerCase()
+    return (
+      person.full_name.toLowerCase().includes(q) ||
+      person.rate_cards.some(rc => rc.role.toLowerCase().includes(q))
+    )
+  })
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sort === 'firstName') {
       return firstNameOf(a.full_name).localeCompare(firstNameOf(b.full_name))
     }
@@ -191,84 +207,102 @@ export default function CrewDirectoryClient({
 
   return (
     <div className="p-6 md:p-10">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Crew Directory</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="text-3xl font-extrabold tracking-tight">Crew Directory</h1>
+        <div className="flex flex-wrap items-center gap-2">
           {crew.length > 0 && (
-            <button onClick={exportCSV} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
-              Export CSV
-            </button>
+            <Button variant="ghost" size="sm" onClick={exportCSV}>Export CSV</Button>
           )}
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value as SortOption)}
-            className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
-          >
-            <option value="lastName" className="bg-zinc-800 text-white">Sort: Last Name</option>
-            <option value="firstName" className="bg-zinc-800 text-white">Sort: First Name</option>
-            <option value="role" className="bg-zinc-800 text-white">Sort: Role</option>
+          <select value={sort} onChange={e => setSort(e.target.value as SortOption)} className={selectCls}>
+            <option value="lastName" className="bg-surface-2 text-ink">Sort: Last Name</option>
+            <option value="firstName" className="bg-surface-2 text-ink">Sort: First Name</option>
+            <option value="role" className="bg-surface-2 text-ink">Sort: Role</option>
           </select>
-          <button onClick={() => setShowImport(true)} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
-            Import
-          </button>
-          <button onClick={() => setShowAdd(true)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500">
-            + Add Person
-          </button>
+          <Button variant="ghost" size="sm" onClick={() => setShowImport(true)}>Import</Button>
+          <Button size="sm" onClick={() => setShowAdd(true)}>+ Add Person</Button>
         </div>
       </div>
 
+      {crew.length > 0 && (
+        <input
+          type="search"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search crew by name or role…"
+          className={`${inputCls} mb-5 max-w-sm`}
+        />
+      )}
+
       {crew.length === 0 ? (
-        <p className="text-zinc-500">Directory empty. Add your freelance crew here so you can assign them to shows.</p>
+        <p className="text-muted">Directory empty. Add your freelance crew here so you can assign them to shows.</p>
+      ) : sorted.length === 0 ? (
+        <p className="text-muted">No crew match &ldquo;{query}&rdquo;.</p>
       ) : (
-        <div className="rounded-2xl bg-zinc-900 divide-y divide-zinc-800">
-          {sorted.map(person => (
-            <div key={person.id} className="flex items-center justify-between p-4">
-              <button
-                onClick={() => router.push(`/dashboard/directory/${person.id}`)}
-                className="flex-1 text-left"
-              >
-                <p className="text-sm font-medium text-white">{formatForDisplay(person.full_name, sort)}</p>
-                <p className="text-xs text-zinc-500">
-                  {person.rate_cards.length > 0 ? person.rate_cards.map(rc => rc.role).join(', ') : 'No roles assigned'}
-                </p>
-              </button>
-              <div className="flex items-center gap-3">
-                {person.phone && (
-                  <>
-                    <a href={`tel:${person.phone}`} className="text-blue-400 hover:text-blue-300" title="Call">☎</a>
-                    <a href={`sms:${person.phone}`} className="text-blue-400 hover:text-blue-300" title="Text">✉</a>
-                  </>
-                )}
-                {person.email && (
-                  <a href={`mailto:${person.email}`} className="text-blue-400 hover:text-blue-300" title="Email">✉️</a>
-                )}
-                <button onClick={() => deleteCrew(person.id)} className="text-zinc-600 hover:text-red-400 text-sm" title="Delete">
-                  ✕
-                </button>
-              </div>
+        <>
+          {/* Desktop: dense data table */}
+          <div className="hidden lg:block rounded-card border border-line bg-surface overflow-hidden">
+            <div className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_88px] gap-3 px-5 py-2.5 border-b border-line text-[10.5px] font-bold uppercase tracking-wide text-muted">
+              <div>Name</div><div>Role</div><div>Phone</div><div>Email</div><div className="text-right">Actions</div>
             </div>
-          ))}
-        </div>
+            {sorted.map(person => (
+              <div
+                key={person.id}
+                className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_88px] gap-3 items-center px-5 py-3 border-b border-line last:border-b-0 hover:bg-surface-2 cursor-pointer"
+                onClick={() => router.push(`/dashboard/directory/${person.id}`)}
+              >
+                <div className="font-semibold text-ink truncate">{formatForDisplay(person.full_name, sort)}</div>
+                <div className="text-muted truncate">{person.rate_cards.map(rc => rc.role).join(', ') || '—'}</div>
+                <div className="text-muted truncate">{person.phone || '—'}</div>
+                <div className="text-muted truncate">{person.email || '—'}</div>
+                <div className="flex justify-end gap-3" onClick={e => e.stopPropagation()}>
+                  {person.phone && <a href={`tel:${person.phone}`} className="text-accent hover:opacity-80" title="Call">☎</a>}
+                  {person.email && <a href={`mailto:${person.email}`} className="text-accent hover:opacity-80" title="Email">✉</a>}
+                  <button onClick={() => deleteCrew(person.id)} className="text-muted hover:text-danger" title="Delete">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Portrait iPad / phone: tappable list */}
+          <div className="lg:hidden rounded-card bg-surface border border-line divide-y divide-line">
+            {sorted.map(person => (
+              <div key={person.id} className="flex items-center justify-between p-4">
+                <button onClick={() => router.push(`/dashboard/directory/${person.id}`)} className="flex-1 text-left">
+                  <p className="text-sm font-medium text-ink">{formatForDisplay(person.full_name, sort)}</p>
+                  <p className="text-xs text-muted">
+                    {person.rate_cards.length > 0 ? person.rate_cards.map(rc => rc.role).join(', ') : 'No roles assigned'}
+                  </p>
+                </button>
+                <div className="flex items-center gap-3">
+                  {person.phone && (
+                    <>
+                      <a href={`tel:${person.phone}`} className="text-accent hover:opacity-80" title="Call">☎</a>
+                      <a href={`sms:${person.phone}`} className="text-accent hover:opacity-80" title="Text">✉</a>
+                    </>
+                  )}
+                  {person.email && <a href={`mailto:${person.email}`} className="text-accent hover:opacity-80" title="Email">✉️</a>}
+                  <button onClick={() => deleteCrew(person.id)} className="text-muted hover:text-danger text-sm" title="Delete">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-4">Add Person</h2>
+          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-ink mb-4">Add Person</h2>
             <input
               placeholder="Name"
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addPerson()}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              className={`${inputCls} mb-4`}
             />
             <div className="flex gap-3">
-              <button onClick={() => { setShowAdd(false); setNewName('') }} className="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-500">
-                Cancel
-              </button>
-              <button onClick={addPerson} disabled={!newName.trim()} className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50">
-                Next
-              </button>
+              <Button variant="ghost" className="flex-1 py-3" onClick={() => { setShowAdd(false); setNewName('') }}>Cancel</Button>
+              <Button className="flex-1 py-3" onClick={addPerson} disabled={!newName.trim()}>Next</Button>
             </div>
           </div>
         </div>
@@ -276,14 +310,14 @@ export default function CrewDirectoryClient({
 
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-zinc-900 p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-card bg-surface border border-line p-6 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white">Import Roster</h2>
-              <button onClick={() => { setShowImport(false); setImportStatus('') }} className="text-zinc-500 hover:text-zinc-300">Close</button>
+              <h2 className="text-lg font-bold text-ink">Import Roster</h2>
+              <button onClick={() => { setShowImport(false); setImportStatus('') }} className="text-muted hover:text-ink">Close</button>
             </div>
-            <p className="text-sm text-zinc-400 mb-2">Upload a .csv with columns in this order:</p>
-            <p className="text-xs text-zinc-500 mb-4">Name, Role, Day Rate, Phone, Email — no dollar signs. Phone and Email are optional.</p>
-            <button onClick={downloadTemplate} className="text-sm text-blue-400 hover:text-blue-300 mb-4 block">
+            <p className="text-sm text-muted mb-2">Upload a .csv with columns in this order:</p>
+            <p className="text-xs text-muted mb-4">Name, Role, Day Rate, Phone, Email — no dollar signs. Phone and Email are optional.</p>
+            <button onClick={downloadTemplate} className="text-sm text-accent hover:opacity-80 mb-4 block">
               Download example template
             </button>
             <input
@@ -291,10 +325,10 @@ export default function CrewDirectoryClient({
               accept=".csv"
               onChange={e => e.target.files?.[0] && handleImportFile(e.target.files[0])}
               disabled={importing}
-              className="w-full text-sm text-zinc-300"
+              className="w-full text-sm text-ink file:mr-3 file:rounded-field file:border-0 file:bg-surface-2 file:px-3 file:py-2 file:text-ink"
             />
-            {importing && <p className="text-sm text-zinc-500 mt-3">Importing...</p>}
-            {importStatus && <p className="text-sm text-zinc-300 mt-3">{importStatus}</p>}
+            {importing && <p className="text-sm text-muted mt-3">Importing...</p>}
+            {importStatus && <p className="text-sm text-ink mt-3">{importStatus}</p>}
           </div>
         </div>
       )}

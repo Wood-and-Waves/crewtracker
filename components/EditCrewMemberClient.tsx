@@ -1,13 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import Button from '@/components/ui/Button'
+import Card from '@/components/ui/Card'
 
 type RateCard = { id: string; role: string; day_rate: number }
 type CrewMember = { id: string; full_name: string; phone: string | null; email: string | null; rate_cards: RateCard[] }
 type AVRole = { id: string; name: string }
+
+const inputCls =
+  'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
 export default function EditCrewMemberClient({
   crew,
@@ -16,7 +20,6 @@ export default function EditCrewMemberClient({
   crew: CrewMember
   availableRoles: AVRole[]
 }) {
-  const router = useRouter()
   const supabase = createClient()
 
   const [name, setName] = useState(crew.full_name)
@@ -66,83 +69,81 @@ export default function EditCrewMemberClient({
   const alreadyHasNewRole = rateCards.some(c => c.role === newRoleName)
 
   return (
-    <div className="p-6 md:p-10 max-w-lg">
-      <Link href="/dashboard/directory" className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Directory</Link>
+    <div className="p-6 md:p-10 max-w-2xl">
+      <Link href="/dashboard/directory" className="text-sm text-muted hover:text-ink">← Back to Directory</Link>
       <h1 className="text-2xl font-bold mt-2 mb-6">Edit Profile</h1>
 
-      <div className="rounded-2xl bg-zinc-900 p-5 mb-4">
-        <p className="text-xs uppercase tracking-wide text-zinc-500 mb-3">Crew Info</p>
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onBlur={() => saveField('full_name', name)}
-          className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">
+        <Card className="p-5 mb-4">
+          <p className="text-xs uppercase tracking-wide text-muted mb-3">Crew Info</p>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onBlur={() => saveField('full_name', name)}
+            className={inputCls}
+          />
+        </Card>
+
+        <Card className="p-5 mb-4">
+          <p className="text-xs uppercase tracking-wide text-muted mb-3">Contact Info (Optional)</p>
+          <input
+            placeholder="Phone Number"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            onBlur={() => saveField('phone', phone)}
+            className={`${inputCls} mb-3`}
+          />
+          <input
+            placeholder="Email Address"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            onBlur={() => saveField('email', email)}
+            className={inputCls}
+          />
+        </Card>
       </div>
 
-      <div className="rounded-2xl bg-zinc-900 p-5 mb-4">
-        <p className="text-xs uppercase tracking-wide text-zinc-500 mb-3">Contact Info (Optional)</p>
-        <input
-          placeholder="Phone Number"
-          value={phone}
-          onChange={e => setPhone(e.target.value)}
-          onBlur={() => saveField('phone', phone)}
-          className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-        />
-        <input
-          placeholder="Email Address"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          onBlur={() => saveField('email', email)}
-          className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div className="rounded-2xl bg-zinc-900 p-5">
-        <p className="text-xs uppercase tracking-wide text-zinc-500 mb-3">Saved Roles & Rates</p>
+      <Card className="p-5">
+        <p className="text-xs uppercase tracking-wide text-muted mb-3">Saved Roles &amp; Rates</p>
         <div className="flex flex-col gap-2 mb-4">
           {rateCards.map(card => (
-            <div key={card.id} className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-4 py-3">
+            <div key={card.id} className="flex items-center justify-between rounded-field bg-surface-2 px-4 py-3">
               <button
                 onClick={() => { setEditingCard(card); setEditRate(String(card.day_rate)) }}
-                className="text-sm text-white hover:text-blue-400"
+                className="text-sm text-ink hover:text-accent"
               >
                 {card.role}
               </button>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-zinc-400">${card.day_rate.toFixed(0)}</span>
-                <button onClick={() => deleteRateCard(card.id)} className="text-zinc-600 hover:text-red-400 text-sm">✕</button>
+                <span className="text-sm text-muted">${card.day_rate.toFixed(0)}</span>
+                <button onClick={() => deleteRateCard(card.id)} className="text-muted hover:text-danger text-sm">✕</button>
               </div>
             </div>
           ))}
         </div>
         <button
           onClick={() => { setNewRoleName(availableRoles[0]?.name || ''); setNewRoleRate(''); setShowAddRole(true) }}
-          className="text-sm text-blue-400 hover:text-blue-300"
+          className="text-sm text-accent hover:opacity-80"
         >
           + Add Another Role...
         </button>
-        <p className="text-xs text-zinc-600 mt-2">Tap a role to edit its day rate, or use the ✕ to remove it.</p>
-      </div>
+        <p className="text-xs text-muted mt-2">Tap a role to edit its day rate, or use the ✕ to remove it.</p>
+      </Card>
 
       {editingCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-1">Edit Day Rate</h2>
-            <p className="text-sm text-zinc-500 mb-4">Enter a new day rate for {editingCard.role}.</p>
+          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-ink mb-1">Edit Day Rate</h2>
+            <p className="text-sm text-muted mb-4">Enter a new day rate for {editingCard.role}.</p>
             <input
               type="number"
               value={editRate}
               onChange={e => setEditRate(e.target.value)}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              className={`${inputCls} mb-4`}
             />
             <div className="flex gap-3">
-              <button onClick={() => setEditingCard(null)} className="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-500">
-                Cancel
-              </button>
-              <button onClick={saveRate} className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500">
-                Save
-              </button>
+              <Button variant="ghost" className="flex-1 py-3" onClick={() => setEditingCard(null)}>Cancel</Button>
+              <Button className="flex-1 py-3" onClick={saveRate}>Save</Button>
             </div>
           </div>
         </div>
@@ -150,16 +151,16 @@ export default function EditCrewMemberClient({
 
       {showAddRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-4">New Role</h2>
+          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-ink mb-4">New Role</h2>
             <select
               key={availableRoles.map(r => r.id).join(',')}
               value={newRoleName}
               onChange={e => setNewRoleName(e.target.value)}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+              className={`${inputCls} mb-3`}
             >
               {availableRoles.map(r => (
-                <option key={r.id} value={r.name} className="bg-zinc-800 text-white">{r.name}</option>
+                <option key={r.id} value={r.name} className="bg-surface-2 text-ink">{r.name}</option>
               ))}
             </select>
             <input
@@ -167,22 +168,14 @@ export default function EditCrewMemberClient({
               type="number"
               value={newRoleRate}
               onChange={e => setNewRoleRate(e.target.value)}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+              className={inputCls}
             />
             {alreadyHasNewRole && (
-              <p className="text-xs text-orange-400 mt-2">{newRoleName} is already saved for this person.</p>
+              <p className="text-xs text-ot mt-2">{newRoleName} is already saved for this person.</p>
             )}
             <div className="flex gap-3 mt-4">
-              <button onClick={() => setShowAddRole(false)} className="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-500">
-                Cancel
-              </button>
-              <button
-                onClick={addRole}
-                disabled={!newRoleName || alreadyHasNewRole}
-                className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-              >
-                Add
-              </button>
+              <Button variant="ghost" className="flex-1 py-3" onClick={() => setShowAddRole(false)}>Cancel</Button>
+              <Button className="flex-1 py-3" onClick={addRole} disabled={!newRoleName || alreadyHasNewRole}>Add</Button>
             </div>
           </div>
         </div>
