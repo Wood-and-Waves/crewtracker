@@ -127,9 +127,14 @@ export default async function ShowDetailPage({
       <Link href="/dashboard" className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Shows</Link>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold mt-2">{show.name}</h1>
-        <Link href={`/dashboard/shows/${id}/reports`} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
-          View Report
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/dashboard/shows/${id}/edit`} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
+            Edit Show
+          </Link>
+          <Link href={`/dashboard/shows/${id}/reports`} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
+            View Report
+          </Link>
+        </div>
       </div>
 
       <div className="flex items-center justify-center gap-4 my-6">
