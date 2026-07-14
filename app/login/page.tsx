@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [magicSent, setMagicSent] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -52,12 +53,34 @@ export default function LoginPage() {
     setLoading(false)
   }
 
+  async function handleForgotPassword() {
+    setError('')
+    setLoading(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    })
+    if (error) setError(error.message)
+    else setResetSent(true)
+    setLoading(false)
+  }
+
   if (magicSent) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950">
         <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl text-center">
           <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
           <p className="text-zinc-400 text-sm">We sent a confirmation link to <span className="text-white">{email}</span>. Click it to continue.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (resetSent) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
+          <p className="text-zinc-400 text-sm">We sent a password reset link to <span className="text-white">{email}</span>. Click it to set a password.</p>
         </div>
       </div>
     )
@@ -110,6 +133,16 @@ export default function LoginPage() {
             onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
             className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
           />
+
+          {!isSignUp && (
+            <button
+              onClick={handleForgotPassword}
+              disabled={loading || !email}
+              className="self-end text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50"
+            >
+              Forgot password?
+            </button>
+          )}
 
           {error && <p className="text-xs text-red-400">{error}</p>}
 
