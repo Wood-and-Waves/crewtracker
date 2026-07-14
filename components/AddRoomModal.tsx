@@ -25,11 +25,38 @@ export default function AddRoomModal({
     setError('')
     setLoading(true)
 
+    const trimmedName = name.trim()
     const targetDayIds = applyAll
       ? [currentWorkDayId, ...remainingWorkDayIds]
       : [currentWorkDayId]
-    const rows = targetDayIds.map(workDayId => ({ work_day_id: workDayId, name }))
 
+    // Skip any day that already has a room with this name (case-insensitive)
+    // instead of silently creating a duplicate.
+    const { data: existingRooms, error: lookupError } = await supabase
+      .from('rooms')
+      .select('work_day_id, name')
+      .in('work_day_id', targetDayIds)
+
+    if (lookupError) {
+      setError(lookupError.message)
+      setLoading(false)
+      return
+    }
+
+    const conflictDayIds = new Set(
+      (existingRooms || [])
+        .filter(r => r.name.trim().toLowerCase() === trimmedName.toLowerCase())
+        .map(r => r.work_day_id)
+    )
+    const insertDayIds = targetDayIds.filter(id => !conflictDayIds.has(id))
+
+    if (insertDayIds.length === 0) {
+      setError(`A room named "${trimmedName}" already exists on ${targetDayIds.length > 1 ? 'every selected day' : 'this day'}.`)
+      setLoading(false)
+      return
+    }
+
+    const rows = insertDayIds.map(workDayId => ({ work_day_id: workDayId, name: trimmedName }))
     const { error: insertError } = await supabase.from('rooms').insert(rows)
 
     if (insertError) {

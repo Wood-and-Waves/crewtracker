@@ -5,6 +5,7 @@ import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
 import TimecardRow from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
+import RoomActionsMenu from '@/components/RoomActionsMenu'
 
 export default async function ShowDetailPage({
   params,
@@ -79,7 +80,10 @@ export default async function ShowDetailPage({
     punches: (allShowPunches || []).filter(p => p.timecard_id === tc.id),
   }))
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  // Compute "today" in the show's timezone, not UTC/device time — using
+  // toISOString() here rolls to tomorrow's date in the evening for any
+  // timezone behind UTC, which silently opens the wrong day.
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date())
   const requestedIndex = day ? workDays.findIndex(d => d.day_number === parseInt(day)) : -1
   const todayIndex = workDays.findIndex(d => d.date === todayStr)
   const activeIndex = requestedIndex >= 0 ? requestedIndex : (todayIndex >= 0 ? todayIndex : 0)
@@ -150,7 +154,14 @@ export default async function ShowDetailPage({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {roomsList.map(room => (
           <div key={room.id} className="rounded-2xl bg-zinc-900 p-5">
-            <h2 className="text-lg font-bold text-white mb-3">{room.name}</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-white">{room.name}</h2>
+              <RoomActionsMenu
+                roomId={room.id}
+                roomName={room.name}
+                crewCount={roomTimecards[room.id]?.length || 0}
+              />
+            </div>
 
             {roomTimecards[room.id]?.length > 0 && (
               <BatchPunchBar timecards={roomTimecards[room.id]} />

@@ -26,7 +26,7 @@ export default function StaffRoomModal({
   const [crew, setCrew] = useState<CrewMember[]>([])
   const [rateCards, setRateCards] = useState<RateCard[]>([])
   const [selected, setSelected] = useState<Record<string, { role: string; dayRate: string }>>({})
-  const [applyAll, setApplyAll] = useState(false)
+  const [applyAll, setApplyAll] = useState(true)
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
