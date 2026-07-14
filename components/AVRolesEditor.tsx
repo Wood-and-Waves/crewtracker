@@ -3,8 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Card from '@/components/ui/Card'
+import Button from '@/components/ui/Button'
 
 type AVRole = { id: string; name: string; sort_order: number }
+
+const inputCls =
+  'rounded-field bg-surface-2 border border-line px-3 py-2 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
 export default function AVRolesEditor({
   organizationId,
@@ -102,16 +107,16 @@ export default function AVRolesEditor({
   }
 
   return (
-    <div className="rounded-2xl bg-zinc-900 p-5 mb-6">
-      <h2 className="text-lg font-bold text-white mb-1">AV Roles</h2>
-      <p className="text-xs text-zinc-500 mb-4">Standard job titles available when staffing crew, shared across your organization.</p>
+    <Card className="p-5">
+      <h2 className="text-lg font-bold text-ink mb-1">AV Roles</h2>
+      <p className="text-xs text-muted mb-4">Standard job titles available when staffing crew, shared across your organization.</p>
 
-      <div className="flex flex-col gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         {roles.map((role, i) => (
-          <div key={role.id} className="flex items-center gap-2 rounded-lg bg-zinc-800/50 px-3 py-2">
+          <div key={role.id} className="flex items-center gap-1.5 rounded-pill bg-surface-2 border border-line pl-1 pr-2 py-1">
             <div className="flex flex-col">
-              <button onClick={() => move(i, -1)} disabled={i === 0 || busy} className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 leading-none text-xs">▲</button>
-              <button onClick={() => move(i, 1)} disabled={i === roles.length - 1 || busy} className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 leading-none text-xs">▼</button>
+              <button onClick={() => move(i, -1)} disabled={i === 0 || busy} className="text-muted hover:text-ink disabled:opacity-30 leading-none text-[9px] px-1">▲</button>
+              <button onClick={() => move(i, 1)} disabled={i === roles.length - 1 || busy} className="text-muted hover:text-ink disabled:opacity-30 leading-none text-[9px] px-1">▼</button>
             </div>
 
             {editingId === role.id ? (
@@ -121,12 +126,12 @@ export default function AVRolesEditor({
                 onChange={e => setEditingName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && renameRole(role.id)}
                 onBlur={() => renameRole(role.id)}
-                className="flex-1 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+                className={`${inputCls} py-1 px-2 text-xs`}
               />
             ) : (
               <button
                 onClick={() => { setEditingId(role.id); setEditingName(role.name); setError('') }}
-                className="flex-1 text-left text-sm text-white hover:text-blue-400"
+                className="text-sm text-ink hover:text-accent"
               >
                 {role.name}
               </button>
@@ -135,17 +140,17 @@ export default function AVRolesEditor({
             <button
               onClick={() => deleteRole(role.id)}
               disabled={busy}
-              className="text-zinc-500 hover:text-red-400 disabled:opacity-30"
+              className="text-muted hover:text-danger disabled:opacity-30"
               aria-label={`Delete ${role.name}`}
             >
               ×
             </button>
           </div>
         ))}
-        {roles.length === 0 && <p className="text-sm text-zinc-500">No roles yet.</p>}
+        {roles.length === 0 && <p className="text-sm text-muted">No roles yet.</p>}
       </div>
 
-      {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+      {error && <p className="text-xs text-danger mb-3">{error}</p>}
 
       <div className="flex gap-2">
         <input
@@ -153,16 +158,10 @@ export default function AVRolesEditor({
           value={newName}
           onChange={e => setNewName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && addRole()}
-          className="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+          className={`${inputCls} flex-1`}
         />
-        <button
-          onClick={addRole}
-          disabled={busy || !newName.trim()}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-        >
-          Add
-        </button>
+        <Button size="sm" onClick={addRole} disabled={busy || !newName.trim()}>Add</Button>
       </div>
-    </div>
+    </Card>
   )
 }

@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Card from '@/components/ui/Card'
+import Toggle from '@/components/ui/Toggle'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 export default function PersonalSettingsClient({
   use24HourTime,
@@ -26,36 +29,42 @@ export default function PersonalSettingsClient({
   }
 
   return (
-    <div className="rounded-2xl bg-zinc-900 p-5 mb-6">
-      <h2 className="text-lg font-bold text-white mb-4">Personal Preferences</h2>
+    <Card className="p-5">
+      <h2 className="text-lg font-bold text-ink mb-4">Personal Preferences</h2>
 
-      <div className="flex items-center justify-between py-3 border-b border-zinc-800">
+      <div className="flex items-center justify-between py-3 border-b border-line">
         <div>
-          <p className="text-sm text-white">24-hour time</p>
-          <p className="text-xs text-zinc-500">Show punch times as 14:30 instead of 2:30 PM.</p>
+          <p className="text-sm text-ink">Appearance</p>
+          <p className="text-xs text-muted">Switch between light and dark on this device.</p>
         </div>
-        <button
-          onClick={() => toggle('use_24_hour_time', !use24HourTime)}
+        <ThemeToggle />
+      </div>
+
+      <div className="flex items-center justify-between py-3 border-b border-line">
+        <div>
+          <p className="text-sm text-ink">24-hour time</p>
+          <p className="text-xs text-muted">Show punch times as 14:30 instead of 2:30 PM.</p>
+        </div>
+        <Toggle
+          checked={use24HourTime}
+          onChange={v => toggle('use_24_hour_time', v)}
           disabled={saving === 'use_24_hour_time'}
-          className={`relative h-6 w-11 rounded-full transition disabled:opacity-50 ${use24HourTime ? 'bg-blue-600' : 'bg-zinc-700'}`}
-        >
-          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${use24HourTime ? 'left-5' : 'left-0.5'}`} />
-        </button>
+          label="24-hour time"
+        />
       </div>
 
       <div className="flex items-center justify-between py-3">
         <div>
-          <p className="text-sm text-white">Shoulder Surfer Mode</p>
-          <p className="text-xs text-zinc-500">Hide dollar amounts on screen behind *** — useful on a shared device.</p>
+          <p className="text-sm text-ink">Shoulder Surfer Mode</p>
+          <p className="text-xs text-muted">Hide dollar amounts on screen behind ••• — useful on a shared device.</p>
         </div>
-        <button
-          onClick={() => toggle('shoulder_surfer_mode', !shoulderSurferMode)}
+        <Toggle
+          checked={shoulderSurferMode}
+          onChange={v => toggle('shoulder_surfer_mode', v)}
           disabled={saving === 'shoulder_surfer_mode'}
-          className={`relative h-6 w-11 rounded-full transition disabled:opacity-50 ${shoulderSurferMode ? 'bg-blue-600' : 'bg-zinc-700'}`}
-        >
-          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${shoulderSurferMode ? 'left-5' : 'left-0.5'}`} />
-        </button>
+          label="Shoulder Surfer Mode"
+        />
       </div>
-    </div>
+    </Card>
   )
 }

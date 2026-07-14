@@ -19,7 +19,7 @@ export default async function SettingsPage() {
     return (
       <div className="p-6 md:p-10">
         <h1 className="text-2xl font-bold mb-4">Settings</h1>
-        <p className="text-zinc-500">No organization linked to this account yet.</p>
+        <p className="text-muted">No organization linked to this account yet.</p>
       </div>
     )
   }
@@ -30,27 +30,36 @@ export default async function SettingsPage() {
   ])
 
   return (
-    <div className="p-6 md:p-10 max-w-xl">
+    <div className="p-6 md:p-10">
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
-      <PersonalSettingsClient
-        use24HourTime={profile.use_24_hour_time || false}
-        shoulderSurferMode={profile.shoulder_surfer_mode || false}
-      />
+      <div className="lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start max-w-4xl">
+        <div className="mb-5 lg:mb-0">
+          <PersonalSettingsClient
+            use24HourTime={profile.use_24_hour_time || false}
+            shoulderSurferMode={profile.shoulder_surfer_mode || false}
+          />
+        </div>
 
-      {profile.can_manage_users && organization && (
-        <>
-          <OrgSettingsClient
-            organizationId={organization.id}
-            timecardRoundingMinutes={organization.timecard_rounding_minutes ?? 1}
-            defaultCcEmail={organization.default_cc_email}
-          />
-          <AVRolesEditor
-            organizationId={profile.organization_id}
-            initialRoles={avRoles || []}
-          />
-        </>
-      )}
+        {profile.can_manage_users && organization && (
+          <div className="mb-5 lg:mb-0">
+            <OrgSettingsClient
+              organizationId={organization.id}
+              timecardRoundingMinutes={organization.timecard_rounding_minutes ?? 1}
+              defaultCcEmail={organization.default_cc_email}
+            />
+          </div>
+        )}
+
+        {profile.can_manage_users && organization && (
+          <div className="lg:col-span-2">
+            <AVRolesEditor
+              organizationId={profile.organization_id}
+              initialRoles={avRoles || []}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

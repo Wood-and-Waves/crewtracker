@@ -3,6 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Card from '@/components/ui/Card'
+import Button from '@/components/ui/Button'
+
+const inputCls =
+  'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
 export default function OrgSettingsClient({
   organizationId,
@@ -42,45 +47,41 @@ export default function OrgSettingsClient({
   }
 
   return (
-    <div className="rounded-2xl bg-zinc-900 p-5 mb-6">
-      <h2 className="text-lg font-bold text-white mb-1">Organization Settings</h2>
-      <p className="text-xs text-zinc-500 mb-4">Applies to everyone in your organization.</p>
+    <Card className="p-5">
+      <h2 className="text-lg font-bold text-ink mb-1">Organization Settings</h2>
+      <p className="text-xs text-muted mb-4">Applies to everyone in your organization.</p>
 
       <div className="mb-4">
-        <label className="block text-sm text-zinc-400 mb-2">Timecard Rounding</label>
+        <label className="block text-sm text-muted mb-2">Timecard Rounding</label>
         <select
           value={rounding}
           onChange={e => setRounding(parseInt(e.target.value))}
-          className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+          className={inputCls}
         >
-          <option value={1} className="bg-zinc-800 text-white">Exact minute</option>
-          <option value={15} className="bg-zinc-800 text-white">Nearest 15 minutes</option>
-          <option value={30} className="bg-zinc-800 text-white">Nearest 30 minutes</option>
+          <option value={1} className="bg-surface-2 text-ink">Exact minute</option>
+          <option value={15} className="bg-surface-2 text-ink">Nearest 15 minutes</option>
+          <option value={30} className="bg-surface-2 text-ink">Nearest 30 minutes</option>
         </select>
-        <p className="text-xs text-zinc-500 mt-1">Rounds worked time up to the next interval before calculating pay.</p>
+        <p className="text-xs text-muted mt-1">Rounds worked time up to the next interval before calculating pay.</p>
       </div>
 
       <div className="mb-4">
-        <label className="block text-sm text-zinc-400 mb-2">Default CC Email</label>
+        <label className="block text-sm text-muted mb-2">Default CC Email</label>
         <input
           type="email"
           value={ccEmail}
           onChange={e => setCcEmail(e.target.value)}
           placeholder="payroll@example.com"
-          className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+          className={inputCls}
         />
-        <p className="text-xs text-zinc-500 mt-1">Used as a default CC when report email delivery is built.</p>
+        <p className="text-xs text-muted mt-1">Used as a default CC when report email delivery is built.</p>
       </div>
 
-      {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+      {error && <p className="text-xs text-danger mb-3">{error}</p>}
 
-      <button
-        onClick={save}
-        disabled={saving}
-        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-      >
+      <Button size="sm" onClick={save} disabled={saving}>
         {saving ? 'Saving...' : saved ? 'Saved' : 'Save'}
-      </button>
-    </div>
+      </Button>
+    </Card>
   )
 }
