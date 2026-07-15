@@ -180,6 +180,14 @@
   margin: 0;
 }
 
+.footer {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 @media (max-width: 600px) {
   .formSection {
     padding: 1.5rem;
