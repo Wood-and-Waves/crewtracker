@@ -9,6 +9,7 @@ import {
 } from '@/lib/payroll'
 import ExportCSVButton from '@/components/ExportCSVButton'
 import ExportPDFButton from '@/components/ExportPDFButton'
+import { cn } from '@/lib/cn'
 
 function fmt(n: number): string {
   if (n === 0) return '0'
@@ -80,9 +81,9 @@ export default async function ShowReportPage({
   if (!rulesetRow) {
     return (
       <div className="p-6 md:p-10">
-        <Link href={`/dashboard/shows/${id}`} className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Show</Link>
+        <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
         <h1 className="text-2xl font-bold mt-4">{show.name}</h1>
-        <p className="text-zinc-500 mt-2">No payroll ruleset found for this show.</p>
+        <p className="text-muted mt-2">No payroll ruleset found for this show.</p>
       </div>
     )
   }
@@ -143,9 +144,9 @@ export default async function ShowReportPage({
 
   return (
     <div className="p-6 md:p-10">
-      <Link href={`/dashboard/shows/${id}`} className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Show</Link>
-      <div className="flex items-center justify-between mt-2 mb-6">
-        <h1 className="text-2xl font-bold">{show.name} — Report</h1>
+      <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
+      <div className="flex items-center justify-between mt-2 mb-6 flex-wrap gap-3">
+        <h1 className="text-2xl font-extrabold tracking-tight">{show.name} — Report</h1>
         <div className="flex gap-2">
           <ExportCSVButton
             showName={show.name}
@@ -179,35 +180,41 @@ export default async function ShowReportPage({
       <div className="flex gap-2 mb-6">
         <Link
           href="?view=day"
-          className={`rounded-full px-4 py-2 text-sm font-medium ${activeView === 'day' ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-400'}`}
+          className={cn(
+            'rounded-pill px-4 py-2 text-sm font-medium',
+            activeView === 'day' ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink',
+          )}
         >
           By Day
         </Link>
         <Link
           href="?view=crew"
-          className={`rounded-full px-4 py-2 text-sm font-medium ${activeView === 'crew' ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-400'}`}
+          className={cn(
+            'rounded-pill px-4 py-2 text-sm font-medium',
+            activeView === 'crew' ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink',
+          )}
         >
           By Crew
         </Link>
       </div>
 
-      <div className="rounded-2xl bg-zinc-900 p-5 mb-6 max-w-md">
+      <div className="rounded-card border border-line bg-surface p-5 mb-6 max-w-md">
         <div className="flex justify-between mb-2">
-          <span className="text-sm text-zinc-400">Total Crew Hours (Paid)</span>
-          <span className="text-lg font-bold text-white">{fmt(totalPaidHours)} hrs</span>
+          <span className="text-sm text-muted">Total Crew Hours (Paid)</span>
+          <span className="text-lg font-bold text-ink tabular-nums">{fmt(totalPaidHours)} hrs</span>
         </div>
-        <div className="flex justify-between mb-2 text-sm text-zinc-500">
+        <div className="flex justify-between mb-2 text-sm text-muted">
           <span>Straight Time</span>
-          <span>{fmt(totalPaidST)} hrs</span>
+          <span className="tabular-nums">{fmt(totalPaidST)} hrs</span>
         </div>
-        <div className="flex justify-between text-sm text-zinc-500">
+        <div className="flex justify-between text-sm text-muted">
           <span>Overtime</span>
-          <span>{fmt(totalPaidOT)} hrs</span>
+          <span className="tabular-nums">{fmt(totalPaidOT)} hrs</span>
         </div>
         {totalPaidDT > 0 && (
-          <div className="flex justify-between text-sm text-zinc-500">
+          <div className="flex justify-between text-sm text-muted">
             <span>Double Time</span>
-            <span>{fmt(totalPaidDT)} hrs</span>
+            <span className="tabular-nums">{fmt(totalPaidDT)} hrs</span>
           </div>
         )}
       </div>
@@ -225,17 +232,17 @@ export default async function ShowReportPage({
 
             return (
               <div key={wd.id}>
-                <p className="text-sm font-semibold text-zinc-400 mb-2">{dayLabel(wd.date)}</p>
-                <div className="rounded-2xl bg-zinc-900 divide-y divide-zinc-800">
+                <p className="text-sm font-semibold text-muted mb-2">{dayLabel(wd.date)}</p>
+                <div className="rounded-card border border-line bg-surface divide-y divide-line">
                   {dayTimecards.map(tc => {
                     if (tc.is_travel_day) {
                       return (
                         <div key={tc.id} className="flex justify-between p-4">
                           <div>
-                            <p className="text-sm text-white">{tc.crew_member_name}</p>
-                            <p className="text-xs text-zinc-500">{tc.role}</p>
+                            <p className="text-sm text-ink">{tc.crew_member_name}</p>
+                            <p className="text-xs text-muted">{tc.role}</p>
                           </div>
-                          <span className="text-sm font-semibold text-blue-400">Travel Day</span>
+                          <span className="text-sm font-semibold text-accent">Travel Day</span>
                         </div>
                       )
                     }
@@ -244,19 +251,19 @@ export default async function ShowReportPage({
                       <div key={tc.id} className="flex justify-between p-4">
                         <div className="flex items-center gap-1.5">
                           <div>
-                            <p className="text-sm text-white">{tc.crew_member_name}</p>
-                            <p className="text-xs text-zinc-500">{tc.role}</p>
+                            <p className="text-sm text-ink">{tc.crew_member_name}</p>
+                            <p className="text-xs text-muted">{tc.role}</p>
                           </div>
-                          {tc.travel_in_day && <span className="text-xs text-blue-400">✈️</span>}
-                          {tc.travel_out_day && <span className="text-xs text-blue-400">✈️</span>}
+                          {tc.travel_in_day && <span className="text-xs text-accent">✈️</span>}
+                          {tc.travel_out_day && <span className="text-xs text-accent">✈️</span>}
                           {tc.pay_as_half_day && <span className="text-xs text-purple-400">◑</span>}
-                          {b.shortTurn && <span className="text-xs text-orange-400">⚠️</span>}
+                          {b.shortTurn && <span className="text-xs text-ot">⚠️</span>}
                         </div>
                         <div className="text-right">
-                          <p className={`text-sm font-semibold ${b.shortTurn ? 'text-orange-400' : 'text-white'}`}>
+                          <p className={cn('text-sm font-semibold tabular-nums', b.shortTurn ? 'text-ot' : 'text-ink')}>
                             {fmt(b.dayTotal)} hrs
                           </p>
-                          <p className="text-xs text-zinc-500">{b.text}</p>
+                          <p className="text-xs text-muted">{b.text}</p>
                         </div>
                       </div>
                     )
@@ -267,7 +274,7 @@ export default async function ShowReportPage({
           })}
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {Object.values(
             (timecards || []).reduce((acc: Record<string, any>, tc) => {
               const key = `${tc.crew_member_name}|${tc.role}`
@@ -281,9 +288,9 @@ export default async function ShowReportPage({
               let crewTotal = 0
 
               return (
-                <div key={crew.name} className="rounded-2xl bg-zinc-900 p-5">
-                  <h2 className="text-lg font-bold text-white mb-1">{crew.name}</h2>
-                  <p className="text-xs text-zinc-500 mb-3">{crew.role}</p>
+                <div key={crew.name} className="rounded-card border border-line bg-surface p-5">
+                  <h2 className="text-lg font-bold text-ink mb-1">{crew.name}</h2>
+                  <p className="text-xs text-muted mb-3">{crew.role}</p>
 
                   <div className="flex flex-col gap-2 mb-3">
                     {crew.entries
@@ -302,8 +309,8 @@ export default async function ShowReportPage({
                         if (tc.is_travel_day) {
                           return (
                             <div key={tc.id} className="flex justify-between text-sm">
-                              <span className="text-zinc-400">{wd ? dayLabel(wd.date) : ''}</span>
-                              <span className="font-semibold text-blue-400">Travel Day</span>
+                              <span className="text-muted">{wd ? dayLabel(wd.date) : ''}</span>
+                              <span className="font-semibold text-accent">Travel Day</span>
                             </div>
                           )
                         }
@@ -313,25 +320,25 @@ export default async function ShowReportPage({
 
                         return (
                           <div key={tc.id} className="flex justify-between text-sm">
-                            <span className="text-zinc-400 flex items-center gap-1">
+                            <span className="text-muted flex items-center gap-1">
                               {wd ? dayLabel(wd.date) : ''}
-                              {b.shortTurn && <span className="text-orange-400">⚠️</span>}
-                              {tc.travel_in_day && <span className="text-blue-400">✈️</span>}
-                              {tc.travel_out_day && <span className="text-blue-400">✈️</span>}
+                              {b.shortTurn && <span className="text-ot">⚠️</span>}
+                              {tc.travel_in_day && <span className="text-accent">✈️</span>}
+                              {tc.travel_out_day && <span className="text-accent">✈️</span>}
                               {tc.pay_as_half_day && <span className="text-purple-400">◑</span>}
                             </span>
                             <div className="text-right">
-                              <p className={`font-semibold ${b.shortTurn ? 'text-orange-400' : 'text-white'}`}>{fmt(b.dayTotal)} hrs</p>
-                              <p className="text-xs text-zinc-500">{b.text}</p>
+                              <p className={cn('font-semibold tabular-nums', b.shortTurn ? 'text-ot' : 'text-ink')}>{fmt(b.dayTotal)} hrs</p>
+                              <p className="text-xs text-muted">{b.text}</p>
                             </div>
                           </div>
                         )
                       })}
                   </div>
 
-                  <div className="border-t border-zinc-800 pt-3 flex justify-between">
-                    <span className="text-sm font-semibold text-white">Total Show Hours</span>
-                    <span className="text-sm font-semibold text-white">{fmt(crewTotal)} hrs</span>
+                  <div className="border-t border-line pt-3 flex justify-between">
+                    <span className="text-sm font-semibold text-ink">Total Show Hours</span>
+                    <span className="text-sm font-semibold text-ink tabular-nums">{fmt(crewTotal)} hrs</span>
                   </div>
                 </div>
               )

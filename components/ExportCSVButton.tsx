@@ -163,7 +163,7 @@ export default function ExportCSVButton({
   }
 
   return (
-    <button onClick={exportCSV} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
+    <button onClick={exportCSV} className="rounded-field bg-surface-2 border border-line px-4 py-2 text-sm text-ink hover:border-accent hover:text-accent">
       Export CSV
     </button>
   )

@@ -270,7 +270,7 @@ export default function ExportPDFButton({
   }
 
   return (
-    <button onClick={generatePDF} disabled={generating} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 disabled:opacity-50">
+    <button onClick={generatePDF} disabled={generating} className="rounded-field bg-surface-2 border border-line px-4 py-2 text-sm text-ink hover:border-accent hover:text-accent disabled:opacity-50">
       {generating ? 'Generating...' : 'Export PDF'}
     </button>
   )
