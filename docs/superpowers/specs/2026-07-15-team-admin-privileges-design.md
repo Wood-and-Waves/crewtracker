@@ -12,14 +12,29 @@ This spec covers building the admin-facing screen and the access-control changes
 
 ## Current enforcement reality (informs scope, not something this spec changes)
 
-Of the 18 permission columns, only 3 are checked anywhere in the app today:
-- `can_manage_users` — gates two sections on the Settings page
-- `can_archive_shows` — gates the "Archive Show" option on the dashboard
-- `can_view_pay_rates` — gates whether $ figures show on the reports page
+**Correction from an earlier pass of this investigation:** the first check only searched application TypeScript code and missed enforcement that lives in Postgres RLS policies. The accurate picture, checked directly against `pg_policies`:
 
-4 columns are not used anywhere and are excluded from this spec's UI entirely (still written to the database with sensible preset values, just never shown as toggles): `can_manage_billing`, `can_view_crew_contacts`, `can_duplicate_shows`, `can_approve_timecards`.
+Enforced somewhere today:
+- `can_manage_users` — gates two sections on the Settings page (app code), plus RLS on `invitations` (`ALL`) and `organizations` (`UPDATE`)
+- `can_archive_shows` — gates the "Archive Show" option on the dashboard (app code)
+- `can_view_pay_rates` — gates whether $ figures show on the reports page (app code)
+- `can_manage_crew_directory` — RLS on `crew_members` (`ALL`)
+- `can_create_shows` — RLS on `shows` (`INSERT`)
+- `can_manage_billing` — RLS on `subscriptions` (`UPDATE`)
+- `can_edit_all_shows` — indirectly, via the `can_see_all_shows()` SQL function, which gates the `shows`/`show_assignments` `SELECT` policies (see "Show visibility" section below) — this is about *which shows you can see*, not about editing them
+- `can_edit_timecards` — RLS on `shows` (`UPDATE`), though this is a naming mismatch worth flagging: this permission gates editing the *show record itself* (name, venue, dates, etc.), not timecards/punches, which have no permission check at all beyond org membership (see "Show visibility" section)
 
-The remaining 11 visible-but-currently-inert columns (`can_manage_crew_directory`, `can_import_crew`, `can_create_shows`, `can_edit_all_shows`, `can_edit_timecards`, `can_edit_pay_rates`, `can_manage_rulesets`, `can_view_reports`, `can_export_reports`, `can_send_reports`, `view_only`) are shown in this spec's UI and save correctly to the database, but do not yet restrict or unlock anything in the app. Wiring up their enforcement is the next spec.
+Genuinely unused anywhere, excluded from this spec's UI entirely (still written to the database with sensible preset values, just never shown as toggles): `can_view_crew_contacts`, `can_duplicate_shows`, `can_approve_timecards`. (`can_manage_billing` was previously assumed to be in this group — it is not; it's a real, enforced permission and is included as a visible toggle below.)
+
+The remaining currently-inert columns (`can_import_crew`, `can_edit_pay_rates`, `can_manage_rulesets`, `can_view_reports`, `can_export_reports`, `can_send_reports`, `view_only`) are shown in this spec's UI and save correctly to the database, but do not yet restrict or unlock anything in the app. Wiring up their enforcement — along with extending write-side visibility scoping (see below) to rooms/timecards/punches/rate_cards/rulesets — is the next spec.
+
+## Show visibility (existing behavior, one bug fixed here)
+
+While reviewing this, a related concern came up: does a PM only see shows they're assigned to or created, not every show in the org? **This already works correctly for viewing shows** — no new code needed. The `shows` table's `SELECT` policy already restricts visibility to: assigned (via `show_assignments`), OR created by you, OR you have `can_edit_all_shows` (via the `can_see_all_shows()` function). Rooms, timecards, punches, and work days all correctly inherit this same visibility for viewing, since each cascades through a chain of RLS policies that bottoms out at this `shows` policy.
+
+**One real bug found and fixed as part of this spec's migration:** the `shows` table has two `UPDATE` policies — the intended one gates on `can_edit_timecards`, but a second, leftover policy (`"Users update shows in their org"`) has no permission check at all beyond organization match, and RLS policies for the same command are OR'd together — so the permissive policy silently wins, meaning any org member can currently update any show's info via a direct request, regardless of assignment or permissions. This spec's migration drops that redundant, overly-permissive policy, leaving the `can_edit_timecards`-gated one as the sole `UPDATE` rule.
+
+**Explicitly deferred to the next spec:** applying the same assignment-aware visibility check to *writes* on rooms/timecards/punches/rate_cards/rulesets (today those only check organization membership, not assignment/creation/can-edit-all — narrower than the read side). This is a real gap, but it's part of "wire up enforcement properly" and is scoped to the next spec rather than growing this one further.
 
 ## Roles in scope
 
@@ -44,21 +59,21 @@ Server component. Fetches all `profiles` rows where `organization_id` matches th
 
 Used by both the Invite Teammate modal and the Edit Member screen. Props: current values (or defaults), an `onChange` callback.
 
-- **Role picker:** Admin / Staff / PM. Selecting a role immediately applies that role's preset values to all 18 underlying permission fields (including the 4 not shown as toggles — see preset table below). Re-selecting a role after manual overrides resets to that role's preset again — switching roles is a "start over" action, it does not attempt to merge with prior manual overrides.
-- **Advanced section:** collapsed by default, an expandable list of 14 individual `Toggle` switches (all 18 columns minus the 4 permanently-hidden ones), each labeled in plain English (e.g. "Manage Users", "View Pay Rates", not the raw column name). Flipping any toggle here edits the in-memory value directly, independent of the role picker above (the role picker's displayed selection does not un-highlight if you diverge from its preset — it simply reflects "the role last chosen," not "current state matches this preset").
+- **Role picker:** Admin / Staff / PM. Selecting a role immediately applies that role's preset values to all 18 underlying permission fields (including the 3 not shown as toggles — see preset table below). Re-selecting a role after manual overrides resets to that role's preset again — switching roles is a "start over" action, it does not attempt to merge with prior manual overrides.
+- **Advanced section:** collapsed by default, an expandable list of 15 individual `Toggle` switches (all 18 columns minus the 3 genuinely-unused ones), each labeled in plain English (e.g. "Manage Users", "View Pay Rates", not the raw column name). Flipping any toggle here edits the in-memory value directly, independent of the role picker above (the role picker's displayed selection does not un-highlight if you diverge from its preset — it simply reflects "the role last chosen," not "current state matches this preset").
 
 ### Preset table
 
 | Permission | Admin | Staff | PM |
 |---|---|---|---|
 | Manage users | ✅ | ❌ | ❌ |
+| Manage billing | ✅ | ❌ | ❌ |
 | Manage crew directory | ✅ | ❌ | ✅ |
 | Import crew | ✅ | ❌ | ❌ |
 | Create shows | ✅ | ❌ | ✅ |
 | Edit all shows | ✅ | ❌ | ❌ |
 | Archive shows | ✅ | ❌ | ❌ |
 | Edit timecards | ✅ | ✅ | ✅ |
-| Approve timecards (hidden, not a toggle) | ✅ | ❌ | ✅ |
 | View pay rates | ✅ | ❌ | ✅ |
 | Edit pay rates | ✅ | ❌ | ❌ |
 | Manage rulesets | ✅ | ❌ | ❌ |
@@ -66,11 +81,11 @@ Used by both the Invite Teammate modal and the Edit Member screen. Props: curren
 | Export reports | ✅ | ❌ | ✅ |
 | Send reports | ✅ | ❌ | ✅ |
 | View only | ❌ | ❌ | ❌ |
-| Manage billing (hidden, not a toggle) | ✅ | ❌ | ❌ |
-| View crew contacts (hidden, not a toggle) | ✅ | ❌ | ✅ |
-| Duplicate shows (hidden, not a toggle) | ✅ | ❌ | ❌ |
+| Approve timecards (not a toggle, unused) | ✅ | ❌ | ✅ |
+| View crew contacts (not a toggle, unused) | ✅ | ❌ | ✅ |
+| Duplicate shows (not a toggle, unused) | ✅ | ❌ | ❌ |
 
-(Rows marked "hidden, not a toggle" are still written to the database by the preset; they just never appear as an editable toggle in the Advanced section, per the "current enforcement reality" section above.)
+(The 3 rows marked "not a toggle, unused" are still written to the database by the preset; they just never appear as an editable toggle in the Advanced section, per the "current enforcement reality" section above.)
 
 ## Invite Teammate modal
 
@@ -112,12 +127,21 @@ with check (
 
 Both are real Postgres errors surfaced to the calling code as a normal Supabase error — not a silent no-op, per this project's standing "surface errors, never fail silently" rule.
 
+**Also in this same migration:** drop the redundant, overly-permissive `shows` policy identified in "Show visibility" above:
+
+```sql
+drop policy "Users update shows in their org" on shows;
+```
+
+Leaving `"Users can update shows they can see"` (gated on `can_edit_timecards`) as the sole `UPDATE` policy on `shows`.
+
 ## Error handling
 
 Standard pattern already used elsewhere in this app (e.g. `EditShowClient.tsx`): a failed save shows an inline error banner, the form stays filled so nothing is lost, no silent failures.
 
 ## Out of scope (explicitly, for this spec)
 
-- Enforcement of the 11 currently-inert permissions across their respective features (show creation, timecard editing, crew directory, report export, rulesets, pay rate edits, `view_only` global mode) — separate follow-up spec.
+- Enforcement of the currently-inert permissions across their respective features (`can_import_crew`, `can_edit_pay_rates`, `can_manage_rulesets`, `can_view_reports`, `can_export_reports`, `can_send_reports`, `view_only`) — separate follow-up spec.
+- Extending assignment-aware visibility scoping to *writes* on rooms/timecards/punches/rate_cards/rulesets (today those only check org membership, not assignment) — separate follow-up spec.
 - Removing/deactivating a user from an org entirely (not asked for; only role/permission editing and inviting new members).
 - Crew role assignment (crew app access isn't built).
