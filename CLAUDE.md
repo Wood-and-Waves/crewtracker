@@ -151,13 +151,17 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 ## Known gaps / not yet built
 
-- SMS/text timesheet delivery (iOS has native SMS composer, no web equivalent)
-- Email report delivery (iOS has native Mail composer; web would need something like Resend). `organizations.default_cc_email` already exists for this, just unused.
-- Microsoft/Azure SSO, Capacitor iOS/Android wrapping, Stripe billing — all deferred
+- **Admin UI for user privileges** — the backend exists (`profiles.base_role` + the full set of `can_*` permission booleans, see Permissions system above), but there's no screen for an admin to actually edit another user's role/permissions. `can_manage_users` currently only gates org-wide Settings fields (name, rounding); it doesn't unlock a per-user editor yet. Needs a UI (likely on the Settings page or a new Directory-adjacent screen) listing org members with role/permission toggles, gated by `can_manage_users`, writing to `profiles` for users in the same `organization_id`.
+- SMS/text timesheet delivery is explicitly **not** being built — decided against a web texting service (Twilio, etc.); device-native share/SMS (e.g. `sms:` links or the OS share sheet) is the intended path, matching how iOS did it natively.
+- **Email report delivery via Resend** — planned, not yet wired up. `organizations.default_cc_email` already exists in schema for this, just unused. Will need a Resend API key/env var and a send path (likely a server route, similar pattern to `api/admin/create-invite`).
+- **"Join the Beta" interest form** — the landing page's "Get Started" CTA currently points at `/login`; it should instead go to a new interest-form page/route titled "Join the Beta" (rename the CTA label too). The form asks something like "Are you interested in joining the CrewTracker Beta?" plus qualifying questions (team size, number of admin users needed, and similar — current company/role, expected show volume/month, and how they heard about it are reasonable additions). On submit it emails Dan (via Resend, once wired up) rather than writing to the database — this is the interest-capture funnel ahead of any self-serve signup, not a replacement for the superadmin-invite onboarding path.
+- **Stripe billing** — planned (was previously listed as indefinitely deferred). `can_manage_billing` permission column and `subscriptions` table already exist as placeholders; actual Stripe integration (checkout, webhooks, plan gating) not started.
+- **No-show / cancelled day flag** — need a per-crew-member, per-day flag (alongside the existing `is_travel_day` / `pay_as_half_day` style toggles on `timecards`) to mark a day as a no-show or cancellation, distinct from a day with punches. Affects payroll (likely $0/no hours counted) and probably short-turnaround detection (a flagged day likely shouldn't count as the "previous day" for rest-period math) — needs a design pass against the iOS reference behavior (if any) before implementing.
+- Microsoft/Azure SSO, Capacitor iOS/Android wrapping — still deferred
 - Crew app access (crew role) — schema ready, UI deferred
 - Room delete/rename, show archiving, and the Settings page (24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, default CC email, AV Roles editor) are all built — see File structure above.
 - Superadmin pages (`app/superadmin/*`) were **not** included in the Signal redesign pass — still on the old zinc palette. Low priority (Dan-only, rarely used), but convert them to tokens if you're ever in that file.
-- No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The landing page's "Get Started" CTA and the "Log In" link both point at `/login`, not a signup flow, since none exists yet.
+- No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links; that stays true even after the "Join the Beta" form ships (the form is a lead-capture funnel, not an auto-provisioning flow).
 
 ## Past incidents worth remembering
 
