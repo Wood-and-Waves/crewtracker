@@ -48,22 +48,22 @@ export default function BatchPunchBar({
   }
 
   return (
-    <div className="mb-4">
-      <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Batch Actions</p>
+    <div className="px-4 pt-3 pb-1">
+      <p className="text-[10.5px] uppercase tracking-wide text-muted font-bold mb-2">Batch Actions</p>
       <div className="flex flex-wrap gap-1.5">
         {PUNCH_ORDER.map(type => (
           <button
             key={type}
             onClick={() => batchPunch(type)}
             disabled={loading !== null}
-            className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-field bg-surface-2 border border-line px-3 py-2 text-xs font-medium text-ink hover:border-accent hover:text-accent disabled:opacity-50"
           >
             {loading === type ? '...' : `${PUNCH_LABELS[type as keyof typeof PUNCH_LABELS]} All`}
           </button>
         ))}
       </div>
       {summary && (
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-muted">
           Applied to {summary.applied.length || 'none'}{summary.skipped.length > 0 && `, skipped ${summary.skipped.length} (already punched or wrapped)`}
         </p>
       )}

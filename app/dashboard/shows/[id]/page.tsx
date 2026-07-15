@@ -3,9 +3,12 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
-import TimecardRow from '@/components/TimecardRow'
+import TimecardRow, { PUNCH_GRID_COLS } from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
+import { PUNCH_ORDER, PUNCH_LABELS } from '@/lib/punches'
+import Button from '@/components/ui/Button'
+import { cn } from '@/lib/cn'
 
 export default async function ShowDetailPage({
   params,
@@ -47,9 +50,9 @@ export default async function ShowDetailPage({
   if (!workDays || workDays.length === 0) {
     return (
       <div className="p-6 md:p-10">
-        <Link href="/dashboard" className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Shows</Link>
+        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
         <h1 className="text-2xl font-bold mt-4">{show.name}</h1>
-        <p className="text-zinc-500 mt-2">No days generated for this show yet.</p>
+        <p className="text-muted mt-2">No days generated for this show yet.</p>
       </div>
     )
   }
@@ -124,15 +127,15 @@ export default async function ShowDetailPage({
 
   return (
     <div className="p-6 md:p-10">
-      <Link href="/dashboard" className="text-sm text-zinc-500 hover:text-zinc-300">← Back to Shows</Link>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold mt-2">{show.name}</h1>
-        <div className="flex gap-2">
-          <Link href={`/dashboard/shows/${id}/edit`} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
-            Edit Show
+      <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-extrabold tracking-tight mt-2">{show.name}</h1>
+        <div className="flex gap-2 mt-2">
+          <Link href={`/dashboard/shows/${id}/edit`}>
+            <Button variant="ghost" size="sm">Edit Show</Button>
           </Link>
-          <Link href={`/dashboard/shows/${id}/reports`} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">
-            View Report
+          <Link href={`/dashboard/shows/${id}/reports`}>
+            <Button variant="ghost" size="sm">View Report</Button>
           </Link>
         </div>
       </div>
@@ -140,68 +143,88 @@ export default async function ShowDetailPage({
       <div className="flex items-center justify-center gap-4 my-6">
         <Link
           href={prevDay ? `?day=${prevDay.day_number}` : '#'}
-          className={`rounded-full bg-zinc-800 p-2 ${!prevDay ? 'pointer-events-none opacity-30' : 'hover:bg-zinc-700'}`}
+          className={cn(
+            'rounded-full bg-surface-2 border border-line p-2 h-9 w-9 flex items-center justify-center',
+            !prevDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
+          )}
         >
           ‹
         </Link>
         <div className="text-center">
-          <p className="text-xs uppercase tracking-wide text-zinc-500">Day {activeDay.day_number} of {workDays.length}</p>
-          <p className="text-lg font-semibold text-white">{dateLabel}</p>
+          <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {activeDay.day_number} of {workDays.length}</p>
+          <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
         </div>
         <Link
           href={nextDay ? `?day=${nextDay.day_number}` : '#'}
-          className={`rounded-full bg-zinc-800 p-2 ${!nextDay ? 'pointer-events-none opacity-30' : 'hover:bg-zinc-700'}`}
+          className={cn(
+            'rounded-full bg-surface-2 border border-line p-2 h-9 w-9 flex items-center justify-center',
+            !nextDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
+          )}
         >
           ›
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {roomsList.map(room => (
-          <div key={room.id} className="rounded-2xl bg-zinc-900 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold text-white">{room.name}</h2>
-              <RoomActionsMenu
-                roomId={room.id}
-                roomName={room.name}
-                crewCount={roomTimecards[room.id]?.length || 0}
-              />
-            </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {roomsList.map(room => {
+          const crew = roomTimecards[room.id] || []
+          return (
+            <div key={room.id} className="rounded-card border border-line bg-surface overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-line">
+                <h2 className="text-lg font-bold text-ink">{room.name}</h2>
+                <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} />
+              </div>
 
-            {roomTimecards[room.id]?.length > 0 && (
-              <BatchPunchBar timecards={roomTimecards[room.id]} />
-            )}
+              {crew.length > 0 && <BatchPunchBar timecards={crew} />}
 
-            <div className="flex flex-col gap-2 mb-4">
-              {roomTimecards[room.id]?.length === 0 && (
-                <p className="text-sm text-zinc-500">No crew staffed yet.</p>
+              {/* Column headers — only meaningful once there's a ruled table
+                  to head; hidden on mobile where TimecardRow renders labeled
+                  cards instead. Must stay in sync with TimecardRow's grid. */}
+              {crew.length > 0 && (
+                <div className={cn('hidden lg:grid gap-3 px-4 pt-3 pb-1', PUNCH_GRID_COLS)}>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-muted">Crew</div>
+                  {PUNCH_ORDER.map(type => (
+                    <div key={type} className="text-[10px] font-bold uppercase tracking-wide text-muted text-center">
+                      {PUNCH_LABELS[type]}
+                    </div>
+                  ))}
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-muted text-right">Total</div>
+                </div>
               )}
-              {roomTimecards[room.id]?.map(tc => (
-                <TimecardRow
-                  key={tc.id}
-                  timecard={tc}
-                  punches={tc.punches}
-                  timezone={timezone}
-                  ruleset={ruleset}
-                  allTimecards={allTimecardsWithPunches}
-                  dayDate={activeDay.date}
-                  use24Hour={profile?.use_24_hour_time || false}
-                  roundingMinutes={roundingMinutes}
+
+              <div>
+                {crew.length === 0 && (
+                  <p className="text-sm text-muted p-4">No crew staffed yet.</p>
+                )}
+                {crew.map(tc => (
+                  <TimecardRow
+                    key={tc.id}
+                    timecard={tc}
+                    punches={tc.punches}
+                    timezone={timezone}
+                    ruleset={ruleset}
+                    allTimecards={allTimecardsWithPunches}
+                    dayDate={activeDay.date}
+                    use24Hour={profile?.use_24_hour_time || false}
+                    roundingMinutes={roundingMinutes}
+                  />
+                ))}
+              </div>
+
+              <div className="p-4 pt-3">
+                <StaffRoomModal
+                  organizationId={profile?.organization_id}
+                  roomId={room.id}
+                  roomName={room.name}
+                  currentWorkDayId={activeDay.id}
+                  remainingRoomIdsSameName={remainingRoomsByName[room.id] || []}
                 />
-              ))}
+              </div>
             </div>
+          )
+        })}
 
-            <StaffRoomModal
-              organizationId={profile?.organization_id}
-              roomId={room.id}
-              roomName={room.name}
-              currentWorkDayId={activeDay.id}
-              remainingRoomIdsSameName={remainingRoomsByName[room.id] || []}
-            />
-          </div>
-        ))}
-
-        <div className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-800 p-5 min-h-[120px]">
+        <div className="flex items-center justify-center rounded-card border border-dashed border-line p-5 min-h-[120px]">
           <AddRoomModal
             showId={id}
             currentWorkDayId={activeDay.id}

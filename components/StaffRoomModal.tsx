@@ -3,9 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Button from '@/components/ui/Button'
 
 type CrewMember = { id: string; full_name: string }
 type RateCard = { crew_member_id: string; role: string; day_rate: number }
+
+const inputCls =
+  'rounded-field bg-surface-2 border border-line px-3 py-2 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
 export default function StaffRoomModal({
   organizationId,
@@ -143,7 +147,7 @@ export default function StaffRoomModal({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg bg-blue-600/20 px-3 py-2 text-sm font-medium text-blue-400 transition hover:bg-blue-600/30"
+        className="w-full rounded-field bg-accent-wash px-3 py-2 text-sm font-medium text-accent transition hover:opacity-80"
       >
         + Staff Crew
       </button>
@@ -154,9 +158,9 @@ export default function StaffRoomModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-2xl bg-zinc-900 shadow-xl">
-        <div className="p-6 pb-4 border-b border-zinc-800">
-          <h2 className="text-lg font-bold text-white">Staff {roomName}</h2>
+      <div className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-card bg-surface border border-line shadow-xl">
+        <div className="p-6 pb-4 border-b border-line">
+          <h2 className="text-lg font-bold text-ink">Staff {roomName}</h2>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 pt-4">
@@ -166,32 +170,27 @@ export default function StaffRoomModal({
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addCrewMember()}
-              className="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+              className={`${inputCls} flex-1`}
             />
-            <button
-              onClick={addCrewMember}
-              className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700"
-            >
-              Add
-            </button>
+            <Button variant="ghost" size="sm" onClick={addCrewMember}>Add</Button>
           </div>
 
           <div className="flex flex-col gap-2">
             {crew.length === 0 && (
-              <p className="text-sm text-zinc-500">No crew members yet. Add one above.</p>
+              <p className="text-sm text-muted">No crew members yet. Add one above.</p>
             )}
             {crew.map(member => {
               const isSelected = !!selected[member.id]
               return (
-                <div key={member.id} className="rounded-lg bg-zinc-800/50 p-3">
+                <div key={member.id} className="rounded-field bg-surface-2 p-3">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleCrew(member.id)}
-                      className="h-4 w-4 rounded"
+                      className="h-4 w-4 rounded accent-accent"
                     />
-                    <span className="text-sm text-white">{member.full_name}</span>
+                    <span className="text-sm text-ink">{member.full_name}</span>
                   </label>
                   {isSelected && (
                     <div className="mt-2 flex gap-2 pl-7">
@@ -199,14 +198,14 @@ export default function StaffRoomModal({
                         placeholder="Role"
                         value={selected[member.id].role}
                         onChange={e => updateField(member.id, 'role', e.target.value)}
-                        className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+                        className={`${inputCls} flex-1 text-xs`}
                       />
                       <input
                         placeholder="Day rate"
                         type="number"
                         value={selected[member.id].dayRate}
                         onChange={e => updateField(member.id, 'dayRate', e.target.value)}
-                        className="w-28 rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+                        className={`${inputCls} w-28 text-xs`}
                       />
                     </div>
                   )}
@@ -216,33 +215,24 @@ export default function StaffRoomModal({
           </div>
         </div>
 
-        <div className="p-6 pt-4 border-t border-zinc-800">
+        <div className="p-6 pt-4 border-t border-line">
           {remainingRoomIdsSameName.length > 0 && (
-            <label className="flex items-center gap-2 text-sm text-zinc-400 mb-3">
+            <label className="flex items-center gap-2 text-sm text-muted mb-3">
               <input
                 type="checkbox"
                 checked={applyAll}
                 onChange={e => setApplyAll(e.target.checked)}
-                className="h-4 w-4 rounded"
+                className="h-4 w-4 rounded accent-accent"
               />
               Apply to all remaining days for this room
             </label>
           )}
-          {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+          {error && <p className="text-xs text-danger mb-3">{error}</p>}
           <div className="flex gap-3">
-            <button
-              onClick={() => setOpen(false)}
-              className="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-500"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={submit}
-              disabled={loading || selectedCount === 0}
-              className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-            >
+            <Button variant="ghost" className="flex-1 py-3" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button className="flex-1 py-3" onClick={submit} disabled={loading || selectedCount === 0}>
               {loading ? 'Staffing...' : `Staff ${selectedCount || ''} Crew`}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
