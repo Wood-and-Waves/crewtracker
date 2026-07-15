@@ -55,12 +55,14 @@ The app was fully redesigned from the original pure-black/zinc/iOS-blue look to 
 
 **Known Safari gotcha:** native `<select>` elements need explicit `className="bg-surface-2 text-ink"` (token equivalents of the old zinc classes) on every `<option>`, or text is invisible against the dark background in Safari. iPad Safari also has a hydration bug that can duplicate `<option>` elements in a controlled `<select>` — fix is a `key` prop on the `<select>` tied to a stable identifier of the options list (e.g. `key={options.map(o => o.id).join(',')}`) so React remounts instead of patching in place. Apply this pattern to any new dropdown.
 
-**Logo:** `components/Logo.tsx` is a **placeholder mark**, not the real CrewTracker logo — deliberately isolated to one file so swapping in the real logo later is a single edit, not a hunt across every screen.
+**Logo:** `components/Logo.tsx` now renders the **real** CrewTracker mark (dropped in 2026-07-15) — two fixed blue tones (`#6699FF` / `#3366CC`), not `currentColor`, so it's already designed to sit on both light and dark backgrounds as-is rather than needing theme-aware recoloring. It has no intrinsic width/height (the source SVG has no `width`/`height` attrs, just a `viewBox`), so the component defaults to `w-7 h-7` internally and every call site should pass `className` to override when a different size is needed (login/invite use `w-12 h-12`) — **don't render `<Logo />` bare**, it'll fall back to the browser's oversized default if the default class is ever removed. `app/icon.png` and `app/favicon.ico` are also the real assets now (Next's file-based icon convention — no manual `<link>` tags needed). A duplicate lives at `public/app-icon.png` purely so the marketing page can reference it via a normal `<img>`/`next/image` src, since `app/icon.png` isn't reliably a stable public URL.
 
 ## File structure
 
 ```
 app/
+  page.tsx                     — public marketing landing page (logged-in visitors redirect straight to /dashboard); styles scoped via page.module.css so they can't leak into the app
+  icon.png / favicon.ico       — real app icons (Next's file-based convention, auto-wired)
   auth/callback/route.ts       — OAuth callback; also finalizes invite acceptance
   dashboard/
     layout.tsx                 — wraps dashboard pages in AppShell
@@ -102,7 +104,7 @@ lib/
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
   trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
-proxy.ts        — auth middleware (protects all routes)
+proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, and exactly "/")
 scripts/
   run-sql.mjs   — runs a .sql file against DATABASE_URL (npm run db:sql -- file.sql)
   sql/          — one-off SQL scripts kept for reference (RLS policies, migrations, checks)
@@ -155,7 +157,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - Crew app access (crew role) — schema ready, UI deferred
 - Room delete/rename, show archiving, and the Settings page (24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, default CC email, AV Roles editor) are all built — see File structure above.
 - Superadmin pages (`app/superadmin/*`) were **not** included in the Signal redesign pass — still on the old zinc palette. Low priority (Dan-only, rarely used), but convert them to tokens if you're ever in that file.
-- The real CrewTracker logo hasn't been dropped in yet — `components/Logo.tsx` is a placeholder (see Design system section above).
+- No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The landing page's "Get Started" CTA and the "Log In" link both point at `/login`, not a signup flow, since none exists yet.
 
 ## Past incidents worth remembering
 
@@ -167,6 +169,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - RLS was originally SELECT-only on most tables; INSERT/UPDATE/DELETE policies were retrofitted per table as each feature hit a wall. **Do not assume a new table has full RLS coverage.**
 - A plain string constant (`PUNCH_GRID_COLS`, the shared grid template for the tracker console) was exported from `TimecardRow.tsx`, a `'use client'` file, and imported into the server-rendered `shows/[id]/page.tsx`. Next.js can't safely pass non-component named exports across that client/server boundary — it silently serialized the constant into a broken function reference instead of the string, so the header row rendered with no `grid-template-columns` at all (looked like a total layout collapse, not an obvious "undefined" error). Fixed by moving the constant to a plain file with no `'use client'` directive (`lib/trackerLayout.ts`). **Never export non-component values from a `'use client'` file for a Server Component to import — put shared constants in a plain module instead.**
 - During the Signal redesign, one push (Edit Show conversion) deployed to production with `x-vercel-cache: MISS` on every request yet kept serving the *old* component markup, even though the source on GitHub was confirmed correct via `git show origin/main`. This wasn't edge/CDN caching (verified via response headers) — it looked like a stale Vercel **build** cache serving an old compiled artifact for that one route. Fixed with `npx vercel --prod --force` (skips the build cache, full clean rebuild). **If a deploy status shows "Ready" and the source is confirmed correct but the live site still shows old UI, don't assume it's browser cache — verify with a `fetch(url, {cache:'no-store'})` from the browser console (or `curl`) to see what's actually being served, and if it's genuinely stale server-side output, force a clean rebuild rather than re-pushing trivial commits and hoping.**
+- `Logo.tsx`'s SVG has no `width`/`height` attributes (Illustrator export, just a `viewBox`). The first version of the landing page + login/invite screens rendered it with no sizing class at all, so it fell back to the browser's default SVG box — looked fine in dev screenshots taken mid-flow but showed up huge on `/login`. Fixed by giving the component a default `w-7 h-7` internally rather than trusting every call site to remember to size it. **Any raw `<svg>` without intrinsic dimensions needs either an explicit size or a safe default baked into the component — don't rely on callers.**
+- The landing page's hero icon (`next/image`) didn't center under `text-align: center` on its parent — `next/image` renders as a block-level element, and `text-align` only affects inline/inline-block content. Fixed with `display: block; margin: 0 auto;` directly on the image. **`text-align: center` silently does nothing for block-level images/components — center those with margin auto or flex, not text-align.**
 
 ## Environment variables
 
