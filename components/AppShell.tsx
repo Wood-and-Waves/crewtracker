@@ -6,11 +6,13 @@ import { cn } from '@/lib/cn'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import Logo from '@/components/Logo'
 
-const navItems = [
+const baseNavItems = [
   { href: '/dashboard', label: 'Shows', icon: 'briefcase', match: (p: string) => p === '/dashboard' || p.startsWith('/dashboard/shows') },
   { href: '/dashboard/directory', label: 'Directory', icon: 'users', match: (p: string) => p.startsWith('/dashboard/directory') },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings', match: (p: string) => p.startsWith('/dashboard/settings') },
 ]
+
+const teamNavItem = { href: '/dashboard/team', label: 'Team', icon: 'shield', match: (p: string) => p.startsWith('/dashboard/team') }
 
 function Icon({ name }: { name: string }) {
   if (name === 'briefcase') {
@@ -30,6 +32,13 @@ function Icon({ name }: { name: string }) {
       </svg>
     )
   }
+  if (name === 'shield') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
+      </svg>
+    )
+  }
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="3.2" />
@@ -38,8 +47,15 @@ function Icon({ name }: { name: string }) {
   )
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  canManageUsers = false,
+}: {
+  children: React.ReactNode
+  canManageUsers?: boolean
+}) {
   const pathname = usePathname()
+  const navItems = canManageUsers ? [...baseNavItems, teamNavItem] : baseNavItems
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
