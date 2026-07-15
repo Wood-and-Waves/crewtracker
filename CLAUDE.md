@@ -37,11 +37,25 @@ Dan (the developer) has no professional dev background. Claude writes the code; 
 - **Direct SQL access**: `DATABASE_URL` is in `.env.local` (Supabase "Transaction pooler" connection string — the "Direct connection" host is IPv6-only and won't resolve here). Run SQL files with `npm run db:sql -- path/to/file.sql` (wraps `scripts/run-sql.mjs`, a thin `pg` client). Use this for RLS policies, schema migrations, one-off data checks — no more handing Dan copy-paste SQL for the Supabase SQL Editor.
 - **Vercel CLI**: `npx vercel inspect crewtracker-lime.vercel.app` / `npx vercel ls crewtracker` to check deployment status and build info directly after a push, instead of guessing whether a deploy succeeded.
 
-## Design language
+## Design system — "Signal" (redesigned 2026-07-14/15)
 
-Pure black background, zinc-900 cards with ~20px corner radius, no borders, iOS system blue accents, bold white headers, gray secondary text. Sidebar nav on desktop, collapses to a floating pill-shaped bottom tab bar on mobile. Intentionally mirrors the iOS app's visual language.
+The app was fully redesigned from the original pure-black/zinc/iOS-blue look to a direction called **Signal**: near-true-black (light theme also fully supported, both first-class), bold white headers, the brand's electric blue as the sole accent, no glow effects (tried in an early mockup round, Dan rejected it — use a crisp `ring-1 ring-inset ring-accent` instead), minimal monospace (tried "everywhere," Dan found it too techy — reserve mono for places digits must align in columns).
 
-**Known Safari gotcha:** native `<select>` elements need explicit `className="bg-zinc-800 text-white"` on every `<option>`, or text is invisible against the dark background in Safari. iPad Safari also has a hydration bug that can duplicate `<option>` elements in a controlled `<select>` — fix is a `key` prop on the `<select>` tied to a stable identifier of the options list (e.g. `key={options.map(o => o.id).join(',')}`) so React remounts instead of patching in place. Apply this pattern to any new dropdown.
+**Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
+
+**Reusable primitives** in `components/ui/`: `Button` (variants: primary/ghost/danger), `Card`, `Chip` (tones: neutral/live/ot/good/danger — semantic status color, kept separate from the brand accent), `Toggle` (on/off switch, replaces native checkboxes everywhere), `ThemeToggle`. Compose new UI from these rather than writing raw styled `<button>`/`<div>` markup.
+
+**Responsive nav, not just responsive layout:**
+- **≥1024px** (landscape iPad + desktop): `AppShell.tsx` renders a sticky **top nav bar** (logo, Shows/Directory/Settings links, theme toggle) — a mouse-driven desktop experience, not a shrunk sidebar.
+- **<1024px** (portrait iPad + phone): top nav hides, a **fixed bottom tab-bar** (`position: fixed`, stays pinned while content scrolls) takes over — an app-like phone experience.
+- **Desktop screens restructure, they don't just stretch mobile layouts.** Directory becomes a real data table with search on desktop, collapsing to tappable rows below 1024px. Settings goes two-column (Personal + Org side by side, AV Roles full-width) on desktop. Same principle applies to any future screen that feels sparse when simply widened.
+- Any screen with a floating fixed-position action button (e.g. Edit Show's "Save Changes" pill) must clear the bottom tab-bar's position below 1024px — use an offset like `bottom-24 lg:bottom-6`, don't let two fixed-bottom elements collide.
+
+**The tracker console's punch table** (`TimecardRow.tsx` + the room block in `shows/[id]/page.tsx`) is a genuine ruled grid on desktop (`lg:grid-cols-[...]`, shared between the header row and every crew row via `lib/trackerLayout.ts`), collapsing to labeled per-field cards on mobile. This replaced free-floating pill buttons after Dan's first-round feedback that times weren't visually separated.
+
+**Known Safari gotcha:** native `<select>` elements need explicit `className="bg-surface-2 text-ink"` (token equivalents of the old zinc classes) on every `<option>`, or text is invisible against the dark background in Safari. iPad Safari also has a hydration bug that can duplicate `<option>` elements in a controlled `<select>` — fix is a `key` prop on the `<select>` tied to a stable identifier of the options list (e.g. `key={options.map(o => o.id).join(',')}`) so React remounts instead of patching in place. Apply this pattern to any new dropdown.
+
+**Logo:** `components/Logo.tsx` is a **placeholder mark**, not the real CrewTracker logo — deliberately isolated to one file so swapping in the real logo later is a single edit, not a hunt across every screen.
 
 ## File structure
 
@@ -67,22 +81,27 @@ app/
   superadmin/page.tsx          — super admin panel
   superadmin/invite-org/page.tsx — generate new org invite links
 components/
-  AppShell.tsx                 — responsive sidebar/tab-bar nav
+  AppShell.tsx                 — responsive top-nav (>=1024px) / fixed bottom tab-bar (<1024px)
+  Logo.tsx                      — placeholder brand mark, isolated for an easy future swap
+  ThemeScript.tsx               — inline pre-paint script, applies saved light/dark theme with no flash
+  ui/                           — Signal design-system primitives: Button, Card, Chip, Toggle, ThemeToggle
   NewShowModal.tsx              — create show, auto-generates work_days
   AddRoomModal.tsx               — add room to a work day (optionally all remaining days); blocks duplicate room names on the same day
   RoomActionsMenu.tsx            — rename/delete a room (per-day, matches the room model)
   StaffRoomModal.tsx             — bulk staff crew into a room ("apply to all remaining days" defaults checked)
-  TimecardRow.tsx / TimeEntryModal.tsx — punch rows + manual time entry w/ chronology validation
+  TimecardRow.tsx / TimeEntryModal.tsx — punch rows + manual time entry w/ chronology validation; TimecardRow renders as a ruled grid row on desktop, a labeled card on mobile
   BatchPunchBar.tsx              — room-level batch punch actions
-  CrewDirectoryClient.tsx / EditCrewMemberClient.tsx
-  EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode
+  CrewDirectoryClient.tsx / EditCrewMemberClient.tsx — Directory goes to a real data table on desktop
+  EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode; two-column on desktop
   ExportCSVButton.tsx / ExportPDFButton.tsx — gated by financials permission
-  ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx
+  ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
   supabase/client.ts / server.ts / admin.ts
   payroll.ts    — TypeScript port of iOS PayrollCalculator
   punches.ts    — punch ordering/labels + chronology validation; formatPunchTime takes a use24Hour flag
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
+  trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
+  cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
 proxy.ts        — auth middleware (protects all routes)
 scripts/
   run-sql.mjs   — runs a .sql file against DATABASE_URL (npm run db:sql -- file.sql)
@@ -132,10 +151,11 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 - SMS/text timesheet delivery (iOS has native SMS composer, no web equivalent)
 - Email report delivery (iOS has native Mail composer; web would need something like Resend). `organizations.default_cc_email` already exists for this, just unused.
-- Dark mode — **intentionally dropped, not just deferred.** The web app was built pure-black-only from day one; there's no light theme anywhere in the CSS, unlike iOS which had both. Dan explicitly does not want a toggle bolted on — he wants a full UI redesign at some point and isn't attached to the current look. Don't build a light theme without that being the explicit ask.
 - Microsoft/Azure SSO, Capacitor iOS/Android wrapping, Stripe billing — all deferred
 - Crew app access (crew role) — schema ready, UI deferred
 - Room delete/rename, show archiving, and the Settings page (24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, default CC email, AV Roles editor) are all built — see File structure above.
+- Superadmin pages (`app/superadmin/*`) were **not** included in the Signal redesign pass — still on the old zinc palette. Low priority (Dan-only, rarely used), but convert them to tokens if you're ever in that file.
+- The real CrewTracker logo hasn't been dropped in yet — `components/Logo.tsx` is a placeholder (see Design system section above).
 
 ## Past incidents worth remembering
 
@@ -145,6 +165,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - `AddRoomModal` had zero uniqueness check, so the same room name could be added twice to one day. Fixed by checking existing room names (case-insensitive, per work_day_id) before inserting.
 - `totalPay` initially miscalculated by multiplying straight-time hourly instead of using the flat day-rate guarantee — corrected against the real Swift source.
 - RLS was originally SELECT-only on most tables; INSERT/UPDATE/DELETE policies were retrofitted per table as each feature hit a wall. **Do not assume a new table has full RLS coverage.**
+- A plain string constant (`PUNCH_GRID_COLS`, the shared grid template for the tracker console) was exported from `TimecardRow.tsx`, a `'use client'` file, and imported into the server-rendered `shows/[id]/page.tsx`. Next.js can't safely pass non-component named exports across that client/server boundary — it silently serialized the constant into a broken function reference instead of the string, so the header row rendered with no `grid-template-columns` at all (looked like a total layout collapse, not an obvious "undefined" error). Fixed by moving the constant to a plain file with no `'use client'` directive (`lib/trackerLayout.ts`). **Never export non-component values from a `'use client'` file for a Server Component to import — put shared constants in a plain module instead.**
+- During the Signal redesign, one push (Edit Show conversion) deployed to production with `x-vercel-cache: MISS` on every request yet kept serving the *old* component markup, even though the source on GitHub was confirmed correct via `git show origin/main`. This wasn't edge/CDN caching (verified via response headers) — it looked like a stale Vercel **build** cache serving an old compiled artifact for that one route. Fixed with `npx vercel --prod --force` (skips the build cache, full clean rebuild). **If a deploy status shows "Ready" and the source is confirmed correct but the live site still shows old UI, don't assume it's browser cache — verify with a `fetch(url, {cache:'no-store'})` from the browser console (or `curl`) to see what's actually being served, and if it's genuinely stale server-side output, force a clean rebuild rather than re-pushing trivial commits and hoping.**
 
 ## Environment variables
 
