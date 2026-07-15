@@ -95,7 +95,7 @@ export default function InviteAuthForm({
     <div className="flex min-h-screen items-center justify-center bg-bg">
       <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl">
         <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-2 text-accent mb-2"><Logo /></div>
+          <div className="flex items-center justify-center gap-2 text-accent mb-2"><Logo className="w-12 h-12" /></div>
           <h1 className="text-2xl font-bold text-ink">CrewTracker</h1>
           <p className="mt-2 text-sm text-muted">
             {isNewOrg ? `You've been invited to create ${orgName}` : `You've been invited to join ${orgName}`}

@@ -1,18 +1,42 @@
-// PLACEHOLDER — not the real CrewTracker logo. Drop the real mark in here
-// (as an inline SVG, or swap this whole file for an <img src="/logo.svg" />)
-// and every screen that renders <Logo /> updates automatically.
+import { cn } from '@/lib/cn'
+
+// Real CrewTracker mark. Two fixed blue tones (not currentColor) —
+// designed to sit on both light and dark backgrounds as-is, so it
+// doesn't need theme-aware recoloring like a single-tone mark would.
+// Has no intrinsic width/height, so it defaults to a sensible on-screen
+// size here rather than the browser's fallback (huge) — pass className
+// to override per call site.
 export default function Logo({ className }: { className?: string }) {
   return (
     <svg
-      width="24"
-      height="24"
-      viewBox="0 0 48 48"
-      fill="none"
+      viewBox="0 0 360 360"
       aria-hidden="true"
-      className={className}
+      className={cn('w-7 h-7', className)}
     >
-      <path d="M36 13H20l-7 7v8l7 7h16" stroke="currentColor" strokeWidth="5" strokeLinejoin="miter" />
-      <path d="M36 13l-5 6M36 42l-5-6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <g>
+        <path fill="#6699FF" d="M261.7,37.7c-8.9-10-16.6-18.6-29.4-18.8H226h-57.3c-13,0-19.9,2.8-28.3,10.2L85,85.4
+          c-0.8,3.9-7.5,8.3-7.5,25.2v34.9c0,12.5,4.2,19.1,11.9,26.6l51.8,51.8c8.3,7.2,14.7,10.5,26.3,10.5h53.2c9.4,0,18.3,1.1,32.7-11.4
+          c3.3-3,23.8-25.5,26.6-30.7c1.7-3.3,1.9-8.3-1.7-12.2c-2.5-2.5-24.9-17.2-30.5-21.3c-1.7-1.1-5-1.4-7.5,1.1l-20.8,20.2h-87V74.3
+          h85.9l21.3,21.6c2.2,1.9,3.3,2.8,6.1,2.2c3.9,0,26-18,31-22.2c3-2.8,3.9-5,3.6-9.7c-0.6-4.7-3.9-8.6-3.9-8.6S261.7,37.7,261.7,37.7
+          z M119.6,70.4l0.3,113.8l-19.9-19.9c-6.1-6.9-9.1-10-9.1-20.5c0-10.5-0.3-30.7,0.3-38.8c0.6-7.5,5.8-12.2,15.8-22.2
+          C106.9,82.9,119.6,70.4,119.6,70.4z M177.5,31.4l28.3,29.4L206,61h-77.3v-0.6l20.5-21.1c4.4-4.7,9.4-8,16.3-8
+          C165.6,31.4,177.5,31.4,177.5,31.4z M178.6,222.5c-13,0-19.9,1.4-28.8-6.9l-21.3-22.4l78.7-0.6l-28.8,29.9
+          C178.3,222.5,178.6,222.5,178.6,222.5z M267,186.2c1.7,1.7,0,3-3.3,6.9c-15.8,18.3-22.4,29.1-39.1,29.1h-27.7v-0.6l47.9-49.6h0.8
+          C245.6,172.1,267,186.2,267,186.2z M265.9,68.5c-4.7,4.2-19.4,15-20.8,14.7l-50.1-51.5h-0.3h31.9c8,0,12.7,2.8,18.3,8.6L265,62.7
+          C268.1,66.3,268.4,66.6,265.9,68.5z"/>
+        <path fill="#6699FF" d="M215.7,271.5H56.2c-2.8,0-5.5,2.2-5.8,5.3c0,3.3,2.2,5.5,5.3,5.5h160.1c3,0,5.5-2.2,5.5-5.3
+          S218.8,271.5,215.7,271.5z"/>
+        <path fill="#3366CC" d="M303.8,271.5h-62c-2.8,0.3-5,2.5-5.3,5c-0.3,3.3,2.2,5.8,5,5.8h62.6c2.8,0,5.5-2.2,5.5-5v-0.6
+          C309.6,274,307.1,271.5,303.8,271.5z"/>
+        <path fill="#3366CC" d="M177.5,300.6H55.6c-2.8,0.3-5.3,2.5-5.3,5.5c0.3,3,2.2,5.3,5.3,5.3h122.2c3,0,5.3-2.2,5.3-5.3
+          C183,303.1,180.5,300.6,177.5,300.6z"/>
+        <path fill="#6699FF" d="M304.1,300.6H203.8c-3,0-5.3,2.5-5.3,5.5c0,3,2.5,5.5,5.3,5.5h99.7c3.3,0,6.4-1.9,6.1-6.1
+          C309.4,302.8,307.1,300.6,304.1,300.6z"/>
+        <path fill="#3366CC" d="M89.7,330H55.6c-2.8,0.3-5.3,2.5-5.3,5.3c0,3.3,2.2,5.5,5.3,5.8h34.1c3,0,5.5-2.2,5.5-5.3S92.7,330,89.7,330z"/>
+        <path fill="#6699FF" d="M227.6,330H116.3c-3,0-5.8,2.2-5.8,5.5c0,3,2.5,5.5,5.5,5.5h111.6c3,0.3,5.8-2.2,5.8-5.3S231,330,227.6,330z"/>
+        <path fill="#3366CC" d="M304.1,330h-50.4c-2.8,0.3-5.3,2.5-5,5.8c0,2.8,2.2,5.3,5.5,5.3h49.9c3,0,5.5-2.2,5.5-5
+          C309.6,331.9,306.9,330,304.1,330z"/>
+      </g>
     </svg>
   )
 }
