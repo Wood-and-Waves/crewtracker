@@ -26,15 +26,23 @@ Enforced somewhere today:
 
 Genuinely unused anywhere, excluded from this spec's UI entirely (still written to the database with sensible preset values, just never shown as toggles): `can_view_crew_contacts`, `can_duplicate_shows`, `can_approve_timecards`. (`can_manage_billing` was previously assumed to be in this group — it is not; it's a real, enforced permission and is included as a visible toggle below.)
 
-The remaining currently-inert columns (`can_import_crew`, `can_edit_pay_rates`, `can_manage_rulesets`, `can_view_reports`, `can_export_reports`, `can_send_reports`, `view_only`) are shown in this spec's UI and save correctly to the database, but do not yet restrict or unlock anything in the app. Wiring up their enforcement — along with extending write-side visibility scoping (see below) to rooms/timecards/punches/rate_cards/rulesets — is the next spec.
+`view_only` is also inert today, and is **deliberately hidden** in this spec (set by presets to `false`, but never shown as a toggle). Its label implies a hard "this user can only look, never edit" lock — but nothing enforces that yet, so exposing it would mislead an admin into believing a user is restricted when they are not. It becomes a visible toggle only once the next spec actually enforces it.
+
+The remaining currently-inert columns (`can_import_crew`, `can_edit_pay_rates`, `can_manage_rulesets`, `can_view_reports`, `can_export_reports`, `can_send_reports`) are shown in this spec's UI and save correctly to the database, but do not yet restrict or unlock anything in the app. Wiring up their enforcement (and `view_only`'s) — along with extending write-side visibility scoping to rooms/timecards/punches/rate_cards/rulesets — is the next spec.
 
 ## Show visibility (existing behavior, one bug fixed here)
 
 While reviewing this, a related concern came up: does a PM only see shows they're assigned to or created, not every show in the org? **This already works correctly for viewing shows** — no new code needed. The `shows` table's `SELECT` policy already restricts visibility to: assigned (via `show_assignments`), OR created by you, OR you have `can_edit_all_shows` (via the `can_see_all_shows()` function). Rooms, timecards, punches, and work days all correctly inherit this same visibility for viewing, since each cascades through a chain of RLS policies that bottoms out at this `shows` policy.
 
-**One real bug found and fixed as part of this spec's migration:** the `shows` table has two `UPDATE` policies — the intended one gates on `can_edit_timecards`, but a second, leftover policy (`"Users update shows in their org"`) has no permission check at all beyond organization match, and RLS policies for the same command are OR'd together — so the permissive policy silently wins, meaning any org member can currently update any show's info via a direct request, regardless of assignment or permissions. This spec's migration drops that redundant, overly-permissive policy, leaving the `can_edit_timecards`-gated one as the sole `UPDATE` rule.
+**Two real problems with `shows` writes, both fixed in this spec's migration:**
 
-**Explicitly deferred to the next spec:** applying the same assignment-aware visibility check to *writes* on rooms/timecards/punches/rate_cards/rulesets (today those only check organization membership, not assignment/creation/can-edit-all — narrower than the read side). This is a real gap, but it's part of "wire up enforcement properly" and is scoped to the next spec rather than growing this one further.
+1. The `shows` table has two `UPDATE` policies. The intended one is named `"Users can update shows they can see"` but the second, leftover policy (`"Users update shows in their org"`) has no permission check at all beyond organization match. RLS policies for the same command are OR'd together, so the permissive one silently wins — meaning any org member can currently update any show's info via a direct request, regardless of assignment or permissions.
+
+2. Worse, the *intended* policy is itself misnamed: despite being called "shows they can see," its condition is only `organization_id match AND can_edit_timecards` — it does **not** check assignment/creator/can-edit-all. So even after dropping the leftover policy, a user with `can_edit_timecards` could still edit *any* show in the org, including one they can't see (e.g. PM A editing PM B's show via a direct request).
+
+This spec drops the leftover policy **and** rewrites the remaining one so editing a show requires both the permission (`can_edit_timecards`) **and** visibility (assigned, creator, or `can_edit_all_shows`) — mirroring the read-side rule. This fully delivers the "PM A can't touch PM B's shows" requirement for shows, at both the view and write level. (SQL in "Data & access layer" below.)
+
+**Explicitly deferred to the next spec:** applying the same assignment-aware visibility check to *writes* on the nested tables — rooms/timecards/punches/rate_cards/rulesets (today those only check organization membership, not assignment/creation/can-edit-all — narrower than the read side). Shows themselves are fully handled here; the nested-table write scoping is part of "wire up enforcement properly" and is scoped to the next spec rather than growing this one further.
 
 ## Roles in scope
 
@@ -59,8 +67,8 @@ Server component. Fetches all `profiles` rows where `organization_id` matches th
 
 Used by both the Invite Teammate modal and the Edit Member screen. Props: current values (or defaults), an `onChange` callback.
 
-- **Role picker:** Admin / Staff / PM. Selecting a role immediately applies that role's preset values to all 18 underlying permission fields (including the 3 not shown as toggles — see preset table below). Re-selecting a role after manual overrides resets to that role's preset again — switching roles is a "start over" action, it does not attempt to merge with prior manual overrides.
-- **Advanced section:** collapsed by default, an expandable list of 15 individual `Toggle` switches (all 18 columns minus the 3 genuinely-unused ones), each labeled in plain English (e.g. "Manage Users", "View Pay Rates", not the raw column name). Flipping any toggle here edits the in-memory value directly, independent of the role picker above (the role picker's displayed selection does not un-highlight if you diverge from its preset — it simply reflects "the role last chosen," not "current state matches this preset").
+- **Role picker:** Admin / Staff / PM. Selecting a role immediately applies that role's preset values to all 18 underlying permission fields (including the 4 not shown as toggles — see preset table below). Re-selecting a role after manual overrides resets to that role's preset again — switching roles is a "start over" action, it does not attempt to merge with prior manual overrides.
+- **Advanced section:** collapsed by default, an expandable list of 14 individual `Toggle` switches (all 18 columns minus the 4 not shown — the 3 genuinely-unused ones plus `view_only`), each labeled in plain English (e.g. "Manage Users", "View Pay Rates", not the raw column name). Flipping any toggle here edits the in-memory value directly, independent of the role picker above (the role picker's displayed selection does not un-highlight if you diverge from its preset — it simply reflects "the role last chosen," not "current state matches this preset").
 
 ### Preset table
 
@@ -80,12 +88,12 @@ Used by both the Invite Teammate modal and the Edit Member screen. Props: curren
 | View reports | ✅ | ✅ | ✅ |
 | Export reports | ✅ | ❌ | ✅ |
 | Send reports | ✅ | ❌ | ✅ |
-| View only | ❌ | ❌ | ❌ |
+| View only (not a toggle, hidden until enforced) | ❌ | ❌ | ❌ |
 | Approve timecards (not a toggle, unused) | ✅ | ❌ | ✅ |
 | View crew contacts (not a toggle, unused) | ✅ | ❌ | ✅ |
 | Duplicate shows (not a toggle, unused) | ✅ | ❌ | ❌ |
 
-(The 3 rows marked "not a toggle, unused" are still written to the database by the preset; they just never appear as an editable toggle in the Advanced section, per the "current enforcement reality" section above.)
+(The 4 rows marked "not a toggle" are still written to the database by the preset; they just never appear as an editable toggle in the Advanced section, per the "current enforcement reality" section above. `view_only` is held out because its implied read-only semantics aren't enforced yet; the other 3 because they're unused entirely.)
 
 ## Invite Teammate modal
 
@@ -107,33 +115,80 @@ Two safeguards, enforced in the UI **and** at the database level (next section):
 
 ## Data & access layer
 
-**New RLS UPDATE policy on `profiles`**, mirroring the existing, already-proven `invitations` policy shape:
+### ⚠️ Foundational fix: close the privilege self-escalation hole (must land in this spec)
+
+**The problem (verified against the live database):** the `authenticated` Postgres role holds `UPDATE` on *every* column of `profiles` — including all `can_*` flags, `base_role`, and `organization_id` — and the only RLS gate today is the policy `"Users can update their own profile"` with `USING (id = auth.uid())` and a null `WITH CHECK` (which Postgres treats as "use the USING clause as the check"). That clause only checks that the row's `id` still equals the caller — it never restricts *which columns* changed. Net effect: **any logged-in user can set `can_manage_users = true` (or any other permission), or move themselves into another organization, on their own profile row via a direct Supabase call** — entirely outside this app's UI. This defeats the entire permissions model, so a permissions editor cannot ship on top of it without this fix.
+
+Column-level `GRANT`s can't express "you may edit these columns but not those," so the fix lives in the trigger below (a trigger can compare `OLD` vs `NEW`).
+
+### SECURITY DEFINER helper (matches existing `can_see_all_shows()` pattern)
+
+```sql
+create or replace function public.can_manage_users_me()
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$ select can_manage_users from profiles where id = auth.uid(); $$;
+```
+
+Using a `SECURITY DEFINER` helper (exactly as `can_see_all_shows()` already does) instead of an inline `(select can_manage_users from profiles where id = auth.uid())` avoids evaluating a `profiles` subquery inside a `profiles` policy — sidestepping RLS-recursion fragility — and keeps the codebase consistent.
+
+### New RLS UPDATE policy on `profiles`
+
+Mirrors the existing, already-proven `invitations` policy shape, using the helper:
 
 ```sql
 create policy "Admins can manage org member permissions"
 on profiles for update
 using (
   organization_id = my_organization_id()
-  and (select can_manage_users from profiles where id = auth.uid())
+  and can_manage_users_me()
+)
+with check (
+  organization_id = my_organization_id()
+  and can_manage_users_me()
+);
+```
+
+This OR's with the existing self-update policy (RLS policies for a command are OR'd), which is intended: regular users keep editing their own personal-preference fields, admins can edit anyone in their org. The column-level protection for both paths comes from the trigger.
+
+### New `BEFORE UPDATE` trigger on `profiles`
+
+A single `SECURITY DEFINER` trigger function (matching the existing `handle_new_user` / `handle_new_organization` pattern) enforces three rules, regardless of what code path attempted the update:
+
+1. **Self-escalation lock (the foundational fix above):** if the row being updated is the caller's own (`NEW.id = auth.uid()`) and the caller is **not** an admin (`can_manage_users` is not true for them), then none of the privileged columns may change — every `can_*` flag, `base_role`, and `organization_id` in `NEW` must equal `OLD`. Otherwise raise an exception. (A non-admin self-edit is thus limited to personal-preference columns like `use_24_hour_time`, `shoulder_surfer_mode`, `full_name`.)
+2. **Self-demotion guard:** even an admin cannot remove their own `can_manage_users` (`NEW.id = auth.uid()` and `can_manage_users` goes `true → false`) — raise.
+3. **Last-admin guard:** if any row's `can_manage_users` goes `true → false` and no *other* row in the same `organization_id` still has `can_manage_users = true`, raise.
+
+**Service-role / invite-accept safety:** `acceptInvite()` (`lib/invite.ts`) writes profiles via the service-role client, which bypasses RLS but **not** triggers. Under a service-role call `auth.uid()` is `null`, so the trigger must early-return (skip all three actor-based checks) when `auth.uid() is null` — the service role is trusted. This interaction must be covered by an explicit test, since a wrong guard here would silently break invite acceptance.
+
+All three rules raise real Postgres errors surfaced to the calling code as normal Supabase errors — not silent no-ops, per this project's standing "surface errors, never fail silently" rule.
+
+*(Known minor edge case, not blocking: rules 2/3 are evaluated per-row, so two admins demoting each other in exactly-simultaneous transactions could theoretically both pass the "another admin exists" check and leave zero admins. Vanishingly unlikely for a small team; a `SELECT ... FOR UPDATE` lock would close it if it ever matters. Noted for the implementation plan, not required for v1.)*
+
+### Fix `shows` write policies (delivers the PM-A-vs-PM-B requirement for writes)
+
+Per "Show visibility" above, drop the leftover no-check policy **and** rewrite the intended one so editing a show requires both `can_edit_timecards` **and** visibility:
+
+```sql
+drop policy "Users update shows in their org" on shows;
+drop policy "Users can update shows they can see" on shows;
+
+create policy "Users can update shows they can see"
+on shows for update
+using (
+  organization_id = my_organization_id()
+  and (select can_edit_timecards from profiles where id = auth.uid())
+  and (
+    can_see_all_shows()
+    or id in (select show_id from show_assignments where profile_id = auth.uid())
+    or created_by = auth.uid()
+  )
 )
 with check (
   organization_id = my_organization_id()
 );
 ```
-
-**New `BEFORE UPDATE` trigger** on `profiles` (matching the existing trigger pattern used for `handle_new_user` / `handle_new_organization`), enforcing both safeguards regardless of what caller attempted the update:
-- Raises an exception if the row being updated has `id = auth.uid()` (a self-edit) and the update would change `can_manage_users` from `true` to `false`.
-- Raises an exception if the row being updated currently has `can_manage_users = true`, the update would set it to `false`, and no other row in the same `organization_id` has `can_manage_users = true`.
-
-Both are real Postgres errors surfaced to the calling code as a normal Supabase error — not a silent no-op, per this project's standing "surface errors, never fail silently" rule.
-
-**Also in this same migration:** drop the redundant, overly-permissive `shows` policy identified in "Show visibility" above:
-
-```sql
-drop policy "Users update shows in their org" on shows;
-```
-
-Leaving `"Users can update shows they can see"` (gated on `can_edit_timecards`) as the sole `UPDATE` policy on `shows`.
 
 ## Error handling
 
@@ -141,7 +196,8 @@ Standard pattern already used elsewhere in this app (e.g. `EditShowClient.tsx`):
 
 ## Out of scope (explicitly, for this spec)
 
-- Enforcement of the currently-inert permissions across their respective features (`can_import_crew`, `can_edit_pay_rates`, `can_manage_rulesets`, `can_view_reports`, `can_export_reports`, `can_send_reports`, `view_only`) — separate follow-up spec.
-- Extending assignment-aware visibility scoping to *writes* on rooms/timecards/punches/rate_cards/rulesets (today those only check org membership, not assignment) — separate follow-up spec.
-- Removing/deactivating a user from an org entirely (not asked for; only role/permission editing and inviting new members).
+- Enforcement of the currently-inert permissions across their respective features (`can_import_crew`, `can_edit_pay_rates`, `can_manage_rulesets`, `can_view_reports`, `can_export_reports`, `can_send_reports`, `view_only`) — separate follow-up spec. (`view_only` also stays hidden from the UI until then.)
+- Extending assignment-aware visibility scoping to *writes* on the nested tables — rooms/timecards/punches/rate_cards/rulesets (today those only check org membership, not assignment) — separate follow-up spec. **Shows themselves are handled in this spec** (both read and write).
+- Gating `av_roles` writes on a permission (currently any org member can add/edit/delete the org's job-title list; no `can_*` check at all) — noted during the access-control sweep, folded into the next spec.
+- Removing/deactivating a user from an org entirely, and surfacing/revoking *pending* (unaccepted) invitations (the Team list shows accepted members only; the invite link is shown once at creation). Not asked for in v1 — candidate follow-ups.
 - Crew role assignment (crew app access isn't built).
