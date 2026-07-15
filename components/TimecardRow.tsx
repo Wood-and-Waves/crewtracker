@@ -7,10 +7,7 @@ import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, P
 import { straightTimeHours, overtimeHours, doubleTimeHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
 import TimeEntryModal from '@/components/TimeEntryModal'
 import { cn } from '@/lib/cn'
-
-// Shared grid template so this row's cells line up with the header row
-// rendered by the parent room block. Keep both in sync.
-export const PUNCH_GRID_COLS = 'lg:grid-cols-[1.7fr_repeat(6,1fr)_1fr]'
+import { PUNCH_GRID_COLS } from '@/lib/trackerLayout'
 
 export default function TimecardRow({
   timecard,
