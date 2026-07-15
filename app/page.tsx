@@ -32,7 +32,7 @@ export default async function LandingPage() {
           <p className={styles.subtitle}>
             Purpose-built time-tracking and payroll-reporting for Production Managers in the live events and AV industry.
           </p>
-          <Link href="/login" className={styles.ctaButton}>Get Started</Link>
+          <Link href="/join-beta" className={styles.ctaButton}>Join the Beta</Link>
         </section>
 
         <section className={styles.features}>
