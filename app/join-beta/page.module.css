@@ -1,0 +1,187 @@
+/* app/join-beta/page.module.css */
+.page {
+  --bg-color: #1a1a1e;
+  --surface-color: #24242a;
+  --accent-color: #4db8ff;
+  --accent-glow: rgba(77, 184, 255, 0.4);
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0ab;
+
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.topnav {
+  display: flex;
+  justify-content: flex-start;
+  padding: 1.5rem 5% 0;
+  max-width: 700px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.backLink {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.backLink:hover {
+  color: var(--accent-color);
+}
+
+.main {
+  flex: 1;
+  padding: 2rem 5% 4rem;
+  max-width: 700px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.hero {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.heroLogo {
+  display: block;
+  width: 100%;
+  max-width: 100px;
+  height: auto;
+  margin: 0 auto 1rem;
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  line-height: 1.1;
+  margin: 0 0 1rem;
+}
+
+.hero h1 span {
+  color: var(--accent-color);
+  text-shadow: 0 0 20px var(--accent-glow);
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.formSection {
+  background-color: var(--surface-color);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 2rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.field input,
+.field textarea {
+  background-color: var(--bg-color);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.errorMessage {
+  color: #ff6b6b;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.submitButton {
+  display: inline-block;
+  background-color: transparent;
+  color: var(--accent-color);
+  border: 2px solid var(--accent-color);
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.submitButton:hover:not(:disabled) {
+  background-color: var(--accent-color);
+  color: var(--bg-color);
+  box-shadow: 0 0 25px var(--accent-glow);
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.successMessage {
+  background-color: var(--surface-color);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 2.5rem;
+  text-align: center;
+}
+
+.successMessage h2 {
+  color: var(--accent-color);
+  margin: 0 0 0.5rem;
+}
+
+.successMessage p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .formSection {
+    padding: 1.5rem;
+  }
+}
