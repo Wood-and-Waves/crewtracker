@@ -12,13 +12,11 @@ export default function EditMemberClient({
   initialRole,
   initialValues,
   isSelf,
-  orgAdminCount,
 }: {
   member: { id: string; full_name: string | null; email: string | null }
   initialRole: Role
   initialValues: PermissionValues
   isSelf: boolean
-  orgAdminCount: number
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -26,10 +24,6 @@ export default function EditMemberClient({
   const [values, setValues] = useState<PermissionValues>(initialValues)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  // A non-self edit that would remove the org's last admin is blocked client-side.
-  const wouldRemoveLastAdmin =
-    initialValues.can_manage_users && !values.can_manage_users && orgAdminCount <= 1
 
   const lockedKeys: PermissionKey[] = isSelf ? ['can_manage_users'] : []
 
@@ -72,16 +66,11 @@ export default function EditMemberClient({
             You can&apos;t remove your own “Manage users” permission.
           </p>
         )}
-        {wouldRemoveLastAdmin && (
-          <p className="mt-3 text-sm text-danger">
-            This is the organization&apos;s last admin. Grant another member “Manage users” before removing it here.
-          </p>
-        )}
         {error && <p className="mt-3 text-sm text-danger">{error}</p>}
 
         <div className="mt-6 flex gap-3">
           <Button variant="ghost" className="flex-1" onClick={() => router.push('/dashboard/team')}>Cancel</Button>
-          <Button className="flex-1" onClick={handleSave} disabled={saving || wouldRemoveLastAdmin}>
+          <Button className="flex-1" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         </div>

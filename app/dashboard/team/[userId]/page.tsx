@@ -27,12 +27,6 @@ export default async function EditMemberPage({ params }: { params: Promise<{ use
     .single()
   if (!member) redirect('/dashboard/team')
 
-  const { count: orgAdminCount } = await supabase
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', me.organization_id)
-    .eq('can_manage_users', true)
-
   // Build the current values object from the member row.
   const initialValues = {} as PermissionValues
   for (const key of ALL_KEYS) initialValues[key] = member[key] ?? false
@@ -46,7 +40,6 @@ export default async function EditMemberPage({ params }: { params: Promise<{ use
       initialRole={initialRole}
       initialValues={initialValues}
       isSelf={member.id === user.id}
-      orgAdminCount={orgAdminCount ?? 1}
     />
   )
 }
