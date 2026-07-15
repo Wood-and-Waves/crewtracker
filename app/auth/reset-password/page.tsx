@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+const inputCls =
+  'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
+
 export default function ResetPasswordPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -36,21 +39,21 @@ export default function ResetPasswordPage() {
 
   if (done) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Password set</h1>
-          <p className="text-zinc-400 text-sm">Redirecting to your dashboard...</p>
+      <div className="flex min-h-screen items-center justify-center bg-bg">
+        <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl text-center">
+          <h1 className="text-2xl font-bold text-ink mb-2">Password set</h1>
+          <p className="text-muted text-sm">Redirecting to your dashboard...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-      <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl">
+    <div className="flex min-h-screen items-center justify-center bg-bg">
+      <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white">Set a new password</h1>
-          <p className="mt-2 text-sm text-zinc-400">Choose a password for your CrewTracker account.</p>
+          <h1 className="text-2xl font-bold text-ink">Set a new password</h1>
+          <p className="mt-2 text-sm text-muted">Choose a password for your CrewTracker account.</p>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -59,7 +62,7 @@ export default function ResetPasswordPage() {
             placeholder="New password"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
           />
           <input
             type="password"
@@ -67,15 +70,15 @@ export default function ResetPasswordPage() {
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleReset()}
-            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
           />
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
 
           <button
             onClick={handleReset}
             disabled={loading}
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+            className="w-full rounded-field bg-accent px-4 py-3 text-sm font-medium text-accent-ink transition hover:opacity-90 disabled:opacity-50"
           >
             {loading ? 'Saving...' : 'Set Password'}
           </button>

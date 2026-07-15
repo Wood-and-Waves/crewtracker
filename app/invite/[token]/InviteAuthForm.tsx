@@ -2,6 +2,10 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
+import Logo from '@/components/Logo'
+
+const inputCls =
+  'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent disabled:opacity-60'
 
 export default function InviteAuthForm({
   token,
@@ -78,28 +82,29 @@ export default function InviteAuthForm({
 
   if (magicSent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
-          <p className="text-zinc-400 text-sm">We sent a confirmation link to <span className="text-white">{email}</span>. Click it to continue.</p>
+      <div className="flex min-h-screen items-center justify-center bg-bg">
+        <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl text-center">
+          <h1 className="text-2xl font-bold text-ink mb-2">Check your email</h1>
+          <p className="text-muted text-sm">We sent a confirmation link to <span className="text-ink">{email}</span>. Click it to continue.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-      <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-8 shadow-xl">
+    <div className="flex min-h-screen items-center justify-center bg-bg">
+      <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white">CrewTracker</h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            {isNewOrg ? `You\'ve been invited to create ${orgName}` : `You\'ve been invited to join ${orgName}`}
+          <div className="flex items-center justify-center gap-2 text-accent mb-2"><Logo /></div>
+          <h1 className="text-2xl font-bold text-ink">CrewTracker</h1>
+          <p className="mt-2 text-sm text-muted">
+            {isNewOrg ? `You've been invited to create ${orgName}` : `You've been invited to join ${orgName}`}
           </p>
         </div>
 
         <button
           onClick={signInWithGoogle}
-          className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 mb-6"
+          className="flex w-full items-center justify-center gap-3 rounded-field bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 mb-6"
         >
           <svg width="18" height="18" viewBox="0 0 18 18">
             <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -111,9 +116,9 @@ export default function InviteAuthForm({
         </button>
 
         <div className="flex items-center gap-3 mb-6">
-          <div className="h-px flex-1 bg-zinc-700" />
-          <span className="text-xs text-zinc-500">or</span>
-          <div className="h-px flex-1 bg-zinc-700" />
+          <div className="h-px flex-1 bg-line" />
+          <span className="text-xs text-muted">or</span>
+          <div className="h-px flex-1 bg-line" />
         </div>
 
         <div className="flex flex-col gap-3">
@@ -123,7 +128,7 @@ export default function InviteAuthForm({
             value={email}
             onChange={e => setEmail(e.target.value)}
             disabled={!!restrictedEmail}
-            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+            className={inputCls}
           />
           <input
             type="password"
@@ -131,15 +136,15 @@ export default function InviteAuthForm({
             value={password}
             onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
-            className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
           />
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
 
           <button
             onClick={handleEmailAuth}
             disabled={loading}
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+            className="w-full rounded-field bg-accent px-4 py-3 text-sm font-medium text-accent-ink transition hover:opacity-90 disabled:opacity-50"
           >
             {loading ? 'Please wait...' : isSignUp ? 'Create Account & Join' : 'Sign In & Join'}
           </button>
@@ -147,17 +152,17 @@ export default function InviteAuthForm({
           <button
             onClick={handleMagicLink}
             disabled={loading || !email}
-            className="w-full rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+            className="w-full rounded-field border border-line px-4 py-3 text-sm text-muted transition hover:border-accent hover:text-accent disabled:opacity-50"
           >
             Send magic link instead
           </button>
         </div>
 
-        <p className="mt-6 text-center text-xs text-zinc-500">
-          {isSignUp ? 'Already have an account?' : "Don\'t have an account?"}{' '}
+        <p className="mt-6 text-center text-xs text-muted">
+          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
           <button
             onClick={() => { setIsSignUp(!isSignUp); setError('') }}
-            className="text-blue-400 hover:text-blue-300"
+            className="text-accent hover:opacity-80"
           >
             {isSignUp ? 'Sign in' : 'Sign up'}
           </button>
