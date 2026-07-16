@@ -149,7 +149,7 @@ export default function StaffRoomModal({
         onClick={() => setOpen(true)}
         className="w-full rounded-field bg-accent-wash px-3 py-2 text-sm font-medium text-accent transition hover:opacity-80"
       >
-        + Staff Crew
+        + Add Crew Member
       </button>
     )
   }
