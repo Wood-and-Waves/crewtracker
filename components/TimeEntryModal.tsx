@@ -83,6 +83,24 @@ export default function TimeEntryModal({
     onClose()
   }
 
+  async function clearPunch() {
+    if (!confirm('Clear this punch? This cannot be undone.')) return
+    const existing = allPunches.find(p => p.punch_type === type)
+    if (!existing) return
+
+    setLoading(true)
+    const { error } = await supabase.from('punches').delete().eq('id', existing.id)
+    setLoading(false)
+
+    if (error) {
+      setError(error.message)
+      return
+    }
+
+    router.refresh()
+    onClose()
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
@@ -121,6 +139,11 @@ export default function TimeEntryModal({
 
             <div className="flex gap-3">
               <Button variant="ghost" className="flex-1 py-3" onClick={onClose}>Cancel</Button>
+              {existingTime && (
+                <Button variant="danger" className="flex-1 py-3" onClick={clearPunch} disabled={loading}>
+                  Clear
+                </Button>
+              )}
               <Button className="flex-1 py-3" onClick={save} disabled={loading}>
                 {loading ? 'Saving...' : 'Save'}
               </Button>
