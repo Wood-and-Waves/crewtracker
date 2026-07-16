@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
+import Dropdown from '@/components/ui/Dropdown'
 
 type RateCard = { id: string; role: string; day_rate: number }
 type CrewMember = { id: string; full_name: string; phone: string | null; email: string | null; rate_cards: RateCard[] }
@@ -32,8 +33,6 @@ function csvField(value: string) {
 
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
-const selectCls =
-  'rounded-field bg-surface-2 border border-line px-3 py-2 text-sm text-ink outline-none focus:border-accent'
 
 export default function CrewDirectoryClient({
   organizationId,
@@ -213,24 +212,30 @@ export default function CrewDirectoryClient({
           {crew.length > 0 && (
             <Button variant="ghost" size="sm" onClick={exportCSV}>Export CSV</Button>
           )}
-          <select value={sort} onChange={e => setSort(e.target.value as SortOption)} className={selectCls}>
-            <option value="lastName" className="bg-surface-2 text-ink">Sort: Last Name</option>
-            <option value="firstName" className="bg-surface-2 text-ink">Sort: First Name</option>
-            <option value="role" className="bg-surface-2 text-ink">Sort: Role</option>
-          </select>
           <Button variant="ghost" size="sm" onClick={() => setShowImport(true)}>Import</Button>
           <Button size="sm" onClick={() => setShowAdd(true)}>+ Add Person</Button>
         </div>
       </div>
 
       {crew.length > 0 && (
-        <input
-          type="search"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search crew by name or role…"
-          className={`${inputCls} mb-5 max-w-sm`}
-        />
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search crew by name or role…"
+            className={`${inputCls} max-w-sm`}
+          />
+          <Dropdown
+            value={sort}
+            onChange={v => setSort(v as SortOption)}
+            options={[
+              { value: 'lastName', label: 'Sort: Last Name' },
+              { value: 'firstName', label: 'Sort: First Name' },
+              { value: 'role', label: 'Sort: Role' },
+            ]}
+          />
+        </div>
       )}
 
       {crew.length === 0 ? (
