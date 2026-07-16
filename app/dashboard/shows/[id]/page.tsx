@@ -133,10 +133,23 @@ export default async function ShowDetailPage({
         <h1 className="text-2xl font-extrabold tracking-tight mt-2">{show.name}</h1>
         <div className="flex gap-2 mt-2">
           <Link href={`/dashboard/shows/${id}/edit`}>
-            <Button variant="ghost" size="sm">Edit Show</Button>
+            <Button variant="ghost" size="sm" aria-label="Edit Show">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="lg:hidden">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              <span className="hidden lg:inline">Edit Show</span>
+            </Button>
           </Link>
           <Link href={`/dashboard/shows/${id}/reports`}>
-            <Button variant="ghost" size="sm">View Report</Button>
+            <Button variant="ghost" size="sm" aria-label="View Report">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="lg:hidden">
+                <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+                <path d="M14 3v6h6" />
+                <path d="M9 14h6M9 17h6" />
+              </svg>
+              <span className="hidden lg:inline">View Report</span>
+            </Button>
           </Link>
         </div>
       </div>
