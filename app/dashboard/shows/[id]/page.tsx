@@ -197,7 +197,7 @@ export default async function ShowDetailPage({
                 <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} />
               </div>
 
-              {crew.length > 0 && <BatchPunchBar timecards={crew} />}
+              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} />}
 
               {/* Column headers — only meaningful once there's a ruled table
                   to head; hidden on mobile where TimecardRow renders labeled
