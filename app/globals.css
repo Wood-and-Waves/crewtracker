@@ -8,19 +8,21 @@
    ============================================================ */
 
 :root {
-  /* light ("paper") */
-  --bg: #eceef1;
+  /* light — matches the iOS app's light appearance (source-verified) */
+  --bg: #f2f2f7;
   --surface: #ffffff;
-  --surface-2: #f2f5f8;
-  --ink: #10141a;
-  --muted: #5d656e;
-  --line: #dce0e6;
-  --accent: #1275d8;
+  --surface-2: #ebebeb;
+  --surface-3: #e5e5ea;
+  --ink: #000000;
+  --muted: #8e8e93;
+  --line: #c6c6c8;
+  --accent: #007aff;
   --accent-ink: #ffffff;
-  --accent-wash: rgba(18, 117, 216, 0.12);
-  --ot: #b7791f;
-  --good: #1f9d63;
-  --danger: #c8362b;
+  --accent-wash: rgba(0, 122, 255, 0.15);
+  --ot: #ff9500;
+  --good: #34c759;
+  --danger: #ff3b30;
+  --half-day: #af52de;
 
   --radius: 14px;
   --radius-sm: 10px;
@@ -30,49 +32,55 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #070809;
-    --surface: #141619;
-    --surface-2: #1c1f24;
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --surface-3: #3a3a3c;
     --ink: #ffffff;
-    --muted: #99a0a8;
-    --line: #262a30;
-    --accent: #3aa0ff;
-    --accent-ink: #04121f;
-    --accent-wash: rgba(58, 160, 255, 0.14);
-    --ot: #f0b429;
-    --good: #3ecf8e;
-    --danger: #ff5c5c;
+    --muted: #8e8e93;
+    --line: #38383a;
+    --accent: #0a84ff;
+    --accent-ink: #ffffff;
+    --accent-wash: rgba(10, 132, 255, 0.15);
+    --ot: #ff9f0a;
+    --good: #30d158;
+    --danger: #ff453a;
+    --half-day: #bf5af2;
   }
 }
 
 /* explicit overrides win over the media query in both directions */
 :root[data-theme="light"] {
-  --bg: #eceef1;
+  --bg: #f2f2f7;
   --surface: #ffffff;
-  --surface-2: #f2f5f8;
-  --ink: #10141a;
-  --muted: #5d656e;
-  --line: #dce0e6;
-  --accent: #1275d8;
+  --surface-2: #ebebeb;
+  --surface-3: #e5e5ea;
+  --ink: #000000;
+  --muted: #8e8e93;
+  --line: #c6c6c8;
+  --accent: #007aff;
   --accent-ink: #ffffff;
-  --accent-wash: rgba(18, 117, 216, 0.12);
-  --ot: #b7791f;
-  --good: #1f9d63;
-  --danger: #c8362b;
+  --accent-wash: rgba(0, 122, 255, 0.15);
+  --ot: #ff9500;
+  --good: #34c759;
+  --danger: #ff3b30;
+  --half-day: #af52de;
 }
 :root[data-theme="dark"] {
-  --bg: #070809;
-  --surface: #141619;
-  --surface-2: #1c1f24;
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
   --ink: #ffffff;
-  --muted: #99a0a8;
-  --line: #262a30;
-  --accent: #3aa0ff;
-  --accent-ink: #04121f;
-  --accent-wash: rgba(58, 160, 255, 0.14);
-  --ot: #f0b429;
-  --good: #3ecf8e;
-  --danger: #ff5c5c;
+  --muted: #8e8e93;
+  --line: #38383a;
+  --accent: #0a84ff;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(10, 132, 255, 0.15);
+  --ot: #ff9f0a;
+  --good: #30d158;
+  --danger: #ff453a;
+  --half-day: #bf5af2;
 }
 
 /* Expose tokens as Tailwind utilities: bg-surface, text-ink, text-accent,
@@ -82,6 +90,7 @@
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-line: var(--line);
@@ -91,6 +100,7 @@
   --color-ot: var(--ot);
   --color-good: var(--good);
   --color-danger: var(--danger);
+  --color-half-day: var(--half-day);
 
   --radius-card: var(--radius);
   --radius-field: var(--radius-sm);

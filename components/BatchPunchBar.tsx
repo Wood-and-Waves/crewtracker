@@ -56,7 +56,7 @@ export default function BatchPunchBar({
             key={type}
             onClick={() => batchPunch(type)}
             disabled={loading !== null}
-            className="rounded-field bg-surface-2 border border-line px-3 py-2 text-xs font-medium text-ink hover:border-accent hover:text-accent disabled:opacity-50"
+            className="rounded-field bg-surface-3 border border-line px-3 py-2 text-xs font-medium text-ink hover:border-accent hover:text-accent disabled:opacity-50"
           >
             {loading === type ? '...' : `${PUNCH_LABELS[type as keyof typeof PUNCH_LABELS]} All`}
           </button>

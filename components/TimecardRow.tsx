@@ -89,17 +89,27 @@ export default function TimecardRow({
         onClick={() => setEditingType(type)}
         disabled={disabled}
         className={cn(
-          'rounded-card lg:rounded-field px-3 py-4 lg:px-2 lg:py-2 text-sm lg:text-xs font-medium transition-colors text-center tabular-nums',
-          'flex flex-col items-center justify-center gap-0.5 min-h-[64px] lg:min-h-0 lg:block lg:gap-0',
+          'rounded-card lg:rounded-field h-12 lg:h-auto lg:aspect-[2/1] px-2 py-1 lg:px-1 lg:py-2 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
+          'flex flex-col items-center justify-center gap-0.5 lg:gap-0',
           done && 'bg-surface-2 text-ink hover:opacity-90',
-          !done && !disabled && 'bg-accent text-accent-ink font-semibold hover:opacity-90',
-          disabled && 'text-muted/40 cursor-not-allowed',
+          !done && !disabled && 'bg-accent-wash text-accent font-bold hover:opacity-90',
+          disabled && 'bg-surface-3 text-muted/40 cursor-not-allowed',
         )}
       >
-        <span className="lg:hidden block text-[9px] uppercase tracking-wide text-muted mb-0.5">
-          {PUNCH_LABELS[type]}
-        </span>
-        {done ? formatPunchTime(done.punched_at, timezone, use24Hour) : PUNCH_LABELS[type]}
+        {done ? (
+          <>
+            <span className="lg:hidden block text-[10px] uppercase tracking-wide text-muted leading-none">
+              {PUNCH_LABELS[type]}
+            </span>
+            <span className="block text-xl leading-none font-bold lg:text-xs lg:font-medium lg:leading-normal">
+              {formatPunchTime(done.punched_at, timezone, use24Hour)}
+            </span>
+          </>
+        ) : (
+          <span className="block text-lg leading-none font-bold lg:text-xs lg:font-medium lg:leading-normal">
+            {PUNCH_LABELS[type]}
+          </span>
+        )}
       </button>
     )
   }
@@ -123,7 +133,7 @@ export default function TimecardRow({
         </div>
 
         {timecard.is_travel_day ? (
-          <div className="col-span-3 lg:col-span-6 rounded-field bg-accent-wash text-accent text-center py-3 text-sm font-semibold">
+          <div className="col-span-3 lg:col-span-6 rounded-field bg-accent/10 text-accent text-center py-3 text-sm font-semibold">
             ✈ Travel Day
           </div>
         ) : (
@@ -151,7 +161,7 @@ export default function TimecardRow({
           onClick={() => toggleTravel('travel_in_day')}
           className={cn(
             'rounded-pill px-3 py-1 text-xs transition-colors',
-            timecard.travel_in_day ? 'bg-accent-wash text-accent' : 'bg-surface-2 text-muted',
+            timecard.travel_in_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
           )}
         >
           ✈ Travel In
@@ -160,7 +170,7 @@ export default function TimecardRow({
           onClick={() => toggleTravel('travel_out_day')}
           className={cn(
             'rounded-pill px-3 py-1 text-xs transition-colors',
-            timecard.travel_out_day ? 'bg-accent-wash text-accent' : 'bg-surface-2 text-muted',
+            timecard.travel_out_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
           )}
         >
           ✈ Travel Out

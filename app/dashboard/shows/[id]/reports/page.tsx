@@ -256,7 +256,7 @@ export default async function ShowReportPage({
                           </div>
                           {tc.travel_in_day && <span className="text-xs text-accent">✈️</span>}
                           {tc.travel_out_day && <span className="text-xs text-accent">✈️</span>}
-                          {tc.pay_as_half_day && <span className="text-xs text-purple-400">◑</span>}
+                          {tc.pay_as_half_day && <span className="text-xs text-half-day">◑</span>}
                           {b.shortTurn && <span className="text-xs text-ot">⚠️</span>}
                         </div>
                         <div className="text-right">
@@ -325,7 +325,7 @@ export default async function ShowReportPage({
                               {b.shortTurn && <span className="text-ot">⚠️</span>}
                               {tc.travel_in_day && <span className="text-accent">✈️</span>}
                               {tc.travel_out_day && <span className="text-accent">✈️</span>}
-                              {tc.pay_as_half_day && <span className="text-purple-400">◑</span>}
+                              {tc.pay_as_half_day && <span className="text-half-day">◑</span>}
                             </span>
                             <div className="text-right">
                               <p className={cn('font-semibold tabular-nums', b.shortTurn ? 'text-ot' : 'text-ink')}>{fmt(b.dayTotal)} hrs</p>
