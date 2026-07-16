@@ -76,7 +76,7 @@ export default function AddRoomModal({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-card border border-dashed border-line px-4 py-3 text-sm text-muted transition hover:border-accent hover:text-accent"
+        className="rounded-field bg-accent-wash px-3 py-2 text-sm font-medium text-accent transition hover:opacity-80"
       >
         + Add Room
       </button>

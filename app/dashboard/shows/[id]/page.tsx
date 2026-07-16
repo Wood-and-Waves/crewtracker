@@ -166,6 +166,14 @@ export default async function ShowDetailPage({
         </Link>
       </div>
 
+      <div className="flex justify-end mb-3">
+        <AddRoomModal
+          showId={id}
+          currentWorkDayId={activeDay.id}
+          remainingWorkDayIds={remainingWorkDayIds}
+        />
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
@@ -224,14 +232,6 @@ export default async function ShowDetailPage({
             </div>
           )
         })}
-
-        <div className="flex items-center justify-center rounded-card border border-dashed border-line p-5 min-h-[120px]">
-          <AddRoomModal
-            showId={id}
-            currentWorkDayId={activeDay.id}
-            remainingWorkDayIds={remainingWorkDayIds}
-          />
-        </div>
       </div>
     </div>
   )
