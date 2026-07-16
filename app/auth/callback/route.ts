@@ -13,7 +13,10 @@ export async function GET(request: Request) {
     const { data } = await supabase.auth.exchangeCodeForSession(code)
 
     if (inviteToken && data.user) {
-      await acceptInvite(inviteToken, data.user.id)
+      const result = await acceptInvite(inviteToken, data.user.id, data.user.email)
+      if (result.error) {
+        return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(result.error)}`)
+      }
     }
   }
 

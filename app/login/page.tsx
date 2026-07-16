@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Logo from '@/components/Logo'
 
 const inputCls =
@@ -16,6 +16,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [magicSent, setMagicSent] = useState(false)
   const [resetSent, setResetSent] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlError = params.get('error')
+    if (urlError) setError(urlError)
+  }, [])
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({

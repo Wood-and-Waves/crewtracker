@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function acceptInvite(token: string, userId: string) {
+export async function acceptInvite(token: string, userId: string, userEmail: string | null | undefined) {
   const admin = createAdminClient()
 
   const { data: invite, error: inviteError } = await admin
@@ -12,6 +12,9 @@ export async function acceptInvite(token: string, userId: string) {
   if (inviteError || !invite) return { error: 'Invalid invite link' }
   if (invite.accepted_at) return { error: 'This invite has already been used' }
   if (new Date(invite.expires_at) < new Date()) return { error: 'This invite has expired' }
+  if (invite.email && invite.email.toLowerCase() !== (userEmail || '').toLowerCase()) {
+    return { error: 'This invite was sent to a different email address. Please sign in with that email to accept it.' }
+  }
 
   let organizationId = invite.organization_id
 

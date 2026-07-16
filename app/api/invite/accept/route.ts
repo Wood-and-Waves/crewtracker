@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const { token } = await request.json()
   if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 })
 
-  const result = await acceptInvite(token, user.id)
+  const result = await acceptInvite(token, user.id, user.email)
   if (result.error) return NextResponse.json({ error: result.error }, { status: 400 })
 
   return NextResponse.json({ success: true })
