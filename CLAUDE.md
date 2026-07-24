@@ -180,9 +180,9 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 ## Environment variables
 
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings.
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings. `RESEND_API_KEY` (beta-signup email). `CRON_SECRET` (Vercel-only, not in `.env.local` — locks down the keepalive cron endpoint; see Notes).
 
 ## Notes
 
-- Supabase free tier pauses projects after 7 days of inactivity — unpause from the dashboard.
+- Supabase free tier pauses projects after 7 days of inactivity. A **keepalive cron** guards against this: `vercel.json` schedules a daily Vercel Cron (08:00 UTC) that hits `app/api/keepalive/route.ts`, which runs one trivial `select` against Supabase — that query counts as DB activity and resets the 7-day timer. The route is allowlisted in `proxy.ts` (otherwise the auth middleware redirects the cron to `/login`) and gated by the optional `CRON_SECRET` env var (Vercel Cron sends it as a `Bearer` header; unauthenticated hits get `401`). If it ever pauses anyway (broken deploy, disabled cron), just unpause from the dashboard. Note: Vercel Hobby crons run at most once/day, which is why the schedule is daily, not more frequent.
 - `crewtracker-lime.vercel.app` is the stable production URL; deployment-specific preview URLs are not.
