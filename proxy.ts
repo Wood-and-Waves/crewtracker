@@ -40,6 +40,7 @@ export async function proxy(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/auth") &&
     !request.nextUrl.pathname.startsWith("/invite") &&
     !request.nextUrl.pathname.startsWith("/api/beta-signup") &&
+    !request.nextUrl.pathname.startsWith("/api/keepalive") &&
     !request.nextUrl.pathname.startsWith("/join-beta")
   ) {
     const url = request.nextUrl.clone()
