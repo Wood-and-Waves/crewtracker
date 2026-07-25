@@ -16,7 +16,7 @@ Dan (the developer) has no professional dev background. Claude writes the code; 
 
 ## Live URLs
 
-- Production: https://crewtracker-lime.vercel.app
+- Production: https://crewtracker.app (primary public domain; `www.` 308-redirects to apex). `crewtracker-lime.vercel.app` is the underlying stable Vercel origin — still valid, and used by the keepalive check and `vercel inspect`/CLI.
 - GitHub: Wood-and-Waves/crewtracker
 - Supabase project ref: `nfrvxkwemtittrqboebl`
 
@@ -185,4 +185,5 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 ## Notes
 
 - Supabase free tier pauses projects after 7 days of inactivity. A **keepalive cron** guards against this: `vercel.json` schedules a daily Vercel Cron (08:00 UTC) that hits `app/api/keepalive/route.ts`, which runs one trivial `select` against Supabase — that query counts as DB activity and resets the 7-day timer. The route is allowlisted in `proxy.ts` (otherwise the auth middleware redirects the cron to `/login`) and gated by the optional `CRON_SECRET` env var (Vercel Cron sends it as a `Bearer` header; unauthenticated hits get `401`). If it ever pauses anyway (broken deploy, disabled cron), just unpause from the dashboard. Note: Vercel Hobby crons run at most once/day, which is why the schedule is daily, not more frequent.
-- `crewtracker-lime.vercel.app` is the stable production URL; deployment-specific preview URLs are not.
+- **Custom domain:** `crewtracker.app` (registered + DNS-hosted at Netlify via NS1) points at the Vercel app. Only the website records changed — apex `A @ → 76.76.21.21` and `www A → 76.76.21.21`; `www.crewtracker.app` is set to a 308 redirect to the apex in Vercel's domain settings. **DNS deliberately stays at Netlify** so the verified Resend email records (`contact.crewtracker.app`: MX/SPF/DKIM, plus `_dmarc`) are preserved — don't move nameservers to Vercel or those break. Supabase Auth Site URL is `https://crewtracker.app` with `https://crewtracker.app/**` and `https://www.crewtracker.app/**` in the redirect allowlist. All app auth redirects derive from `window.location.origin`, so no code is domain-pinned. To roll back: repoint the apex/www A records to Netlify's IPs (`98.84.224.111`, `18.208.88.157`) and re-add the domain to the Netlify site.
+- `crewtracker-lime.vercel.app` remains the stable Vercel origin (still valid); deployment-specific preview URLs are not.
