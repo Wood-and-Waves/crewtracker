@@ -12,7 +12,7 @@ import UnlockShowButton from '@/components/UnlockShowButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
 import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
-import { punchGridCols, shouldStackRooms } from '@/lib/trackerLayout'
+import { punchGridCols } from '@/lib/trackerLayout'
 import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
@@ -312,14 +312,17 @@ export default async function ShowDetailPage({
         </div>
       </aside>
 
-      {/* Rooms sit two-up on a wide screen, but stack once a third meal pushes
-          the table past six punch columns — the cells get too narrow to read a
-          time in a half-width card. Applied to the whole row so rooms are never
-          different widths from each other. */}
-      <div className={cn(
-        'hidden lg:grid min-w-0 grid-cols-1 gap-4',
-        !shouldStackRooms(dayPunchTypes.length) && '2xl:grid-cols-2',
-      )}>
+      {/* One room per row, at every width.
+          Rooms used to sit two-up on a 2xl screen, which meant the punch table
+          only had half the width to work with — tight at six columns and
+          unreadable at eight. Making it conditional on the column count fixed
+          the width but introduced something worse: the whole page reflowed the
+          moment someone punched an M2 In. A fixed single column is calmer, gives
+          the table the full width whatever it's showing, and means nothing about
+          the layout depends on punch state.
+          The desktop/mobile distinction still holds — this is the ruled grid,
+          mobile renders labelled cards. */}
+      <div className="hidden lg:grid min-w-0 grid-cols-1 gap-4">
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
           return (

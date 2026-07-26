@@ -35,12 +35,3 @@ const GRID_BY_PUNCH_COUNT: Record<number, string> = {
 export function punchGridCols(punchCount: number): string {
   return GRID_BY_PUNCH_COUNT[punchCount] ?? GRID_BY_PUNCH_COUNT[6]
 }
-
-/**
- * Should rooms stack one-per-row instead of sitting two-up on a wide screen?
- *
- * Beyond the everyday six columns the cells get too narrow to read a time in a
- * half-width card. Applied to every room together rather than just the busy
- * one: a narrow room beside a wide one looked broken.
- */
-export const shouldStackRooms = (punchCount: number) => punchCount > 6
