@@ -15,6 +15,11 @@ const baseNavItems = [
 
 const teamNavItem = { href: '/dashboard/team', label: 'Team', icon: 'shield', match: (p: string) => p.startsWith('/dashboard/team') }
 
+// Platform operator only. Lives in the nav so there's a way back to the admin
+// area without typing the URL — previously /superadmin was reachable only from
+// memory.
+const superAdminNavItem = { href: '/superadmin', label: 'Platform', icon: 'shield', match: (p: string) => p.startsWith('/superadmin') }
+
 function Icon({ name }: { name: string }) {
   if (name === 'briefcase') {
     return (
@@ -51,16 +56,22 @@ function Icon({ name }: { name: string }) {
 export default function AppShell({
   children,
   canManageUsers = false,
+  isSuperAdmin = false,
   userName,
   userEmail,
 }: {
   children: React.ReactNode
   canManageUsers?: boolean
+  isSuperAdmin?: boolean
   userName?: string
   userEmail?: string
 }) {
   const pathname = usePathname()
-  const navItems = canManageUsers ? [...baseNavItems, teamNavItem] : baseNavItems
+  const navItems = [
+    ...baseNavItems,
+    ...(canManageUsers ? [teamNavItem] : []),
+    ...(isSuperAdmin ? [superAdminNavItem] : []),
+  ]
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">

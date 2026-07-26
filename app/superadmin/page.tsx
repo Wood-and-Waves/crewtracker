@@ -1,152 +1,75 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { getSuperAdminId } from '@/lib/superadmin'
 import { redirect } from 'next/navigation'
+import SuperAdminClient, { type OrgRow, type InviteRow } from '@/components/SuperAdminClient'
 
-const SUPER_ADMIN_ID = '28d3ae69-15bb-42bc-a478-5d9b43b737de'
+// Platform operator view. Everything below runs with the SERVICE ROLE, which
+// bypasses row-level security completely — the getSuperAdminId check is the
+// only thing protecting every organization's data, so it comes first and
+// redirects rather than rendering anything.
+//
+// Deliberately does NOT load profiles. The previous version listed every user
+// on the platform with their name, email, org and role; seat counts give the
+// same operational picture without the customer's member directory.
 
 export default async function SuperAdminPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user || user.id !== SUPER_ADMIN_ID) {
+  if (!(await getSuperAdminId(supabase as any))) {
     redirect('/dashboard')
   }
 
   const admin = createAdminClient()
 
-  const { data: orgs } = await admin
-    .from('organizations')
-    .select('*, subscriptions(*)')
-    .order('created_at', { ascending: false })
+  const [{ data: orgs }, { data: subs }, { data: memberOrgIds }, { data: showOrgIds }, { data: invites }] =
+    await Promise.all([
+      admin.from('organizations').select('id, name, created_at, disabled_at').order('created_at', { ascending: false }),
+      admin.from('subscriptions').select('organization_id, plan, status, trial_ends_at'),
+      // organization_id only — counting members must not mean reading them.
+      admin.from('profiles').select('organization_id'),
+      admin.from('shows').select('organization_id'),
+      admin.from('invitations').select('*, organizations(name)').is('accepted_at', null).order('created_at', { ascending: false }),
+    ])
 
-  const { data: users } = await admin
-    .from('profiles')
-    .select('*, organizations(name)')
-    .order('created_at', { ascending: false })
+  const countBy = (rows: { organization_id: string | null }[] | null) => {
+    const m = new Map<string, number>()
+    for (const r of rows || []) {
+      if (r.organization_id) m.set(r.organization_id, (m.get(r.organization_id) || 0) + 1)
+    }
+    return m
+  }
+  const memberCounts = countBy(memberOrgIds)
+  const showCounts = countBy(showOrgIds)
+  const subByOrg = new Map((subs || []).map(s => [s.organization_id, s]))
 
-  const { data: invites } = await admin
-    .from('invitations')
-    .select('*, organizations(name)')
-    .order('created_at', { ascending: false })
+  const orgRows: OrgRow[] = (orgs || []).map(o => {
+    const sub = subByOrg.get(o.id)
+    return {
+      id: o.id,
+      name: o.name,
+      created_at: o.created_at,
+      disabled_at: o.disabled_at,
+      plan: sub?.plan ?? null,
+      status: sub?.status ?? null,
+      trialEndsAt: sub?.trial_ends_at ?? null,
+      members: memberCounts.get(o.id) || 0,
+      shows: showCounts.get(o.id) || 0,
+    }
+  })
 
-  return (
-    <div className="min-h-screen bg-zinc-950 text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2">Super Admin</h1>
-        <p className="text-zinc-400 mb-10">CrewTracker platform management</p>
+  const now = Date.now()
+  const inviteRows: InviteRow[] = (invites || []).map((i: any) => ({
+    id: i.id,
+    email: i.email,
+    // A new-org invite has no organization yet, so it carries the intended name
+    // on the invitation itself.
+    orgLabel: i.is_new_organization
+      ? (i.organization_name || 'New organization')
+      : (i.organizations?.name || 'Unknown organization'),
+    isNewOrg: !!i.is_new_organization,
+    expires_at: i.expires_at,
+    expired: new Date(i.expires_at).getTime() < now,
+  }))
 
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Organizations ({orgs?.length ?? 0})</h2>
-            
-              <a href="/superadmin/invite-org" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500 transition">New Org Invite</a>
-          </div>
-          <div className="rounded-xl border border-zinc-800 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-zinc-900 text-zinc-400">
-                <tr>
-                  <th className="text-left px-4 py-3">Organization</th>
-                  <th className="text-left px-4 py-3">Plan</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                  <th className="text-left px-4 py-3">Trial Ends</th>
-                  <th className="text-left px-4 py-3">Created</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {orgs?.map(org => (
-                  <tr key={org.id} className="hover:bg-zinc-900">
-                    <td className="px-4 py-3 font-medium">{org.name}</td>
-                    <td className="px-4 py-3 capitalize">{org.subscriptions?.plan ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${org.subscriptions?.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
-                        {org.subscriptions?.status ?? '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">
-                      {org.subscriptions?.trial_ends_at ? new Date(org.subscriptions.trial_ends_at).toLocaleDateString() : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">
-                      {new Date(org.created_at).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="mb-12">
-          <h2 className="text-xl font-semibold mb-4">Users ({users?.length ?? 0})</h2>
-          <div className="rounded-xl border border-zinc-800 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-zinc-900 text-zinc-400">
-                <tr>
-                  <th className="text-left px-4 py-3">Name</th>
-                  <th className="text-left px-4 py-3">Email</th>
-                  <th className="text-left px-4 py-3">Organization</th>
-                  <th className="text-left px-4 py-3">Role</th>
-                  <th className="text-left px-4 py-3">Joined</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {users?.map(u => (
-                  <tr key={u.id} className="hover:bg-zinc-900">
-                    <td className="px-4 py-3 font-medium">{u.full_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-zinc-400">{u.email}</td>
-                    <td className="px-4 py-3">{u.organizations?.name ?? '—'}</td>
-                    <td className="px-4 py-3 capitalize">{u.base_role}</td>
-                    <td className="px-4 py-3 text-zinc-400">
-                      {new Date(u.created_at).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold mb-4">
-            Pending Invitations ({invites?.filter(i => !i.accepted_at).length ?? 0})
-          </h2>
-          <div className="rounded-xl border border-zinc-800 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-zinc-900 text-zinc-400">
-                <tr>
-                  <th className="text-left px-4 py-3">Email</th>
-                  <th className="text-left px-4 py-3">Organization</th>
-                  <th className="text-left px-4 py-3">Type</th>
-                  <th className="text-left px-4 py-3">Expires</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {invites?.map(invite => (
-                  <tr key={invite.id} className="hover:bg-zinc-900">
-                    <td className="px-4 py-3">{invite.email ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      {invite.is_new_organization ? invite.organization_name : invite.organizations?.name ?? '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${invite.is_new_organization ? 'bg-purple-900 text-purple-300' : 'bg-blue-900 text-blue-300'}`}>
-                        {invite.is_new_organization ? 'New Org' : 'Team Member'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">
-                      {new Date(invite.expires_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${invite.accepted_at ? 'bg-green-900 text-green-300' : 'bg-yellow-900 text-yellow-300'}`}>
-                        {invite.accepted_at ? 'Accepted' : 'Pending'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-    </div>
-  )
+  return <SuperAdminClient orgs={orgRows} invites={inviteRows} />
 }

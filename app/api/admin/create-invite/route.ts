@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-const SUPER_ADMIN_ID = '28d3ae69-15bb-42bc-a478-5d9b43b737de'
+import { getSuperAdminId } from '@/lib/superadmin'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-  if (authError || !user || user.id !== SUPER_ADMIN_ID) {
+  // Was a hardcoded UUID compare; now reads profiles.is_super_admin, which the
+  // app itself cannot set. See lib/superadmin.ts.
+  const superAdminId = await getSuperAdminId(supabase as any)
+  if (!superAdminId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   }
+  const user = { id: superAdminId }
 
   const body = await request.json()
   const { orgName, email } = body
