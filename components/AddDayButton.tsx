@@ -75,9 +75,14 @@ export default function AddDayButton({
 
     // Clone the rooms, nudging created_at so the new day lists them in the same
     // order as the day they came from (the tracker orders rooms by created_at).
-    const sourceRooms = rooms
-      .filter(r => r.work_day_id === lastDay.id)
-      .sort((a, b) => a.name.localeCompare(b.name))
+    //
+    // Deliberately NOT sorted: `rooms` arrives already ordered by created_at
+    // from the server, so filtering preserves the source day's display order.
+    // Sorting by name here used to override that, which is why a show whose
+    // rooms were created "Lobby, GS" got a new day ordered "GS, Lobby" — the
+    // rooms swapped places partway through the show, right where a PM is
+    // punching the same crew day after day.
+    const sourceRooms = rooms.filter(r => r.work_day_id === lastDay.id)
     let newRooms: Room[] = []
     if (sourceRooms.length > 0) {
       const { data, error: roomError } = await supabase
