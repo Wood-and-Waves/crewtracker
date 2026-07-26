@@ -192,6 +192,15 @@ export default function RoomActionsMenu({
           <div className="w-full max-w-md max-h-[85vh] flex flex-col rounded-card bg-surface border border-line shadow-xl">
             <div className="p-5 pb-3 border-b border-line">
               <h2 className="text-lg font-bold text-ink">Edit Crew — {roomName}</h2>
+              {canViewRates && canEditRates && (
+                // A day rate belongs to the show, not the day: the database
+                // propagates any change to every day this person works this
+                // show in this role. Said plainly here so the PM isn't
+                // surprised by an edit reaching beyond the day they're on.
+                <p className="mt-1 text-xs text-muted">
+                  Day rates apply to the whole show — changing one updates every day.
+                </p>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 pt-4 flex flex-col gap-3">

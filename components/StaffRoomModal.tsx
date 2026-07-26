@@ -46,6 +46,11 @@ export default function StaffRoomModal({
   }
   const [crew, setCrew] = useState<CrewMember[]>([])
   const [rateCards, setRateCards] = useState<RateCard[]>([])
+  // Rates already established on THIS show, keyed `crewMemberId|role`. A day
+  // rate belongs to the show, so once one is set the database ignores whatever
+  // an insert supplies (see scripts/sql/show-wide-day-rate.sql). Loading them
+  // here keeps the form from advertising a directory rate that won't be used.
+  const [showRates, setShowRates] = useState<Record<string, number>>({})
   const [roles, setRoles] = useState<string[]>([])
   // `other` puts the role field into free-text mode for a one-off title.
   const [selected, setSelected] = useState<Record<string, Sel>>({})
@@ -97,12 +102,41 @@ export default function StaffRoomModal({
         .eq('organization_id', organizationId)
         .order('sort_order')
       setRoles((roleData || []).map(r => r.name))
+
+      // Every rate already in use anywhere on this show. Reached through
+      // rooms -> work_days because timecards carry no show_id of their own.
+      const { data: dayRow } = await supabase
+        .from('work_days')
+        .select('show_id')
+        .eq('id', currentWorkDayId)
+        .single()
+
+      if (dayRow?.show_id) {
+        const { data: existing } = await supabase
+          .from('timecards')
+          .select('crew_member_id, role, day_rate, rooms!inner(work_days!inner(show_id))')
+          .eq('rooms.work_days.show_id', dayRow.show_id)
+          .not('crew_member_id', 'is', null)
+
+        const map: Record<string, number> = {}
+        for (const tc of existing || []) {
+          if (tc.day_rate === null) continue
+          map[`${tc.crew_member_id}|${tc.role ?? ''}`] = Number(tc.day_rate)
+        }
+        setShowRates(map)
+      }
     }
     load()
-  }, [open, organizationId])
+  }, [open, organizationId, currentWorkDayId])
 
   function cardsFor(id: string) {
     return rateCards.filter(rc => rc.crew_member_id === id)
+  }
+
+  /** The rate this person already holds in this role on this show, if any. */
+  function showRateFor(id: string, role: string): number | null {
+    const v = showRates[`${id}|${role}`]
+    return v === undefined ? null : v
   }
 
   function toggleCrew(id: string) {
@@ -112,9 +146,12 @@ export default function StaffRoomModal({
         delete next[id]
       } else {
         const first = cardsFor(id)[0]
+        const role = first?.role || ''
+        // The show's own rate outranks the directory default.
+        const onShow = showRateFor(id, role)
         next[id] = {
-          role: first?.role || '',
-          dayRate: first ? String(first.day_rate) : '',
+          role,
+          dayRate: onShow !== null ? String(onShow) : (first ? String(first.day_rate) : ''),
           other: false,
         }
       }
@@ -130,7 +167,9 @@ export default function StaffRoomModal({
     setSelected(prev => {
       const cur = prev[id]
       if (value === OTHER) return { ...prev, [id]: { ...cur, other: true, role: '' } }
-      // Picking a role the person has a saved rate for brings the rate with it.
+      // Picking a role the person has a saved rate for brings the rate with it —
+      // unless this show already has a rate for that role, which wins.
+      const onShow = showRateFor(id, value)
       const card = cardsFor(id).find(c => c.role === value)
       return {
         ...prev,
@@ -138,16 +177,23 @@ export default function StaffRoomModal({
           ...cur,
           other: false,
           role: value,
-          dayRate: card ? String(card.day_rate) : cur.dayRate,
+          dayRate: onShow !== null ? String(onShow)
+            : card ? String(card.day_rate)
+            : cur.dayRate,
         },
       }
     })
   }
 
   function applyCard(id: string, card: RateCard) {
+    const onShow = showRateFor(id, card.role)
     setSelected(prev => ({
       ...prev,
-      [id]: { role: card.role, dayRate: String(card.day_rate), other: false },
+      [id]: {
+        role: card.role,
+        dayRate: onShow !== null ? String(onShow) : String(card.day_rate),
+        other: false,
+      },
     }))
   }
 
@@ -356,6 +402,11 @@ export default function StaffRoomModal({
                       ...(sel.role && !sel.other ? [sel.role] : []),
                       ...roles,
                     ])]
+                    // A rate already in force on this show for this role. Checked
+                    // for custom roles too — the database matches on the role
+                    // string either way, so a typed title that collides with an
+                    // existing one is genuinely locked.
+                    const lockedRate = showRateFor(member.id, sel.role)
                     return (
                       <div className="mt-2 pl-7 flex flex-col gap-2">
                         {cards.length > 1 && (
@@ -398,9 +449,25 @@ export default function StaffRoomModal({
                             type="number"
                             value={sel.dayRate}
                             onChange={e => updateField(member.id, 'dayRate', e.target.value)}
-                            className={`${inputCls} w-24 text-xs`}
+                            // Locked once the show has a rate for this role: the
+                            // database would override anything typed here, so
+                            // offering the field would be a lie. Changing a show
+                            // rate is a deliberate act, done in Edit Show or the
+                            // room's Edit Crew panel.
+                            readOnly={lockedRate !== null}
+                            title={lockedRate !== null ? 'Set for this show' : undefined}
+                            className={cn(
+                              inputCls, 'w-24 text-xs',
+                              lockedRate !== null && 'text-muted cursor-not-allowed',
+                            )}
                           />
                         </div>
+                        {lockedRate !== null && (
+                          <p className="text-[11px] text-muted">
+                            ${Math.round(lockedRate)} is {member.full_name.split(' ')[0]}&rsquo;s rate for
+                            this show{sel.role ? ` as ${sel.role}` : ''} — change it in Edit Show.
+                          </p>
+                        )}
                         {sel.other && (
                           <input
                             autoFocus
