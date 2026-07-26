@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/client'
 import {
   PUNCH_LABELS,
   PunchType,
-  visibleMealCount,
   visiblePunchTypes,
   BatchTimecard,
   canApplyBatch,
@@ -116,10 +115,10 @@ export default function BatchPunchBar({
     <div className="px-4 pt-3 pb-1">
       <p className="text-[10.5px] uppercase tracking-wide text-muted font-bold mb-2">Batch Actions</p>
       <div className="flex flex-wrap gap-1.5">
-        {/* Same progressive reveal as the punch table: no M3 button until
-            someone in scope has actually taken a second break. Derived from the
-            timecards this bar already has, so nothing needs threading in. */}
-        {visiblePunchTypes(visibleMealCount(timecards.map(tc => tc.punches))).map(type => {
+        {/* Same reveal as the punch table: no M3 button until someone in scope
+            has finished a second break. Derived from the timecards this bar
+            already has, so nothing needs threading in. */}
+        {visiblePunchTypes(timecards.map(tc => tc.punches)).map(type => {
           const active = canApplyBatch(timecards, type)
           return (
             <button

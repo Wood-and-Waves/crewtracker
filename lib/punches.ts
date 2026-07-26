@@ -36,34 +36,45 @@ export const MEAL_PAIRS: readonly (readonly [PunchType, PunchType])[] = [
 export const mealLabel = (index: number) => `M${index + 1}`
 
 /**
- * The punch columns to render when `mealCount` meals are visible.
- * Start, then that many meal pairs, then Wrap.
+ * Meals always shown, whether or not anyone has taken them. Two is the layout
+ * every PM already knows, so an ordinary day looks exactly as it always has and
+ * the columns don't shuffle around as people punch in.
  */
-export function visiblePunchTypes(mealCount: number): PunchType[] {
-  const meals = MEAL_PAIRS.slice(0, Math.max(1, Math.min(mealCount, MEAL_PAIRS.length)))
-  return ['start', ...meals.flatMap(pair => [...pair]), 'end']
-}
+const ALWAYS_VISIBLE_MEALS = 2
 
 /**
- * How many meal breaks to SHOW for a set of timecards.
+ * Which punch columns to show, given every timecard in scope.
  *
- * A third meal is rare, so the columns for one shouldn't sit empty on every
- * show. A meal is revealed once the previous one has been taken — the count is
- * computed across a whole room rather than per person, because the tracker is a
- * ruled grid: per-person visibility would give each row a different number of
- * columns and the table would stop lining up.
+ * Beyond the first two meals, columns appear ONE at a time and only once
+ * they're actually reachable: a third meal's Out shows after someone returns
+ * from their second, and its In shows only after that Out is punched. A third
+ * break is rare, so its columns shouldn't sit empty on every show — but a day
+ * that never takes one looks completely unchanged.
  *
- * Always at least one meal, so there's somewhere to punch the first break.
+ * Scope is a whole DAY, not a room: the tracker shows rooms side by side, and
+ * computing this per room made one room narrow and its neighbour wide. Rooms
+ * on the same day now always share a column set, so they're always the same
+ * width.
  */
-export function visibleMealCount(punchSets: Punch[][]): number {
-  let visible = 1
-  for (let i = 0; i < MEAL_PAIRS.length - 1; i++) {
-    const [outType] = MEAL_PAIRS[i]
-    // Reveal the next meal once anyone has started this one.
-    const anyStartedThis = punchSets.some(ps => ps.some(p => p.punch_type === outType))
-    if (anyStartedThis) visible = i + 2
+export function visiblePunchTypes(punchSets: Punch[][]): PunchType[] {
+  const anyHas = (t: PunchType) => punchSets.some(ps => ps.some(p => p.punch_type === t))
+  const types: PunchType[] = ['start']
+
+  for (let i = 0; i < MEAL_PAIRS.length; i++) {
+    const [outType, inType] = MEAL_PAIRS[i]
+    if (i < ALWAYS_VISIBLE_MEALS) {
+      types.push(outType, inType)
+      continue
+    }
+    // Reachable only once the previous meal is finished.
+    if (!anyHas(MEAL_PAIRS[i - 1][1])) break
+    types.push(outType)
+    if (!anyHas(outType)) break
+    types.push(inType)
   }
-  return Math.min(visible, MEAL_PAIRS.length)
+
+  types.push('end')
+  return types
 }
 
 export type Punch = { id: string; punch_type: PunchType; punched_at: string }

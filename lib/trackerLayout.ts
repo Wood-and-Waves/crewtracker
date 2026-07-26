@@ -19,18 +19,28 @@
 // rows' tracks out while the header's — holding shorter text like "M1 Out" —
 // stayed put. The two grids then disagreed and the table stopped lining up.
 // A zero minimum keeps every track exactly equal and lets content shrink.
-const GRID_BY_MEAL_COUNT: Record<number, string> = {
-  1: 'lg:grid-cols-[1.7fr_repeat(4,minmax(0,1fr))_1fr]',
-  2: 'lg:grid-cols-[1.7fr_repeat(6,minmax(0,1fr))_1fr]',
-  3: 'lg:grid-cols-[1.7fr_repeat(8,minmax(0,1fr))_1fr]',
+const GRID_BY_PUNCH_COUNT: Record<number, string> = {
+  6: 'lg:grid-cols-[1.7fr_repeat(6,minmax(0,1fr))_1fr]',
+  7: 'lg:grid-cols-[1.7fr_repeat(7,minmax(0,1fr))_1fr]',
+  8: 'lg:grid-cols-[1.7fr_repeat(8,minmax(0,1fr))_1fr]',
 }
 
 /**
- * Grid template for a room showing `mealCount` meal breaks.
+ * Grid template for a punch table showing `punchCount` punch columns.
  *
- * The count is per ROOM, not per crew member: this is a ruled table, and giving
- * each row its own column count would stop the rows lining up under the header.
+ * Six is the everyday case (Start, two meals, Wrap); seven and eight appear
+ * only once a third break is under way. The count comes from the whole DAY so
+ * every room matches — see visiblePunchTypes.
  */
-export function punchGridCols(mealCount: number): string {
-  return GRID_BY_MEAL_COUNT[mealCount] ?? GRID_BY_MEAL_COUNT[2]
+export function punchGridCols(punchCount: number): string {
+  return GRID_BY_PUNCH_COUNT[punchCount] ?? GRID_BY_PUNCH_COUNT[6]
 }
+
+/**
+ * Should rooms stack one-per-row instead of sitting two-up on a wide screen?
+ *
+ * Beyond the everyday six columns the cells get too narrow to read a time in a
+ * half-width card. Applied to every room together rather than just the busy
+ * one: a narrow room beside a wide one looked broken.
+ */
+export const shouldStackRooms = (punchCount: number) => punchCount > 6

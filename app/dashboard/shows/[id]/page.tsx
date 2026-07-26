@@ -10,9 +10,9 @@ import CopyCrewButton from '@/components/CopyCrewButton'
 import AddDayButton from '@/components/AddDayButton'
 import UnlockShowButton from '@/components/UnlockShowButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
-import { PUNCH_LABELS, isWrapped, visibleMealCount, visiblePunchTypes } from '@/lib/punches'
+import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
-import { punchGridCols } from '@/lib/trackerLayout'
+import { punchGridCols, shouldStackRooms } from '@/lib/trackerLayout'
 import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
@@ -189,6 +189,10 @@ export default async function ShowDetailPage({
   // worked-hours convention (not the ceiling-rounded "paid" totals).
   const dayTimecards = roomsList.flatMap(r => roomTimecards[r.id] || []).sort(byFirstName)
 
+  // One column set for the whole day, shared by every room. Computed here
+  // rather than per room so two rooms side by side are never different widths.
+  const dayPunchTypes = visiblePunchTypes(dayTimecards.map(tc => tc.punches))
+
   // Who is already staffed where today — powers the duplicate-staffing
   // safeguard in StaffRoomModal (block same room, confirm cross-room).
   const roomNameById: Record<string, string> = Object.fromEntries(roomsList.map(r => [r.id, r.name]))
@@ -308,22 +312,18 @@ export default async function ShowDetailPage({
         </div>
       </aside>
 
-      <div className="hidden lg:grid min-w-0 grid-cols-1 2xl:grid-cols-2 gap-4">
+      {/* Rooms sit two-up on a wide screen, but stack once a third meal pushes
+          the table past six punch columns — the cells get too narrow to read a
+          time in a half-width card. Applied to the whole row so rooms are never
+          different widths from each other. */}
+      <div className={cn(
+        'hidden lg:grid min-w-0 grid-cols-1 gap-4',
+        !shouldStackRooms(dayPunchTypes.length) && '2xl:grid-cols-2',
+      )}>
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
-          // Meal columns are revealed progressively and per ROOM: a third break
-          // is rare, so its columns shouldn't sit empty on every show, and the
-          // count has to be room-wide or the ruled rows stop lining up.
-          const mealCount = visibleMealCount(crew.map(tc => tc.punches))
           return (
-            // A room showing all three meals needs ten columns, which is too
-            // many for a half-width card on a 2xl screen — the cells end up
-            // around 35px and the times become unreadable. Since a third break
-            // is rare, that room takes the full row and the others stay 2-up.
-            <div key={room.id} className={cn(
-              'rounded-card border border-line bg-surface',
-              mealCount === 3 && '2xl:col-span-2',
-            )}>
+            <div key={room.id} className="rounded-card border border-line bg-surface">
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
                 <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
@@ -335,9 +335,9 @@ export default async function ShowDetailPage({
                   to head; hidden on mobile where TimecardRow renders labeled
                   cards instead. Must stay in sync with TimecardRow's grid. */}
               {crew.length > 0 && (
-                <div className={cn('hidden lg:grid gap-3 px-4 pt-3 pb-1', punchGridCols(mealCount))}>
+                <div className={cn('hidden lg:grid gap-3 px-4 pt-3 pb-1', punchGridCols(dayPunchTypes.length))}>
                   <div className="text-[10px] font-bold uppercase tracking-wide text-muted">Crew</div>
-                  {visiblePunchTypes(mealCount).map(type => (
+                  {dayPunchTypes.map(type => (
                     <div key={type} className="text-[10px] font-bold uppercase tracking-wide text-muted text-center">
                       {PUNCH_LABELS[type]}
                     </div>
@@ -371,7 +371,7 @@ export default async function ShowDetailPage({
                     dayDate={activeDay.date}
                     use24Hour={profile?.use_24_hour_time || false}
                     roundingMinutes={roundingMinutes}
-                    mealCount={mealCount}
+                    visibleTypes={dayPunchTypes}
                   />
                 ))}
               </div>

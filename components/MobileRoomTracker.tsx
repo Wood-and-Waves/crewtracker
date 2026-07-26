@@ -8,7 +8,7 @@ import TimecardRow from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
 import CopyCrewButton from '@/components/CopyCrewButton'
-import { visibleMealCount } from '@/lib/punches'
+import { visiblePunchTypes } from '@/lib/punches'
 import { cn } from '@/lib/cn'
 
 type CopySource = { roomId: string; count: number; dayNumber: number } | null
@@ -123,11 +123,12 @@ export default function MobileRoomTracker({
     )
   }
 
+  // One column set for the whole day, matching the desktop table. Derived from
+  // every timecard on the day rather than the room being viewed, so switching
+  // rooms doesn't change which fields are on screen.
+  const dayPunchTypes = visiblePunchTypes(dayCrew.map((tc: any) => tc.punches))
+
   function rowsFor(crew: any[]) {
-    // Same room-wide reveal as the desktop table. Mobile renders labelled cards
-    // rather than a ruled grid so alignment isn't at stake, but a PM shouldn't
-    // see M3 fields on a day nobody has taken a second break.
-    const mealCount = visibleMealCount(crew.map(tc => tc.punches))
     return crew.map(tc => (
       <TimecardRow
         key={tc.id}
@@ -139,7 +140,7 @@ export default function MobileRoomTracker({
         dayDate={dayDate}
         use24Hour={use24Hour}
         roundingMinutes={roundingMinutes}
-        mealCount={mealCount}
+        visibleTypes={dayPunchTypes}
       />
     ))
   }

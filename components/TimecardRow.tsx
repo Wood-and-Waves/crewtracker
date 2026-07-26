@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, visiblePunchTypes, Punch, PunchType } from '@/lib/punches'
+import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, Punch, PunchType } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours, calculateNetHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
 import TimeEntryModal from '@/components/TimeEntryModal'
 import { cn } from '@/lib/cn'
@@ -18,7 +18,7 @@ export default function TimecardRow({
   dayDate,
   use24Hour = false,
   roundingMinutes = 1,
-  mealCount = 2,
+  visibleTypes,
 }: {
   timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean }
   punches: Punch[]
@@ -28,9 +28,9 @@ export default function TimecardRow({
   dayDate: string
   use24Hour?: boolean
   roundingMinutes?: number
-  /** How many meal breaks this ROOM is showing. Room-wide, not per person, so
-   *  every row lines up under the shared header. */
-  mealCount?: number
+  /** Punch columns to render, computed once for the whole day so every row and
+   *  every room lines up under the same header. */
+  visibleTypes: PunchType[]
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -40,7 +40,6 @@ export default function TimecardRow({
 
   const next = nextPunchType(punches)
   const wrapped = isWrapped(punches)
-  const visibleTypes = visiblePunchTypes(mealCount)
 
   const timecardInput: TimecardLike = {
     id: timecard.id,
@@ -174,7 +173,7 @@ export default function TimecardRow({
 
   return (
     <div className="border-b border-line last:border-b-0">
-      <div className={cn('p-4 grid grid-cols-3 gap-2', punchGridCols(mealCount), 'lg:items-center lg:gap-3 lg:py-3')}>
+      <div className={cn('p-4 grid grid-cols-3 gap-2', punchGridCols(visibleTypes.length), 'lg:items-center lg:gap-3 lg:py-3')}>
         {/* Who + totals + undo */}
         <div className="col-span-3 lg:col-span-1 mb-2 lg:mb-0">
           {/* Mobile: name and role on one line, iOS-style */}
@@ -192,7 +191,9 @@ export default function TimecardRow({
           // names so Tailwind generates them.
           <div className={cn(
             'col-span-3 rounded-field bg-accent/10 text-accent text-center py-3 text-sm font-semibold',
-            mealCount === 1 ? 'lg:col-span-4' : mealCount === 3 ? 'lg:col-span-8' : 'lg:col-span-6',
+            visibleTypes.length === 7 ? 'lg:col-span-7'
+              : visibleTypes.length === 8 ? 'lg:col-span-8'
+              : 'lg:col-span-6',
           )}>
             ✈ Travel Day
           </div>
