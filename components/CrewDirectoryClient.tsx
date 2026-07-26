@@ -211,7 +211,9 @@ export default function CrewDirectoryClient({
         const { data } = await supabase
           .from('crew_members')
           .insert({ organization_id: organizationId, full_name: name, phone: phone || null, email: email || null })
-          .select('*, rate_cards(*)')
+          // No day_rate: it lives behind crew_rate_cards_visible now. This path
+      // only needs the roles, to decide whether to add a rate card on import.
+      .select('*, rate_cards(id, role)')
           .single()
         if (data) {
           member = data
@@ -235,11 +237,24 @@ export default function CrewDirectoryClient({
     setImportStatus(parts.length === 0 ? 'No changes made.' : parts.join(', ') + '.')
     router.refresh()
 
-    const { data: refreshed } = await supabase
-      .from('crew_members')
-      .select('*, rate_cards(*)')
-      .eq('organization_id', organizationId)
-    if (refreshed) setCrew(refreshed)
+    // Rebuild the list the same way the server page does: cards without rates,
+    // then rates merged back from the permission-checked view. Skipping the
+    // merge here would silently blank the rate column in the CSV export until
+    // the next full page load.
+    const [{ data: refreshed }, { data: visibleRates }] = await Promise.all([
+      supabase
+        .from('crew_members')
+        .select('*, rate_cards(id, role)')
+        .eq('organization_id', organizationId),
+      supabase.from('crew_rate_cards_visible').select('id, day_rate'),
+    ])
+    if (refreshed) {
+      const rateByCardId = new Map((visibleRates || []).map(r => [r.id, Number(r.day_rate) || 0]))
+      setCrew(refreshed.map((m: any) => ({
+        ...m,
+        rate_cards: (m.rate_cards || []).map((rc: any) => ({ ...rc, day_rate: rateByCardId.get(rc.id) ?? 0 })),
+      })))
+    }
   }
 
   return (

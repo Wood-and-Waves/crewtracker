@@ -14,13 +14,27 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
     .eq('id', user.id)
     .single()
 
-  const { data: crew } = await supabase
-    .from('crew_members')
-    .select('*, rate_cards(*)')
-    .eq('id', crewId)
-    .single()
+  // Rate cards without day_rate; the rates come from the permission-checked
+  // view, so a user without can_view_pay_rates simply gets zeros.
+  const [{ data: crewRow }, { data: visibleRates }] = await Promise.all([
+    supabase
+      .from('crew_members')
+      .select('*, rate_cards(id, role)')
+      .eq('id', crewId)
+      .single(),
+    supabase.from('crew_rate_cards_visible').select('id, day_rate').eq('crew_member_id', crewId),
+  ])
 
-  if (!crew) notFound()
+  if (!crewRow) notFound()
+
+  const rateByCardId = new Map((visibleRates || []).map(r => [r.id, Number(r.day_rate) || 0]))
+  const crew = {
+    ...crewRow,
+    rate_cards: ((crewRow as any).rate_cards || []).map((rc: any) => ({
+      ...rc,
+      day_rate: rateByCardId.get(rc.id) ?? 0,
+    })),
+  }
 
   const { data: roles } = await supabase
     .from('av_roles')

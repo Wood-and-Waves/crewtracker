@@ -21,10 +21,22 @@ export default async function DirectoryPage() {
     )
   }
 
-  const { data: crew } = await supabase
-    .from('crew_members')
-    .select('*, rate_cards(*)')
-    .eq('organization_id', profile.organization_id)
+  // Embed the rate cards WITHOUT day_rate, then merge the rates back in from the
+  // permission-checked view. `rate_cards(*)` would send every rate to anyone who
+  // can open the Directory.
+  const [{ data: crew }, { data: visibleRates }] = await Promise.all([
+    supabase
+      .from('crew_members')
+      .select('*, rate_cards(id, role)')
+      .eq('organization_id', profile.organization_id),
+    supabase.from('crew_rate_cards_visible').select('id, day_rate'),
+  ])
 
-  return <CrewDirectoryClient organizationId={profile.organization_id} initialCrew={crew || []} />
+  const rateByCardId = new Map((visibleRates || []).map(r => [r.id, Number(r.day_rate) || 0]))
+  const crewWithRates = (crew || []).map((m: any) => ({
+    ...m,
+    rate_cards: (m.rate_cards || []).map((rc: any) => ({ ...rc, day_rate: rateByCardId.get(rc.id) ?? 0 })),
+  }))
+
+  return <CrewDirectoryClient organizationId={profile.organization_id} initialCrew={crewWithRates} />
 }

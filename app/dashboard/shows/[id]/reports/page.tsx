@@ -13,7 +13,7 @@ import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
 import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
 import { cn } from '@/lib/cn'
-import { timecardSelect, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
 function fmt(n: number): string {
   if (n === 0) return '0'
@@ -83,13 +83,21 @@ export default async function ShowReportPage({
 
   const roomIds = (rooms || []).map(r => r.id)
 
-  // canSeeFinancials is already the stricter test — the show must track money
-  // AND this user must hold can_view_pay_rates. Anything it gates is the only
-  // thing on this page that reads a rate, so don't fetch rates otherwise.
   const { data: timecardRows } = roomIds.length > 0
-    ? await supabase.from('timecards').select(timecardSelect(canSeeFinancials)).in('room_id', roomIds)
+    ? await supabase.from('timecards').select(TIMECARD_SELECT).in('room_id', roomIds)
     : { data: [] }
-  const timecards = (timecardRows || []) as unknown as TimecardRowMaybeRate[]
+  const rawTimecards = (timecardRows || []) as unknown as TimecardRowMaybeRate[]
+
+  // Rates come from the permission-checked view. Additionally gated on the
+  // show's own financials flag: canSeeFinancials is the stricter test (show
+  // tracks money AND this user may see rates), and every money figure on this
+  // page is already behind it.
+  const rateById = canSeeFinancials ? await fetchShowRates(supabase, id) : new Map<string, number>()
+
+  // Reattach the rate here, once, so everything downstream — the payroll
+  // mappings and the CSV/PDF export buttons — keeps seeing a normal timecard
+  // with a day_rate on it. Zero for anyone not entitled to the real figure.
+  const timecards = rawTimecards.map(tc => ({ ...tc, day_rate: rateById.get(tc.id) ?? 0 }))
 
   const timecardIds = (timecards || []).map(t => t.id)
 

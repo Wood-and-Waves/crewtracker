@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
-import type { TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
 export default async function EditShowPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -38,24 +38,22 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   // Crew & Rates is the only consumer and it's hidden without can_view_pay_rates,
   // so don't pull the rate for someone who can't be shown it.
   const canViewRates = profile?.can_view_pay_rates || false
-  // Annotated as `string` on purpose: supabase-js parses a literal select string
-  // into a result type, and a conditional one makes that parse fail. Widening to
-  // string opts out of that inference, which is what the `?? 0` below accounts for.
-  const rateEntryCols: string = canViewRates
-    ? 'crew_member_id, crew_member_name, role, room_id, day_rate'
-    : 'crew_member_id, crew_member_name, role, room_id'
 
   const { data: timecardRows } = roomIds.length > 0
-    ? await supabase.from('timecards').select(rateEntryCols).in('room_id', roomIds)
+    ? await supabase.from('timecards').select('id, crew_member_id, crew_member_name, role, room_id').in('room_id', roomIds)
     : { data: [] }
   const timecards = (timecardRows || []) as unknown as TimecardRowMaybeRate[]
+
+  // Rates via the permission-checked view — empty for a user without
+  // can_view_pay_rates, which is also when Crew & Rates is hidden entirely.
+  const rateById = await fetchShowRates(supabase, id)
 
   // Dedupe to unique (crew, role) combos, matching iOS crewRateEntries logic
   const seen: Record<string, any> = {}
   for (const tc of timecards || []) {
     const key = (tc.crew_member_id || tc.crew_member_name) + '|' + tc.role
     if (!seen[key]) {
-      seen[key] = { crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate ?? 0 }
+      seen[key] = { crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }
     }
   }
   const crewRateEntries = Object.values(seen).sort((a: any, b: any) => a.name.localeCompare(b.name))

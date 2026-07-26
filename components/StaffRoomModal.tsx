@@ -86,8 +86,10 @@ export default function StaffRoomModal({
       // Ordered so the pre-filled rate is deterministic. Unordered, `.find()`
       // returned an arbitrary card, so anyone holding a $0 placeholder rate
       // alongside a real one could silently be staffed at $0.
+      // Via the permission-checked view, so someone without can_view_pay_rates
+      // gets no saved-rate chips rather than a list of everyone's rates.
       const { data: rateData } = await supabase
-        .from('rate_cards')
+        .from('crew_rate_cards_visible')
         .select('crew_member_id, role, day_rate')
         .order('role')
       setRateCards(rateData || [])
@@ -112,16 +114,28 @@ export default function StaffRoomModal({
         .single()
 
       if (dayRow?.show_id) {
-        const { data: existing } = await supabase
-          .from('timecards')
-          .select('crew_member_id, role, day_rate, rooms!inner(work_days!inner(show_id))')
-          .eq('rooms.work_days.show_id', dayRow.show_id)
-          .not('crew_member_id', 'is', null)
+        // Two queries: the timecards give (crew, role) per timecard id, the view
+        // gives the rate for the ids this user is allowed to see. Joined by id
+        // rather than selecting day_rate off timecards directly, which is the
+        // access the lockdown removes.
+        const [{ data: existing }, { data: rates }] = await Promise.all([
+          supabase
+            .from('timecards')
+            .select('id, crew_member_id, role, rooms!inner(work_days!inner(show_id))')
+            .eq('rooms.work_days.show_id', dayRow.show_id)
+            .not('crew_member_id', 'is', null),
+          supabase
+            .from('timecard_day_rates')
+            .select('timecard_id, day_rate')
+            .eq('show_id', dayRow.show_id),
+        ])
 
+        const rateById = new Map((rates || []).map(r => [r.timecard_id, Number(r.day_rate) || 0]))
         const map: Record<string, number> = {}
         for (const tc of existing || []) {
-          if (tc.day_rate === null) continue
-          map[`${tc.crew_member_id}|${tc.role ?? ''}`] = Number(tc.day_rate)
+          const rate = rateById.get(tc.id)
+          if (rate === undefined) continue
+          map[`${tc.crew_member_id}|${tc.role ?? ''}`] = rate
         }
         setShowRates(map)
       }

@@ -53,14 +53,30 @@ export const TIMECARD_FIELDS_NO_RATE = [
 ] as const
 
 /**
- * Column list for a `.select()` on `timecards`.
+ * The only column list the app should ever use against `timecards`.
  *
- * @param includeRate pass the caller's can_view_pay_rates (or the stricter
- *   show-financials AND permission check where money is being displayed).
- *   Never pass a literal `true` without having checked a permission first.
+ * There is deliberately no "include the rate" option: rates come from the
+ * `timecard_day_rates` view (scripts/sql/rate-views.sql), which checks
+ * can_view_pay_rates for the calling user and is the one path that keeps
+ * working once the column is revoked from `authenticated`. Merge by timecard id.
  */
-export function timecardSelect(includeRate: boolean): string {
-  return includeRate
-    ? [...TIMECARD_FIELDS_NO_RATE, 'day_rate'].join(', ')
-    : TIMECARD_FIELDS_NO_RATE.join(', ')
+export const TIMECARD_SELECT = TIMECARD_FIELDS_NO_RATE.join(', ')
+
+/**
+ * Fetches per-timecard rates for a show and returns them keyed by timecard id.
+ * Returns an empty map when the caller can't see rates — the view simply yields
+ * no rows, so no permission check is needed here.
+ */
+export async function fetchShowRates(
+  supabase: { from: (t: string) => any },
+  showId: string,
+): Promise<Map<string, number>> {
+  const { data } = await supabase
+    .from('timecard_day_rates')
+    .select('timecard_id, day_rate')
+    .eq('show_id', showId)
+  return new Map(
+    (data || []).map((r: { timecard_id: string; day_rate: number | null }) =>
+      [r.timecard_id, Number(r.day_rate) || 0] as const),
+  )
 }

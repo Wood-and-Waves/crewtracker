@@ -13,7 +13,7 @@ import MobileRoomTracker from '@/components/MobileRoomTracker'
 import { PUNCH_ORDER, PUNCH_LABELS, isWrapped } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
 import { PUNCH_GRID_COLS } from '@/lib/trackerLayout'
-import { timecardSelect, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 
@@ -84,12 +84,13 @@ export default async function ShowDetailPage({
   const allRoomIds = (allShowRooms || []).map(r => r.id)
 
   // The tracker shows hours, never money — the only thing here that wants a rate
-  // is RoomActionsMenu's rate editor, which is already gated on canViewRates. So
-  // don't fetch the rate at all unless this user is allowed to see it.
+  // is RoomActionsMenu's rate editor. Rates come from the permission-checked
+  // view, which yields nothing for a user who can't see them.
   const { data: allShowTimecardRows } = allRoomIds.length > 0
-    ? await supabase.from('timecards').select(timecardSelect(canViewRates)).in('room_id', allRoomIds)
+    ? await supabase.from('timecards').select(TIMECARD_SELECT).in('room_id', allRoomIds)
     : { data: [] }
   const allShowTimecards = (allShowTimecardRows || []) as unknown as TimecardRowMaybeRate[]
+  const rateById = await fetchShowRates(supabase, id)
 
   const allTimecardIds = (allShowTimecards || []).map(t => t.id)
 
@@ -100,9 +101,9 @@ export default async function ShowDetailPage({
   const allTimecardsWithPunches = (allShowTimecards || []).map(tc => ({
     id: tc.id,
     crew_member_id: tc.crew_member_id,
-    // 0 when unfetched: only the money functions read this, and the tracker
-    // calls none of them.
-    day_rate: tc.day_rate ?? 0,
+    // 0 when the caller can't see rates: only the money functions read this,
+    // and the tracker calls none of them.
+    day_rate: rateById.get(tc.id) ?? 0,
     is_travel_day: tc.is_travel_day,
     travel_in_day: tc.travel_in_day,
     travel_out_day: tc.travel_out_day,
@@ -317,7 +318,7 @@ export default async function ShowDetailPage({
             <div key={room.id} className="rounded-card border border-line bg-surface">
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
-                <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+                <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
 
               {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} timezone={timezone} />}
@@ -411,6 +412,8 @@ export default async function ShowDetailPage({
         addDayControl={addDayControl}
         canViewRates={canViewRates}
         canEditRates={canEditRates}
+        // Plain object, not the Map: this crosses into a Client Component.
+        ratesByTimecardId={Object.fromEntries(rateById)}
       />
     </div>
   )
