@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { localDateStr } from '@/lib/datetime'
+import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
+import RulesetFields from '@/components/RulesetFields'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
 
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
-const numberInputCls =
-  'w-20 rounded-field bg-surface-2 border border-line px-2 py-1.5 text-sm text-ink text-right outline-none focus:border-accent'
 
 function FieldRow({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -30,6 +30,8 @@ export default function EditShowClient({
   rooms,
   crewRateEntries,
   shoulderSurferMode = false,
+  organizationId,
+  canManageRulesets = false,
 }: {
   show: any
   ruleset: any
@@ -37,6 +39,8 @@ export default function EditShowClient({
   rooms: any[]
   crewRateEntries: any[]
   shoulderSurferMode?: boolean
+  organizationId?: string
+  canManageRulesets?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -53,22 +57,18 @@ export default function EditShowClient({
 
   const [rs, setRs] = useState(ruleset)
 
-  const [showSTAInfo, setShowSTAInfo] = useState(false)
-  const [showMealInfo, setShowMealInfo] = useState(false)
-
   const [rateEntry, setRateEntry] = useState<any>(null)
   const [rateText, setRateText] = useState('')
 
+  // "Save as preset" — captures this show's tuned rules as a reusable template.
+  const [presetOpen, setPresetOpen] = useState(false)
+  const [presetName, setPresetName] = useState('')
+  const [presetBusy, setPresetBusy] = useState(false)
+  const [presetError, setPresetError] = useState('')
+  const [presetSaved, setPresetSaved] = useState('')
+
   function updateRuleset(field: string, value: any) {
-    setRs((prev: any) => {
-      const next = { ...prev, [field]: value }
-      // Continuous Time and the Working Lunch Rule are mutually exclusive:
-      // one pays straight through, the other deducts meal breaks. Turning
-      // either on turns the other off, matching iOS.
-      if (field === 'continuous_time_enabled' && value) next.minimum_meal_break_enabled = false
-      if (field === 'minimum_meal_break_enabled' && value) next.continuous_time_enabled = false
-      return next
-    })
+    setRs((prev: any) => applyRulesetChange(prev, field, value))
   }
 
   async function handleSave() {
@@ -97,21 +97,7 @@ export default function EditShowClient({
     if (rs) {
       const rulesetResult = await supabase
         .from('payroll_rulesets')
-        .update({
-          travel_rate: rs.travel_rate,
-          overtime_after_hours: rs.overtime_after_hours,
-          double_time_enabled: rs.double_time_enabled,
-          double_time_after_hours: rs.double_time_after_hours,
-          meal_penalty_enabled: rs.meal_penalty_enabled,
-          meal_penalty_grace_period: rs.meal_penalty_grace_period,
-          meal_penalty_amount: rs.meal_penalty_amount,
-          continuous_time_enabled: rs.continuous_time_enabled,
-          minimum_meal_break_enabled: rs.minimum_meal_break_enabled,
-          minimum_meal_break_minutes: rs.minimum_meal_break_minutes,
-          meal_break_deduction_cap: rs.meal_break_deduction_cap,
-          short_turn_penalty_enabled: rs.short_turn_penalty_enabled,
-          short_turn_rest_hours: rs.short_turn_rest_hours,
-        })
+        .update(pickRulesetValues(rs))
         .eq('show_id', show.id)
 
       if (rulesetResult.error) {
@@ -123,6 +109,34 @@ export default function EditShowClient({
 
     setSaving(false)
     router.push(`/dashboard/shows/${show.id}`)
+  }
+
+  async function saveAsPreset() {
+    const trimmed = presetName.trim()
+    if (!trimmed || !organizationId || !rs) return
+    setPresetBusy(true)
+    setPresetError('')
+
+    const { error } = await supabase
+      .from('payroll_presets')
+      .insert({ organization_id: organizationId, name: trimmed, ...pickRulesetValues(rs) })
+
+    setPresetBusy(false)
+
+    if (error) {
+      // The (organization_id, lower(name)) unique index surfaces here.
+      setPresetError(
+        error.code === '23505'
+          ? `A preset named "${trimmed}" already exists.`
+          : error.message
+      )
+      return
+    }
+
+    setPresetOpen(false)
+    setPresetName('')
+    setPresetSaved(trimmed)
+    router.refresh()
   }
 
   async function extendShow() {
@@ -346,198 +360,48 @@ export default function EditShowClient({
 
       {rs && (
         <>
-          <Card className="p-5 mb-4">
-            <p className="text-xs uppercase tracking-wide text-muted mb-3">Hours &amp; Pay Rates</p>
+          <RulesetFields values={rs} onChange={updateRuleset} showFinancials={showFinancials} />
 
-            <div className="mb-3">
-              <label className="text-sm text-ink block mb-1">Travel Day Pay</label>
-              <select
-                value={rs.travel_rate}
-                onChange={e => updateRuleset('travel_rate', e.target.value)}
-                className={`${inputCls} py-2`}
-              >
-                <option value="halfDay" className="bg-surface-2 text-ink">Half Day</option>
-                <option value="fullDay" className="bg-surface-2 text-ink">Full Day</option>
-              </select>
-            </div>
-
-            <FieldRow label="Overtime Starts After">
-              <div className="flex items-center gap-2">
-                <input
-                  type="number" step={0.5} min={0} max={24}
-                  value={rs.overtime_after_hours}
-                  onChange={e => updateRuleset('overtime_after_hours', parseFloat(e.target.value) || 0)}
-                  className={numberInputCls}
-                />
-                <span className="text-sm text-muted">hrs</span>
-              </div>
-            </FieldRow>
-
-            <FieldRow label="Enable Double Time">
-              <Toggle checked={rs.double_time_enabled} onChange={v => updateRuleset('double_time_enabled', v)} label="Enable Double Time" />
-            </FieldRow>
-
-            {rs.double_time_enabled && (
-              <FieldRow label="Double Time Starts After">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" step={0.5} min={0} max={24}
-                    value={rs.double_time_after_hours}
-                    onChange={e => updateRuleset('double_time_after_hours', parseFloat(e.target.value) || 0)}
-                    className={numberInputCls}
-                  />
-                  <span className="text-sm text-muted">hrs</span>
-                </div>
-              </FieldRow>
-            )}
-
-            <p className="text-xs text-muted mt-3">Crew are paid their full day rate up to the Overtime threshold. Hours beyond that are paid at 1.5×. Double time (2×) is optional and kicks in after its own threshold.</p>
-          </Card>
-
-          <Card className="p-5 mb-4">
-            <p className="text-xs uppercase tracking-wide text-muted mb-3">Continuous Time</p>
-
-            <FieldRow label="Continuous Time">
-              <Toggle
-                checked={rs.continuous_time_enabled}
-                onChange={v => updateRuleset('continuous_time_enabled', v)}
-                label="Continuous Time"
-              />
-            </FieldRow>
-
-            <p className="text-xs text-muted mt-3">Crew are paid from start to wrap with no meal break deductions. OT and DT still apply after their thresholds. Turning this on switches off the Working Lunch Rule below.</p>
-          </Card>
-
-          <Card className="p-5 mb-4">
-            <p className="text-xs uppercase tracking-wide text-muted mb-3">Meal Rules</p>
-
-            <FieldRow label="Meal Penalties">
-              <Toggle checked={rs.meal_penalty_enabled} onChange={v => updateRuleset('meal_penalty_enabled', v)} label="Meal Penalties" />
-            </FieldRow>
-
-            {rs.meal_penalty_enabled && (
-              <>
-                <FieldRow label="Grace Period">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number" step={0.5} min={0} max={12}
-                      value={rs.meal_penalty_grace_period}
-                      onChange={e => updateRuleset('meal_penalty_grace_period', parseFloat(e.target.value) || 0)}
-                      className={numberInputCls}
-                    />
-                    <span className="text-sm text-muted">hrs</span>
-                  </div>
-                </FieldRow>
-                {showFinancials && (
-                  <FieldRow label="Penalty Amount">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number" step={5} min={0} max={500}
-                        value={rs.meal_penalty_amount}
-                        onChange={e => updateRuleset('meal_penalty_amount', parseFloat(e.target.value) || 0)}
-                        className={numberInputCls}
-                      />
-                      <span className="text-sm text-muted">{rs.meal_penalty_amount > 0 ? '$' : '(OT Rate)'}</span>
-                    </div>
-                  </FieldRow>
-                )}
-              </>
-            )}
-
-            <FieldRow
-              label={<>Working Lunch Rule
-                <button onClick={() => setShowMealInfo(true)} className="text-accent">ⓘ</button>
-              </>}
-            >
-              <Toggle checked={rs.minimum_meal_break_enabled} onChange={v => updateRuleset('minimum_meal_break_enabled', v)} label="Working Lunch Rule" />
-            </FieldRow>
-
-            {rs.minimum_meal_break_enabled && (
-              <>
-                <FieldRow label="Minimum Break Length">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number" step={15} min={15} max={120}
-                      value={rs.minimum_meal_break_minutes}
-                      onChange={e => updateRuleset('minimum_meal_break_minutes', parseFloat(e.target.value) || 0)}
-                      className={numberInputCls}
-                    />
-                    <span className="text-sm text-muted">min</span>
-                  </div>
-                </FieldRow>
-                <FieldRow label="Max Deduction Per Break">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number" step={15} min={15} max={120}
-                      value={rs.meal_break_deduction_cap}
-                      onChange={e => updateRuleset('meal_break_deduction_cap', parseFloat(e.target.value) || 0)}
-                      className={numberInputCls}
-                    />
-                    <span className="text-sm text-muted">min</span>
-                  </div>
-                </FieldRow>
-              </>
-            )}
-
-            <p className="text-xs text-muted mt-3">Meal penalties are charged when crew go too long without a break. The working lunch rule controls whether short breaks count as paid work time.</p>
-          </Card>
-
-          <Card className="p-5 mb-4">
-            <p className="text-xs uppercase tracking-wide text-muted mb-3">Turnaround</p>
-
-            <FieldRow
-              label={<>Short Turnaround Penalty
-                <button onClick={() => setShowSTAInfo(true)} className="text-accent">ⓘ</button>
-              </>}
-            >
-              <Toggle checked={rs.short_turn_penalty_enabled} onChange={v => updateRuleset('short_turn_penalty_enabled', v)} label="Short Turnaround Penalty" />
-            </FieldRow>
-
-            {rs.short_turn_penalty_enabled && (
-              <FieldRow label="Minimum Rest Between Shifts">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" step={0.5} min={0} max={24}
-                    value={rs.short_turn_rest_hours}
-                    onChange={e => updateRuleset('short_turn_rest_hours', parseFloat(e.target.value) || 0)}
-                    className={numberInputCls}
-                  />
-                  <span className="text-sm text-muted">hrs</span>
-                </div>
-              </FieldRow>
-            )}
-
-            <p className="text-xs text-muted mt-3">A short turnaround (forced call) occurs when a crew member doesn&apos;t get enough rest between shifts. Their entire next day is paid at double time.</p>
-          </Card>
+          {canManageRulesets && organizationId && (
+            <Card className="p-5 mb-4">
+              <p className="text-xs uppercase tracking-wide text-muted mb-3">Reuse These Rules</p>
+              {presetSaved ? (
+                <p className="text-sm text-good">Saved as &ldquo;{presetSaved}&rdquo; — it&apos;s now available when creating a show.</p>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => { setPresetOpen(true); setPresetError('') }}>
+                    Save these rules as a preset…
+                  </Button>
+                  <p className="text-xs text-muted mt-2">Captures the rules above as a named template you can pick when creating a future show. Saving a preset never changes this or any other existing show.</p>
+                </>
+              )}
+            </Card>
+          )}
         </>
       )}
 
-      {showSTAInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowSTAInfo(false)}>
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-ink mb-3">Short Turnaround</h2>
-            <p className="text-sm text-ink mb-4 whitespace-pre-line">
-              Also called a &apos;Forced Call.&apos; If a crew member gets less than the minimum rest between shifts, their entire next day is paid at double time.
-              {'\n\n'}
-              Example: Crew wraps at midnight and is called at 8am — only 8 hours rest. With a 10-hour minimum, that entire next day starts at double time.
-            </p>
-            <Button className="w-full py-3" onClick={() => setShowSTAInfo(false)}>Got it</Button>
-          </div>
-        </div>
-      )}
-
-      {showMealInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowMealInfo(false)}>
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-ink mb-3">Working Lunch Rule</h2>
-            <p className="text-sm text-ink mb-4 whitespace-pre-line">
-              When enabled, breaks shorter than the minimum length are treated as working lunches — no time is deducted from hours worked.
-              {'\n\n'}
-              Breaks at or beyond the minimum have up to the &apos;Max Deduction&apos; amount subtracted. Crew are paid for any hold time beyond that cap.
-              {'\n\n'}
-              Example with 60-min minimum and 60-min cap: A 45-min break = no deduction. A 90-min break = 60 min deducted, 30 min paid.
-            </p>
-            <Button className="w-full py-3" onClick={() => setShowMealInfo(false)}>Got it</Button>
+      {presetOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-ink mb-1">Save as Preset</h2>
+            <p className="text-sm text-muted mb-4">Name this rule set — e.g. a client or contract it applies to.</p>
+            <input
+              autoFocus
+              placeholder="e.g. PwC"
+              value={presetName}
+              onChange={e => setPresetName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveAsPreset()}
+              className={`${inputCls} mb-3`}
+            />
+            {presetError && <p className="text-xs text-danger mb-3">{presetError}</p>}
+            <div className="flex gap-3">
+              <Button variant="ghost" className="flex-1 py-3" onClick={() => { setPresetOpen(false); setPresetName(''); setPresetError('') }}>
+                Cancel
+              </Button>
+              <Button className="flex-1 py-3" onClick={saveAsPreset} disabled={presetBusy || !presetName.trim()}>
+                {presetBusy ? 'Saving…' : 'Save Preset'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

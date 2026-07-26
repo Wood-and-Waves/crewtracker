@@ -1,10 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { localDateStr } from '@/lib/datetime'
+import { pickRulesetValues, type RulesetValues } from '@/lib/ruleset'
 import Button from '@/components/ui/Button'
+
+type Preset = { id: string; name: string; is_default: boolean } & RulesetValues
 
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
@@ -42,6 +45,37 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Payroll presets: picking one COPIES its rules into this show's ruleset.
+  // '' means "Custom" — start from the plain column defaults, the old behaviour.
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetId, setPresetId] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    supabase
+      .from('payroll_presets')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('sort_order')
+      .then(({ data }) => {
+        const list = (data || []) as Preset[]
+        setPresets(list)
+        // Pre-select the org's default preset, if it has one.
+        setPresetId(list.find(p => p.is_default)?.id ?? '')
+      })
+  }, [open, organizationId])
+
+  const chosen = presets.find(p => p.id === presetId) || null
+
+  function summarize(p: Preset): string {
+    const bits = [`OT after ${p.overtime_after_hours}h`]
+    if (p.double_time_enabled) bits.push(`DT after ${p.double_time_after_hours}h`)
+    if (p.continuous_time_enabled) bits.push('continuous time')
+    if (p.meal_penalty_enabled) bits.push('meal penalties')
+    if (p.short_turn_penalty_enabled) bits.push(`turnaround ${p.short_turn_rest_hours}h`)
+    return bits.join(' · ')
+  }
+
   async function createShow() {
     setError('')
     setLoading(true)
@@ -72,8 +106,15 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
       day_number: i + 1,
     }))
 
+    // Copy the preset's values in rather than referencing it. The show owns its
+    // rules from here on, so editing or deleting the preset later can never
+    // rewrite the hours and pay on a show that already exists.
+    const rulesetRow = chosen
+      ? { show_id: show.id, ...pickRulesetValues(chosen) }
+      : { show_id: show.id }
+
     const [rulesetResult, daysResult] = await Promise.all([
-      supabase.from('payroll_rulesets').insert({ show_id: show.id }),
+      supabase.from('payroll_rulesets').insert(rulesetRow),
       supabase.from('work_days').insert(workDayRows),
     ])
 
@@ -128,6 +169,28 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
               <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
             ))}
           </select>
+
+          <div>
+            <label className="text-xs uppercase tracking-wide text-muted block mb-1">Payroll Rules</label>
+            <select
+              key={presets.map(p => p.id).join(',')}
+              value={presetId}
+              onChange={e => setPresetId(e.target.value)}
+              className={inputCls}
+            >
+              {presets.map(p => (
+                <option key={p.id} value={p.id} className="bg-surface-2 text-ink">
+                  {p.name}{p.is_default ? ' (default)' : ''}
+                </option>
+              ))}
+              <option value="" className="bg-surface-2 text-ink">Custom — start from scratch</option>
+            </select>
+            <p className="text-xs text-muted mt-1">
+              {chosen
+                ? summarize(chosen)
+                : 'OT after 10h, no double time, no meal penalties, no short turnaround. Set them per-show in Edit Show.'}
+            </p>
+          </div>
 
           {error && <p className="text-xs text-danger">{error}</p>}
 

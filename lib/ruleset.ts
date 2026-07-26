@@ -1,0 +1,64 @@
+// Shared shape of a payroll rule set — the columns that payroll_rulesets (one
+// per show) and payroll_presets (org-level templates) have in common.
+//
+// Plain module (no 'use client') so it is safe to import from client components
+// AND Server Components — see CLAUDE.md "Past incidents" on the client/server
+// export rule.
+
+export type RulesetValues = {
+  overtime_after_hours: number
+  double_time_enabled: boolean
+  double_time_after_hours: number
+  travel_rate: string
+  meal_penalty_enabled: boolean
+  meal_penalty_grace_period: number
+  meal_penalty_amount: number
+  continuous_time_enabled: boolean
+  minimum_meal_break_enabled: boolean
+  minimum_meal_break_minutes: number
+  meal_break_deduction_cap: number
+  short_turn_penalty_enabled: boolean
+  short_turn_rest_hours: number
+}
+
+// Single source of truth for which columns make up a rule set. Used to build
+// update payloads and to copy a preset into a show's ruleset, so adding a rule
+// in future means touching this list rather than hunting call sites.
+export const RULESET_FIELDS = [
+  'overtime_after_hours',
+  'double_time_enabled',
+  'double_time_after_hours',
+  'travel_rate',
+  'meal_penalty_enabled',
+  'meal_penalty_grace_period',
+  'meal_penalty_amount',
+  'continuous_time_enabled',
+  'minimum_meal_break_enabled',
+  'minimum_meal_break_minutes',
+  'meal_break_deduction_cap',
+  'short_turn_penalty_enabled',
+  'short_turn_rest_hours',
+] as const satisfies readonly (keyof RulesetValues)[]
+
+/** Picks just the rule columns off any row that carries them. */
+export function pickRulesetValues(row: Record<string, any>): RulesetValues {
+  const out: Record<string, any> = {}
+  for (const f of RULESET_FIELDS) out[f] = row[f]
+  return out as RulesetValues
+}
+
+/**
+ * Applies one field change, keeping Continuous Time and the Working Lunch Rule
+ * mutually exclusive: one pays straight through, the other deducts meal breaks.
+ * Turning either on turns the other off, matching iOS.
+ */
+export function applyRulesetChange<T extends Record<string, any>>(
+  prev: T,
+  field: string,
+  value: any,
+): T {
+  const next: Record<string, any> = { ...prev, [field]: value }
+  if (field === 'continuous_time_enabled' && value) next.minimum_meal_break_enabled = false
+  if (field === 'minimum_meal_break_enabled' && value) next.continuous_time_enabled = false
+  return next as T
+}

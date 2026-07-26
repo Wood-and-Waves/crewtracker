@@ -17,7 +17,7 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
     { data: ruleset },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('shoulder_surfer_mode').eq('id', user.id).single(),
+    supabase.from('profiles').select('organization_id, shoulder_surfer_mode, can_manage_rulesets').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -55,6 +55,8 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       rooms={rooms || []}
       crewRateEntries={crewRateEntries}
       shoulderSurferMode={profile?.shoulder_surfer_mode || false}
+      organizationId={profile?.organization_id || undefined}
+      canManageRulesets={profile?.can_manage_rulesets || false}
     />
   )
 }

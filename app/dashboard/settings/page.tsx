@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import PersonalSettingsClient from '@/components/PersonalSettingsClient'
 import OrgSettingsClient from '@/components/OrgSettingsClient'
 import AVRolesEditor from '@/components/AVRolesEditor'
+import PayrollPresetsEditor from '@/components/PayrollPresetsEditor'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -11,7 +12,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('organization_id, use_24_hour_time, shoulder_surfer_mode, can_manage_users')
+    .select('organization_id, use_24_hour_time, shoulder_surfer_mode, can_manage_users, can_manage_rulesets')
     .eq('id', user.id)
     .single()
 
@@ -24,9 +25,10 @@ export default async function SettingsPage() {
     )
   }
 
-  const [{ data: organization }, { data: avRoles }] = await Promise.all([
+  const [{ data: organization }, { data: avRoles }, { data: presets }] = await Promise.all([
     supabase.from('organizations').select('id, timecard_rounding_minutes, default_cc_email').eq('id', profile.organization_id).single(),
     supabase.from('av_roles').select('id, name, sort_order').eq('organization_id', profile.organization_id).order('sort_order'),
+    supabase.from('payroll_presets').select('*').eq('organization_id', profile.organization_id).order('sort_order'),
   ])
 
   return (
@@ -52,10 +54,19 @@ export default async function SettingsPage() {
         )}
 
         {profile.can_manage_users && organization && (
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 mb-5">
             <AVRolesEditor
               organizationId={profile.organization_id}
               initialRoles={avRoles || []}
+            />
+          </div>
+        )}
+
+        {profile.can_manage_rulesets && (
+          <div className="lg:col-span-2">
+            <PayrollPresetsEditor
+              organizationId={profile.organization_id}
+              initialPresets={(presets || []) as any}
             />
           </div>
         )}
