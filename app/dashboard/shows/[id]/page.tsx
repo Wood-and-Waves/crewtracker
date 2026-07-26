@@ -245,7 +245,7 @@ export default async function ShowDetailPage({
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
           return (
-            <div key={room.id} className="rounded-card border border-line bg-surface overflow-hidden">
+            <div key={room.id} className="rounded-card border border-line bg-surface">
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
                 <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }))} canViewRates={canViewRates} canEditRates={canEditRates} />
