@@ -136,9 +136,15 @@ export async function POST(request: Request) {
     punches: punches || [],
     ruleset,
     timezone,
-    // The SHOW decides whether there are dollars to report. The caller's
-    // can_view_pay_rates deliberately does not.
-    showFinancials: show.show_financials || false,
+    // ALWAYS include figures. Neither the caller's can_view_pay_rates nor the
+    // show's show_financials suppresses them here.
+    //
+    // show_financials governs what the app DISPLAYS to PMs; it does not mean the
+    // rates are absent. A show with it switched off can still carry every day
+    // rate — so respecting it here silently stripped real payroll out of the one
+    // document whose whole purpose is to deliver it. This report goes only to
+    // admin-designated recipients, who are entitled to the numbers.
+    showFinancials: true,
     roundingMinutes,
   }
 
