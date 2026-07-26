@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
+import type { TimecardRowMaybeRate } from '@/lib/timecardFields'
 
 export default async function EditShowPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -34,16 +35,27 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
 
   const roomIds = (rooms || []).map(r => r.id)
 
-  const { data: timecards } = roomIds.length > 0
-    ? await supabase.from('timecards').select('crew_member_id, crew_member_name, role, day_rate, room_id').in('room_id', roomIds)
+  // Crew & Rates is the only consumer and it's hidden without can_view_pay_rates,
+  // so don't pull the rate for someone who can't be shown it.
+  const canViewRates = profile?.can_view_pay_rates || false
+  // Annotated as `string` on purpose: supabase-js parses a literal select string
+  // into a result type, and a conditional one makes that parse fail. Widening to
+  // string opts out of that inference, which is what the `?? 0` below accounts for.
+  const rateEntryCols: string = canViewRates
+    ? 'crew_member_id, crew_member_name, role, room_id, day_rate'
+    : 'crew_member_id, crew_member_name, role, room_id'
+
+  const { data: timecardRows } = roomIds.length > 0
+    ? await supabase.from('timecards').select(rateEntryCols).in('room_id', roomIds)
     : { data: [] }
+  const timecards = (timecardRows || []) as unknown as TimecardRowMaybeRate[]
 
   // Dedupe to unique (crew, role) combos, matching iOS crewRateEntries logic
   const seen: Record<string, any> = {}
   for (const tc of timecards || []) {
     const key = (tc.crew_member_id || tc.crew_member_name) + '|' + tc.role
     if (!seen[key]) {
-      seen[key] = { crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }
+      seen[key] = { crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate ?? 0 }
     }
   }
   const crewRateEntries = Object.values(seen).sort((a: any, b: any) => a.name.localeCompare(b.name))
@@ -72,7 +84,7 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       shoulderSurferMode={profile?.shoulder_surfer_mode || false}
       organizationId={profile?.organization_id || undefined}
       canManageRulesets={profile?.can_manage_rulesets || false}
-      canViewRates={profile?.can_view_pay_rates || false}
+      canViewRates={canViewRates}
       canEditRates={profile?.can_edit_pay_rates || false}
     >
       {canManageUsers && (

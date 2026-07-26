@@ -93,9 +93,13 @@ export default function AddDayButton({
     }
 
     if (copyCrew && newRooms.length > 0) {
+      // No day_rate: the BEFORE INSERT trigger inherits the show's rate for this
+      // (crew member, role) — sourced from the very row being copied, which is on
+      // the same show — so reading it here would be redundant and the trigger
+      // would override it anyway. See scripts/sql/show-wide-day-rate.sql.
       const { data: oldTimecards, error: tcReadError } = await supabase
         .from('timecards')
-        .select('room_id, crew_member_id, crew_member_name, role, day_rate')
+        .select('room_id, crew_member_id, crew_member_name, role')
         .in('room_id', sourceRooms.map(r => r.id))
       if (tcReadError) { setBusy(false); setError(tcReadError.message); return }
 
@@ -109,7 +113,6 @@ export default function AddDayButton({
           crew_member_id: oldTc.crew_member_id,
           crew_member_name: oldTc.crew_member_name,
           role: oldTc.role,
-          day_rate: oldTc.day_rate,
         })
       }
       if (rows.length > 0) {

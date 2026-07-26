@@ -31,9 +31,12 @@ export default function CopyCrewButton({
     setBusy(true)
     setError('')
 
+    // No day_rate: the BEFORE INSERT trigger inherits the show's rate for this
+    // (crew member, role) from the source row itself, which is on the same show.
+    // See scripts/sql/show-wide-day-rate.sql.
     const { data: source, error: srcError } = await supabase
       .from('timecards')
-      .select('crew_member_id, crew_member_name, role, day_rate')
+      .select('crew_member_id, crew_member_name, role')
       .eq('room_id', sourceRoomId)
 
     if (srcError) { setBusy(false); setError(srcError.message); return }
@@ -57,7 +60,6 @@ export default function CopyCrewButton({
         crew_member_id: s.crew_member_id,
         crew_member_name: s.crew_member_name,
         role: s.role,
-        day_rate: s.day_rate,
       }))
 
     if (rows.length === 0) { setBusy(false); setError('Everyone from that day is already here.'); return }

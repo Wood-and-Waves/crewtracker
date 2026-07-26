@@ -13,6 +13,7 @@ import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
 import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
 import { cn } from '@/lib/cn'
+import { timecardSelect, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
 function fmt(n: number): string {
   if (n === 0) return '0'
@@ -82,9 +83,13 @@ export default async function ShowReportPage({
 
   const roomIds = (rooms || []).map(r => r.id)
 
-  const { data: timecards } = roomIds.length > 0
-    ? await supabase.from('timecards').select('*').in('room_id', roomIds)
+  // canSeeFinancials is already the stricter test — the show must track money
+  // AND this user must hold can_view_pay_rates. Anything it gates is the only
+  // thing on this page that reads a rate, so don't fetch rates otherwise.
+  const { data: timecardRows } = roomIds.length > 0
+    ? await supabase.from('timecards').select(timecardSelect(canSeeFinancials)).in('room_id', roomIds)
     : { data: [] }
+  const timecards = (timecardRows || []) as unknown as TimecardRowMaybeRate[]
 
   const timecardIds = (timecards || []).map(t => t.id)
 
@@ -116,7 +121,9 @@ export default async function ShowReportPage({
   const allTimecards: TimecardLike[] = (timecards || []).map(tc => ({
     id: tc.id,
     crew_member_id: tc.crew_member_id,
-    day_rate: tc.day_rate,
+    // 0 when unfetched — every money function is behind canSeeFinancials, which
+    // is the same flag that decided whether to fetch it.
+    day_rate: tc.day_rate ?? 0,
     is_travel_day: tc.is_travel_day,
     travel_in_day: tc.travel_in_day,
     travel_out_day: tc.travel_out_day,
@@ -190,7 +197,7 @@ export default async function ShowReportPage({
     return {
       id: rawTc.id,
       crew_member_id: rawTc.crew_member_id,
-      day_rate: rawTc.day_rate,
+      day_rate: rawTc.day_rate ?? 0,
       is_travel_day: rawTc.is_travel_day,
       travel_in_day: rawTc.travel_in_day,
       travel_out_day: rawTc.travel_out_day,
