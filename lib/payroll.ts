@@ -21,6 +21,8 @@ export type PayrollRuleset = {
   meal_penalty_enabled: boolean
   meal_penalty_grace_period: number
   meal_penalty_amount: number
+  // Mutually exclusive with minimum_meal_break_enabled — see calculateNetHours.
+  continuous_time_enabled: boolean
   minimum_meal_break_enabled: boolean
   minimum_meal_break_minutes: number
   meal_break_deduction_cap: number
@@ -65,18 +67,27 @@ export function calculateNetHours(tc: TimecardLike, ruleset: PayrollRuleset, rou
   if (!start || !end) return 0
 
   const grossSeconds = (end.getTime() - start.getTime()) / 1000
-  const minBreakSeconds = ruleset.minimum_meal_break_enabled ? ruleset.minimum_meal_break_minutes * 60 : 0
-  const capSeconds = ruleset.meal_break_deduction_cap * 60
 
-  let deductionSeconds = 0
-  for (const [outP, inP] of mealBreakPairs(tc)) {
-    const duration = (inP.getTime() - outP.getTime()) / 1000
-    if (duration >= minBreakSeconds) {
-      deductionSeconds += Math.min(duration, capSeconds)
+  let netSeconds: number
+  if (ruleset.continuous_time_enabled) {
+    // Continuous Time: paid raw wrap-minus-start, no meal deduction at all.
+    // OT/DT still apply after their thresholds, downstream of this.
+    netSeconds = Math.max(0, grossSeconds)
+  } else {
+    const minBreakSeconds = ruleset.minimum_meal_break_enabled ? ruleset.minimum_meal_break_minutes * 60 : 0
+    const capSeconds = ruleset.meal_break_deduction_cap * 60
+
+    let deductionSeconds = 0
+    for (const [outP, inP] of mealBreakPairs(tc)) {
+      const duration = (inP.getTime() - outP.getTime()) / 1000
+      if (duration >= minBreakSeconds) {
+        deductionSeconds += Math.min(duration, capSeconds)
+      }
     }
+
+    netSeconds = Math.max(0, grossSeconds - deductionSeconds)
   }
 
-  const netSeconds = Math.max(0, grossSeconds - deductionSeconds)
   const netMinutes = Math.round(netSeconds / 60)
 
   const safeInterval = roundingMinutes > 0 ? roundingMinutes : 1

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, Punch, PunchType } from '@/lib/punches'
-import { straightTimeHours, overtimeHours, doubleTimeHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
+import { straightTimeHours, overtimeHours, doubleTimeHours, calculateNetHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
 import TimeEntryModal from '@/components/TimeEntryModal'
 import { cn } from '@/lib/cn'
 import { PUNCH_GRID_COLS } from '@/lib/trackerLayout'
@@ -50,7 +50,18 @@ export default function TimecardRow({
   const ot = wrapped ? overtimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
   const dt = wrapped ? doubleTimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
 
-  async function toggleTravel(field: 'travel_in_day' | 'travel_out_day') {
+  // Pay as Half Day is only offered on a completed work day of 5 net hours or
+  // less — a negotiated call the PM makes on site. Days over 5 hours always get
+  // the full day-rate guarantee, and payroll ignores the flag if it's somehow
+  // left on, so the toggle simply disappears.
+  const started = punches.some(p => p.punch_type === 'start')
+  const showHalfDay =
+    !timecard.is_travel_day &&
+    started &&
+    wrapped &&
+    calculateNetHours(timecardInput, ruleset, roundingMinutes) <= 5
+
+  async function toggleFlag(field: 'travel_in_day' | 'travel_out_day' | 'pay_as_half_day') {
     const { error } = await supabase
       .from('timecards')
       .update({ [field]: !timecard[field] })
@@ -138,9 +149,9 @@ export default function TimecardRow({
         </div>
       </div>
 
-      <div className="flex gap-1.5 px-4 pb-3 lg:pb-3">
+      <div className="flex flex-wrap gap-1.5 px-4 pb-3 lg:pb-3">
         <button
-          onClick={() => toggleTravel('travel_in_day')}
+          onClick={() => toggleFlag('travel_in_day')}
           className={cn(
             'rounded-pill px-3 py-1 text-xs transition-colors',
             timecard.travel_in_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
@@ -149,7 +160,7 @@ export default function TimecardRow({
           ✈ Travel In
         </button>
         <button
-          onClick={() => toggleTravel('travel_out_day')}
+          onClick={() => toggleFlag('travel_out_day')}
           className={cn(
             'rounded-pill px-3 py-1 text-xs transition-colors',
             timecard.travel_out_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
@@ -157,6 +168,18 @@ export default function TimecardRow({
         >
           ✈ Travel Out
         </button>
+        {showHalfDay && (
+          <button
+            onClick={() => toggleFlag('pay_as_half_day')}
+            title="Pay this day at half the day rate (offered only at 5 net hours or less)"
+            className={cn(
+              'rounded-pill px-3 py-1 text-xs transition-colors',
+              timecard.pay_as_half_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
+            )}
+          >
+            ◑ Half Day
+          </button>
+        )}
       </div>
 
       {editingType && (

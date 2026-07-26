@@ -60,7 +60,15 @@ export default function EditShowClient({
   const [rateText, setRateText] = useState('')
 
   function updateRuleset(field: string, value: any) {
-    setRs((prev: any) => ({ ...prev, [field]: value }))
+    setRs((prev: any) => {
+      const next = { ...prev, [field]: value }
+      // Continuous Time and the Working Lunch Rule are mutually exclusive:
+      // one pays straight through, the other deducts meal breaks. Turning
+      // either on turns the other off, matching iOS.
+      if (field === 'continuous_time_enabled' && value) next.minimum_meal_break_enabled = false
+      if (field === 'minimum_meal_break_enabled' && value) next.continuous_time_enabled = false
+      return next
+    })
   }
 
   async function handleSave() {
@@ -97,6 +105,7 @@ export default function EditShowClient({
           meal_penalty_enabled: rs.meal_penalty_enabled,
           meal_penalty_grace_period: rs.meal_penalty_grace_period,
           meal_penalty_amount: rs.meal_penalty_amount,
+          continuous_time_enabled: rs.continuous_time_enabled,
           minimum_meal_break_enabled: rs.minimum_meal_break_enabled,
           minimum_meal_break_minutes: rs.minimum_meal_break_minutes,
           meal_break_deduction_cap: rs.meal_break_deduction_cap,
@@ -383,6 +392,20 @@ export default function EditShowClient({
             )}
 
             <p className="text-xs text-muted mt-3">Crew are paid their full day rate up to the Overtime threshold. Hours beyond that are paid at 1.5×. Double time (2×) is optional and kicks in after its own threshold.</p>
+          </Card>
+
+          <Card className="p-5 mb-4">
+            <p className="text-xs uppercase tracking-wide text-muted mb-3">Continuous Time</p>
+
+            <FieldRow label="Continuous Time">
+              <Toggle
+                checked={rs.continuous_time_enabled}
+                onChange={v => updateRuleset('continuous_time_enabled', v)}
+                label="Continuous Time"
+              />
+            </FieldRow>
+
+            <p className="text-xs text-muted mt-3">Crew are paid from start to wrap with no meal break deductions. OT and DT still apply after their thresholds. Turning this on switches off the Working Lunch Rule below.</p>
           </Card>
 
           <Card className="p-5 mb-4">
