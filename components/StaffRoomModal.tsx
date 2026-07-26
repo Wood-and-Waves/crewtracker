@@ -17,16 +17,27 @@ export default function StaffRoomModal({
   roomName,
   currentWorkDayId,
   remainingRoomIdsSameName,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
 }: {
   organizationId: string
   roomId: string
   roomName: string
   currentWorkDayId: string
   remainingRoomIdsSameName: string[]
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  hideTrigger?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = (v: boolean) => {
+    onOpenChange?.(v)
+    if (controlledOpen === undefined) setInternalOpen(v)
+  }
   const [crew, setCrew] = useState<CrewMember[]>([])
   const [rateCards, setRateCards] = useState<RateCard[]>([])
   const [selected, setSelected] = useState<Record<string, { role: string; dayRate: string }>>({})
@@ -144,6 +155,7 @@ export default function StaffRoomModal({
   }
 
   if (!open) {
+    if (hideTrigger) return null
     return (
       <button
         onClick={() => setOpen(true)}

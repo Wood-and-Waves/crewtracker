@@ -30,7 +30,6 @@ export default function TimecardRow({
 }) {
   const router = useRouter()
   const supabase = createClient()
-  const [loading, setLoading] = useState<string | null>(null)
   const [editingType, setEditingType] = useState<PunchType | null>(null)
 
   const next = nextPunchType(punches)
@@ -50,15 +49,6 @@ export default function TimecardRow({
   const st = wrapped ? straightTimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
   const ot = wrapped ? overtimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
   const dt = wrapped ? doubleTimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
-
-  async function undoLast() {
-    if (punches.length === 0) return
-    const last = punches[punches.length - 1]
-    setLoading('undo')
-    const { error } = await supabase.from('punches').delete().eq('id', last.id)
-    setLoading(null)
-    if (!error) router.refresh()
-  }
 
   async function toggleTravel(field: 'travel_in_day' | 'travel_out_day') {
     const { error } = await supabase
@@ -89,11 +79,11 @@ export default function TimecardRow({
         onClick={() => setEditingType(type)}
         disabled={disabled}
         className={cn(
-          'rounded-card lg:rounded-field h-12 lg:h-auto lg:aspect-[2/1] px-2 py-1 lg:px-1 lg:py-2 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
+          'rounded-[5px] h-12 lg:h-auto lg:aspect-[2/1] px-2 py-1 lg:px-1 lg:py-2 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
           'flex flex-col items-center justify-center gap-0.5 lg:gap-0',
           done && 'bg-surface-2 text-ink hover:opacity-90',
-          !done && !disabled && 'bg-accent-wash text-accent font-bold hover:opacity-90',
-          disabled && 'bg-surface-3 text-muted/40 cursor-not-allowed',
+          !done && !disabled && 'bg-accent/25 text-accent font-bold hover:opacity-90',
+          disabled && 'bg-surface-3 text-muted cursor-not-allowed',
         )}
       >
         {done ? (
@@ -116,20 +106,17 @@ export default function TimecardRow({
 
   return (
     <div className="border-b border-line last:border-b-0">
-      <div className={cn('p-4 grid grid-cols-3 gap-3', PUNCH_GRID_COLS, 'lg:items-center lg:gap-3 lg:py-3')}>
+      <div className={cn('p-4 grid grid-cols-3 gap-2', PUNCH_GRID_COLS, 'lg:items-center lg:gap-3 lg:py-3')}>
         {/* Who + totals + undo */}
-        <div className="col-span-3 lg:col-span-1 flex items-center justify-between lg:block mb-2 lg:mb-0">
-          <div>
-            <p className="text-sm font-semibold text-ink">{timecard.crew_member_name}</p>
-            <p className="text-xs text-muted">{timecard.role}</p>
-          </div>
-          <div className="flex items-center gap-2 lg:hidden">
-            {punches.length > 0 && (
-              <button onClick={undoLast} disabled={loading === 'undo'} className="text-xs text-muted hover:text-ink">
-                ↶ Undo
-              </button>
-            )}
-          </div>
+        <div className="col-span-3 lg:col-span-1 mb-2 lg:mb-0">
+          {/* Mobile: name and role on one line, iOS-style */}
+          <p className="lg:hidden text-base font-semibold text-ink">
+            {timecard.crew_member_name}
+            {timecard.role && <span className="font-normal text-muted"> | {timecard.role}</span>}
+          </p>
+          {/* Desktop: stacked to fit the narrow crew column */}
+          <p className="hidden lg:block text-sm font-semibold text-ink">{timecard.crew_member_name}</p>
+          <p className="hidden lg:block text-xs text-muted">{timecard.role}</p>
         </div>
 
         {timecard.is_travel_day ? (
@@ -140,18 +127,13 @@ export default function TimecardRow({
           PUNCH_ORDER.map(type => <PunchCell key={type} type={type} />)
         )}
 
-        <div className="col-span-3 lg:col-span-1 flex items-center justify-between lg:justify-end lg:flex-col lg:items-end mt-2 lg:mt-0 gap-2 lg:gap-0.5">
+        <div className="col-span-3 lg:col-span-1 flex items-center justify-end lg:flex-col lg:items-end mt-2 lg:mt-0 gap-2 lg:gap-0.5">
           {wrapped && (
             <p className="text-sm font-bold text-ink tabular-nums">
               {st.toFixed(2)} ST
               {ot > 0 && <span className="block text-xs font-semibold text-ot">+{ot.toFixed(2)} OT</span>}
               {dt > 0 && <span className="block text-xs font-semibold text-ot">{dt.toFixed(2)} DT</span>}
             </p>
-          )}
-          {punches.length > 0 && (
-            <button onClick={undoLast} disabled={loading === 'undo'} className="hidden lg:block text-xs text-muted hover:text-ink">
-              ↶ Undo
-            </button>
           )}
         </div>
       </div>

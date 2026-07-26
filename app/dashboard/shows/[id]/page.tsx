@@ -152,64 +152,9 @@ export default async function ShowDetailPage({
 
   return (
     <div className="p-6 md:p-10 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8 lg:max-w-[1400px] lg:mx-auto">
-      {/* Mobile compact header: show info, small action icons, day nav.
-          Hidden on desktop, where the rail below takes over. */}
-      <div className="lg:hidden mb-6">
-        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
-        <div className="flex items-start justify-between gap-3 mt-2">
-          <div className="min-w-0">
-            <h1 className="text-xl font-extrabold tracking-tight truncate">{show.name}</h1>
-            {showMeta && <p className="text-sm text-muted truncate">{showMeta}</p>}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link href={`/dashboard/shows/${id}/edit`}>
-              <Button variant="ghost" size="sm" aria-label="Edit Show">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                </svg>
-              </Button>
-            </Link>
-            <Link href={`/dashboard/shows/${id}/reports`}>
-              <Button variant="ghost" size="sm" aria-label="View Report">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
-                  <path d="M14 3v6h6" />
-                  <path d="M9 14h6M9 17h6" />
-                </svg>
-              </Button>
-            </Link>
-          </div>
-        </div>
-        <div className="flex items-center justify-center gap-4 mt-5">
-          <Link
-            href={prevDay ? `?day=${prevDay.day_number}` : '#'}
-            aria-label="Previous day"
-            className={cn(
-              'rounded-full h-9 w-9 flex items-center justify-center shrink-0',
-              !prevDay ? 'pointer-events-none bg-surface-2 text-muted opacity-30' : 'bg-accent text-accent-ink',
-            )}
-          >
-            ‹
-          </Link>
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {activeDay.day_number} of {workDays.length}</p>
-            <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
-          </div>
-          <Link
-            href={nextDay ? `?day=${nextDay.day_number}` : '#'}
-            aria-label="Next day"
-            className={cn(
-              'rounded-full h-9 w-9 flex items-center justify-center shrink-0',
-              !nextDay ? 'pointer-events-none bg-surface-2 text-muted opacity-30' : 'bg-accent text-accent-ink',
-            )}
-          >
-            ›
-          </Link>
-        </div>
-      </div>
-
-      {/* Left rail (desktop only): show info, day nav, day summary, actions. */}
+      {/* Left rail (desktop only): show info, day nav, day summary, actions.
+          The mobile header lives inside MobileRoomTracker so its add-crew
+          icon can target the currently selected room. */}
       <aside className="hidden lg:block space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div>
           <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
@@ -346,6 +291,15 @@ export default async function ShowDetailPage({
       <MobileRoomTracker
         className="lg:hidden min-w-0"
         showId={id}
+        showName={show.name}
+        showMeta={showMeta || undefined}
+        editHref={`/dashboard/shows/${id}/edit`}
+        reportHref={`/dashboard/shows/${id}/reports`}
+        dayNumber={activeDay.day_number}
+        totalDays={workDays.length}
+        dateLabel={dateLabel}
+        prevDayNumber={prevDay?.day_number ?? null}
+        nextDayNumber={nextDay?.day_number ?? null}
         rooms={roomsList.map(r => ({ id: r.id, name: r.name }))}
         roomCrew={roomTimecards}
         dayCrew={dayTimecards}

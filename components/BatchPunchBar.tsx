@@ -99,7 +99,7 @@ export default function BatchPunchBar({
               onClick={() => onTap(type)}
               disabled={busy}
               className={cn(
-                'rounded-field border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
+                'rounded-[5px] border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
                 active
                   ? 'bg-accent/30 border-transparent text-accent font-semibold'
                   : 'bg-surface-3 border-line text-muted hover:border-accent hover:text-accent',

@@ -33,14 +33,20 @@ export default function TimeEntryModal({
   const [error, setError] = useState('')
   const [travelDay, setTravelDay] = useState(isTravelDay)
 
-  // Default the date to the show-day being edited, NOT the browser's real
-  // "today" — this was the source of a bug where new punches silently got
-  // stamped on the wrong date, corrupting hour totals and short-turnaround
-  // detection.
-  const base = existingTime ? new Date(existingTime) : new Date(dayDate + 'T12:00:00')
-  const [dateStr, setDateStr] = useState(existingTime ? base.toISOString().slice(0, 10) : dayDate)
+  // For a NEW punch, default the time to the current wall-clock time in the
+  // show's timezone (so live punching pre-fills "now"), but keep the DATE on
+  // the show-day being edited — never the browser's real "today". Defaulting
+  // the date to real-today once produced 33.5-hour days and broke
+  // short-turnaround detection when the viewed day wasn't today.
+  const nowInTz = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date())
+  const base = existingTime ? new Date(existingTime) : null
+  const [dateStr, setDateStr] = useState(existingTime ? base!.toISOString().slice(0, 10) : dayDate)
   const [timeStr, setTimeStr] = useState(
-    `${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}`
+    existingTime
+      ? `${String(base!.getHours()).padStart(2, '0')}:${String(base!.getMinutes()).padStart(2, '0')}`
+      : nowInTz
   )
 
   async function handleTravelToggle(checked: boolean) {
