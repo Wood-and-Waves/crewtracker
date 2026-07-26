@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { localDateStr } from '@/lib/datetime'
 import { pickRulesetValues, type RulesetValues } from '@/lib/ruleset'
+import { SHOW_TIMEZONES, DEFAULT_SHOW_TIMEZONE } from '@/lib/timezones'
 import Button from '@/components/ui/Button'
 
 type Preset = { id: string; name: string; is_default: boolean } & RulesetValues
@@ -12,12 +13,20 @@ type Preset = { id: string; name: string; is_default: boolean } & RulesetValues
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
-const TIMEZONES = [
-  { value: 'America/New_York', label: 'Eastern' },
-  { value: 'America/Chicago', label: 'Central' },
-  { value: 'America/Denver', label: 'Mountain' },
-  { value: 'America/Los_Angeles', label: 'Pacific' },
-]
+// Rooms typed as a comma-separated list, iOS-style, falling back to a single
+// "Main Stage" so a new show is never created with no rooms at all — which left
+// the tracker with nothing to punch against until you added one by hand.
+function parseRooms(input: string): string[] {
+  const names = input.split(',').map(s => s.trim()).filter(Boolean)
+  const seen = new Set<string>()
+  const unique = names.filter(n => {
+    const k = n.toLowerCase()
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+  return unique.length > 0 ? unique : ['Main Stage']
+}
 
 function datesBetween(start: string, end: string) {
   const dates: string[] = []
@@ -41,7 +50,8 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
   const [venue, setVenue] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [timezone, setTimezone] = useState('America/Chicago')
+  const [roomsText, setRoomsText] = useState('')
+  const [timezone, setTimezone] = useState(DEFAULT_SHOW_TIMEZONE)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -115,7 +125,7 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
 
     const [rulesetResult, daysResult] = await Promise.all([
       supabase.from('payroll_rulesets').insert(rulesetRow),
-      supabase.from('work_days').insert(workDayRows),
+      supabase.from('work_days').insert(workDayRows).select('id, day_number'),
     ])
 
     if (rulesetResult.error) {
@@ -127,6 +137,27 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
       setError(daysResult.error.message)
       setLoading(false)
       return
+    }
+
+    // Every day gets the same rooms, in the order they were typed — created_at
+    // is nudged per room so the tracker (which orders by it) matches that order.
+    const roomNames = parseRooms(roomsText)
+    const days = (daysResult.data || []).slice().sort((a, b) => a.day_number - b.day_number)
+    const roomRows = days.flatMap(d =>
+      roomNames.map((name, i) => ({
+        work_day_id: d.id,
+        name,
+        created_at: new Date(Date.now() + i).toISOString(),
+      }))
+    )
+
+    if (roomRows.length > 0) {
+      const { error: roomsError } = await supabase.from('rooms').insert(roomRows)
+      if (roomsError) {
+        setError(roomsError.message)
+        setLoading(false)
+        return
+      }
     }
 
     setLoading(false)
@@ -165,10 +196,22 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
             onChange={e => setTimezone(e.target.value)}
             className={inputCls}
           >
-            {TIMEZONES.map(tz => (
+            {SHOW_TIMEZONES.map(tz => (
               <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
             ))}
           </select>
+
+          <div>
+            <input
+              placeholder="Rooms (e.g. Main Stage, Breakout A)"
+              value={roomsText}
+              onChange={e => setRoomsText(e.target.value)}
+              className={inputCls}
+            />
+            <p className="text-xs text-muted mt-1">
+              Comma-separated, added to every day. Leave blank for a single &ldquo;Main Stage&rdquo;.
+            </p>
+          </div>
 
           <div>
             <label className="text-xs uppercase tracking-wide text-muted block mb-1">Payroll Rules</label>

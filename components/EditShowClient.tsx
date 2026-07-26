@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { localDateStr } from '@/lib/datetime'
 import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
+import { SHOW_TIMEZONES } from '@/lib/timezones'
 import RulesetFields from '@/components/RulesetFields'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -274,12 +275,9 @@ export default function EditShowClient({
             onChange={e => setTimezone(e.target.value)}
             className={`${inputCls} mt-2`}
           >
-            <option value="America/New_York" className="bg-surface-2 text-ink">Eastern (ET)</option>
-            <option value="America/Chicago" className="bg-surface-2 text-ink">Central (CT)</option>
-            <option value="America/Denver" className="bg-surface-2 text-ink">Mountain (MT)</option>
-            <option value="America/Los_Angeles" className="bg-surface-2 text-ink">Pacific (PT)</option>
-            <option value="America/Anchorage" className="bg-surface-2 text-ink">Alaska (AKT)</option>
-            <option value="Pacific/Honolulu" className="bg-surface-2 text-ink">Hawaii (HIT)</option>
+            {SHOW_TIMEZONES.map(tz => (
+              <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
+            ))}
           </select>
           <p className="text-xs text-muted mt-2">Punch times, the day picker, and reports all use this timezone — useful when you&apos;re prepping a show that&apos;s in a different timezone than you are.</p>
         </Card>

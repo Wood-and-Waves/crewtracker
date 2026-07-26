@@ -73,6 +73,9 @@ export default async function ShowDetailPage({
     .from('rooms')
     .select('id, name, work_day_id')
     .in('work_day_id', workDays.map(d => d.id))
+    // Insertion order, matching iOS. Unordered, multiple rooms on a day came
+    // back arbitrarily and could reshuffle between refreshes.
+    .order('created_at')
 
   const allRoomIds = (allShowRooms || []).map(r => r.id)
 
