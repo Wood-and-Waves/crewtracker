@@ -172,9 +172,11 @@ export default function EditShowClient({
     await query
 
     if (rateEntry.crewMemberId && confirm(`Update ${rateEntry.name}'s ${rateEntry.role} rate in the crew directory to $${Math.round(newRate)}?`)) {
+      // Only the id is needed, to choose update vs insert. `select('*')` would
+      // pull day_rate, which authenticated no longer holds SELECT on.
       const { data: existingCard } = await supabase
         .from('rate_cards')
-        .select('*')
+        .select('id')
         .eq('crew_member_id', rateEntry.crewMemberId)
         .eq('role', rateEntry.role)
         .maybeSingle()

@@ -90,12 +90,14 @@ export default function EditCrewMemberClient({
   async function addRole() {
     if (!newRoleName || rateCards.some(c => c.role === newRoleName)) return
     const rate = parseFloat(newRoleRate) || 0
+    // Return only id + role: reading day_rate back would need SELECT on a column
+    // authenticated no longer holds. The rate we just wrote is already in hand.
     const { data } = await supabase
       .from('rate_cards')
       .insert({ crew_member_id: crew.id, role: newRoleName, day_rate: rate })
-      .select()
+      .select('id, role')
       .single()
-    if (data) setRateCards(prev => [...prev, data])
+    if (data) setRateCards(prev => [...prev, { ...data, day_rate: rate }])
     setShowAddRole(false)
     setNewRoleRate('')
   }
