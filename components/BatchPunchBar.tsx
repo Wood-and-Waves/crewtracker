@@ -27,9 +27,11 @@ type Overlay =
 export default function BatchPunchBar({
   timecards,
   dayDate,
+  timezone,
 }: {
   timecards: BatchTimecard[]
   dayDate: string
+  timezone: string
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -117,6 +119,7 @@ export default function BatchPunchBar({
           mode={overlay.mode}
           scope={timecards}
           dayDate={dayDate}
+          timezone={timezone}
           onCancel={() => setOverlay({ kind: 'none' })}
           onConfirm={(when, checkedIds) => applyPicked(overlay.type, when, checkedIds)}
         />

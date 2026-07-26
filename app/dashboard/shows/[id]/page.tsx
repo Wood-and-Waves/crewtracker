@@ -251,7 +251,7 @@ export default async function ShowDetailPage({
                 <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
 
-              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} />}
+              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} timezone={timezone} />}
 
               {/* Column headers — only meaningful once there's a ruled table
                   to head; hidden on mobile where TimecardRow renders labeled

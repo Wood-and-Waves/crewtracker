@@ -220,7 +220,7 @@ export default function MobileRoomTracker({
         <div className="space-y-4">
           {dayCrew.length > 0 && (
             <div className="rounded-card border border-line bg-surface">
-              <BatchPunchBar timecards={dayCrew} dayDate={dayDate} />
+              <BatchPunchBar timecards={dayCrew} dayDate={dayDate} timezone={timezone} />
             </div>
           )}
           {rooms.map(room => {
@@ -248,7 +248,7 @@ export default function MobileRoomTracker({
                 <h2 className="text-lg font-bold text-ink">{activeRoom!.name}</h2>
                 <RoomActionsMenu roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
-              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} />}
+              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} />}
               <div>
                 {crew.length === 0 && <p className="text-sm text-muted p-4">No crew staffed yet.</p>}
                 {rowsFor(crew)}

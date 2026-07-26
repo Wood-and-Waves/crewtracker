@@ -20,6 +20,7 @@ export default function BatchTimeModal({
   mode,
   scope,
   dayDate,
+  timezone,
   onCancel,
   onConfirm,
 }: {
@@ -27,16 +28,18 @@ export default function BatchTimeModal({
   mode: 'apply' | 'change'
   scope: BatchTimecard[]
   dayDate: string
+  timezone: string
   onCancel: () => void
   onConfirm: (when: Date, checkedIds: Set<string>) => void
 }) {
-  // Default date/time exactly like TimeEntryModal: the show-day being
-  // viewed at 12:00, never the browser's real "today".
-  const base = new Date(dayDate + 'T12:00:00')
+  // Default the time to the current wall-clock time in the show's timezone
+  // (live punching), keeping the DATE on the show-day being viewed — never the
+  // browser's real "today". Mirrors TimeEntryModal.
+  const nowInTz = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date())
   const [dateStr, setDateStr] = useState(dayDate)
-  const [timeStr, setTimeStr] = useState(
-    `${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}`
-  )
+  const [timeStr, setTimeStr] = useState(nowInTz)
 
   function initialChecked(tc: BatchTimecard): boolean {
     return mode === 'change'
