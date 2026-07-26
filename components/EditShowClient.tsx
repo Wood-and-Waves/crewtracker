@@ -33,6 +33,9 @@ export default function EditShowClient({
   shoulderSurferMode = false,
   organizationId,
   canManageRulesets = false,
+  canViewRates = false,
+  canEditRates = false,
+  children,
 }: {
   show: any
   ruleset: any
@@ -42,6 +45,14 @@ export default function EditShowClient({
   shoulderSurferMode?: boolean
   organizationId?: string
   canManageRulesets?: boolean
+  /** profiles.can_view_pay_rates — may this user see day rates at all? */
+  canViewRates?: boolean
+  /** profiles.can_edit_pay_rates — may they change them? */
+  canEditRates?: boolean
+  /** Server-rendered sections appended below the form (e.g. Show Access), so
+   *  their data fetching stays on the server instead of being threaded through
+   *  this client component as props. */
+  children?: React.ReactNode
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -278,45 +289,75 @@ export default function EditShowClient({
         </Card>
       </div>
 
-      <Card className="p-5 mb-4">
-        <p className="text-xs uppercase tracking-wide text-muted mb-3">Rates &amp; Payroll Calculation</p>
-        <FieldRow label="Show Dollar Amounts">
-          <Toggle checked={showFinancials} onChange={setShowFinancials} label="Show Dollar Amounts" />
-        </FieldRow>
-        <p className="text-xs text-muted mt-2">Turn this on to enter crew day rates and show dollar totals in reports.</p>
-      </Card>
+      {/* Whether this show tracks money is a pay decision, so it needs
+          can_edit_pay_rates. Hidden outright rather than shown disabled: a
+          control you can't use is noise, and the setting's existence isn't
+          something a PM needs to know about. */}
+      {canEditRates && (
+        <Card className="p-5 mb-4">
+          <p className="text-xs uppercase tracking-wide text-muted mb-3">Rates &amp; Payroll Calculation</p>
+          <FieldRow label="Show Dollar Amounts">
+            <Toggle checked={showFinancials} onChange={setShowFinancials} label="Show Dollar Amounts" />
+          </FieldRow>
+          <p className="text-xs text-muted mt-2">Turn this on to enter crew day rates and show dollar totals in reports.</p>
+        </Card>
+      )}
 
-      {showFinancials && (
+      {/* Two separate gates: the SHOW must track money at all, AND this user
+          must be allowed to see rates. Previously only the first was checked,
+          so any user who could open Edit Show saw every crew day rate and
+          could click one to change it — including a PM with
+          can_view_pay_rates and can_edit_pay_rates both false. */}
+      {showFinancials && canViewRates && (
         <Card className="p-5 mb-4">
           <p className="text-xs uppercase tracking-wide text-muted mb-3">Crew &amp; Rates</p>
           {crewRateEntries.length === 0 ? (
             <p className="text-sm text-muted">No crew assigned yet.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {crewRateEntries.map((entry: any) => (
-                <button
-                  key={entry.name + entry.role}
-                  onClick={() => { setRateEntry(entry); setRateText(String(Math.round(entry.dayRate))) }}
-                  className="flex items-center justify-between rounded-field bg-surface-2 px-4 py-3 hover:bg-line/40"
-                >
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-ink">{entry.name}</p>
-                    <p className="text-xs text-muted">{entry.role}</p>
-                  </div>
-                  <span className="text-sm font-semibold text-accent">
-                    {shoulderSurferMode ? '•••' : `$${Math.round(entry.dayRate)}`}
-                  </span>
-                </button>
-              ))}
+              {crewRateEntries.map((entry: any) => {
+                const amount = shoulderSurferMode ? '•••' : `$${Math.round(entry.dayRate)}`
+                const inner = (
+                  <>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-ink">{entry.name}</p>
+                      <p className="text-xs text-muted">{entry.role}</p>
+                    </div>
+                    <span className="text-sm font-semibold text-accent">{amount}</span>
+                  </>
+                )
+                const cls = 'flex items-center justify-between rounded-field bg-surface-2 px-4 py-3'
+                return canEditRates ? (
+                  <button
+                    key={entry.name + entry.role}
+                    onClick={() => { setRateEntry(entry); setRateText(String(Math.round(entry.dayRate))) }}
+                    className={`${cls} hover:bg-line/40`}
+                  >
+                    {inner}
+                  </button>
+                ) : (
+                  <div key={entry.name + entry.role} className={cls}>{inner}</div>
+                )
+              })}
             </div>
           )}
-          <p className="text-xs text-muted mt-3">Tap a rate to update it — this saves immediately, separate from the Save button above. Changes apply to all of that person&apos;s timecards on this show for that role.</p>
+          {canEditRates && (
+            <p className="text-xs text-muted mt-3">Tap a rate to update it — this saves immediately, separate from the Save button above. Changes apply to all of that person&apos;s timecards on this show for that role.</p>
+          )}
         </Card>
       )}
 
       {rs && (
         <>
-          <RulesetFields values={rs} onChange={updateRuleset} showFinancials={showFinancials} />
+          {/* can_manage_rulesets gated the "save as preset" card below but not
+              the rules themselves, so a PM without it could rewrite this show's
+              OT thresholds, meal penalties and travel rate. Hidden rather than
+              rendered read-only, per the same rule as the card above. The
+              tracker already shows computed ST/OT/DT totals, so a PM doesn't
+              need the thresholds themselves to do their job. */}
+          {canManageRulesets && (
+            <RulesetFields values={rs} onChange={updateRuleset} showFinancials={showFinancials} />
+          )}
 
           {canManageRulesets && organizationId && (
             <Card className="p-5 mb-4">
@@ -380,6 +421,8 @@ export default function EditShowClient({
           </div>
         </div>
       )}
+
+      {children}
 
       {/* Floating save affordance for this long form. Sits clear of the
           app's fixed bottom tab-bar (<1024px) instead of overlapping it. */}
