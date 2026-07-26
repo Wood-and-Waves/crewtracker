@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PunchType, PUNCH_LABELS, Punch, getChronologyError } from '@/lib/punches'
+import { zonedWallTimeToUtc, utcToZonedParts } from '@/lib/datetime'
 import Button from '@/components/ui/Button'
 
 export default function TimeEntryModal({
@@ -38,16 +39,19 @@ export default function TimeEntryModal({
   // the show-day being edited — never the browser's real "today". Defaulting
   // the date to real-today once produced 33.5-hour days and broke
   // short-turnaround detection when the viewed day wasn't today.
+  //
+  // For an EXISTING punch, BOTH fields come from the show's timezone in one
+  // conversion. Taking the date from UTC and the time from the browser's clock
+  // (as this used to) makes them disagree for any punch after ~7 PM Central,
+  // so re-saving an untouched form moved the punch forward a full day.
   const nowInTz = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date())
-  const base = existingTime ? new Date(existingTime) : null
-  const [dateStr, setDateStr] = useState(existingTime ? base!.toISOString().slice(0, 10) : dayDate)
-  const [timeStr, setTimeStr] = useState(
-    existingTime
-      ? `${String(base!.getHours()).padStart(2, '0')}:${String(base!.getMinutes()).padStart(2, '0')}`
-      : nowInTz
-  )
+  const initial = existingTime
+    ? utcToZonedParts(new Date(existingTime), timezone)
+    : { dateStr: dayDate, timeStr: nowInTz }
+  const [dateStr, setDateStr] = useState(initial.dateStr)
+  const [timeStr, setTimeStr] = useState(initial.timeStr)
 
   async function handleTravelToggle(checked: boolean) {
     setTravelDay(checked)
@@ -63,7 +67,8 @@ export default function TimeEntryModal({
 
   async function save() {
     setError('')
-    const combined = new Date(`${dateStr}T${timeStr}:00`)
+    // The entered wall-clock time means the SHOW's timezone, not the browser's.
+    const combined = zonedWallTimeToUtc(dateStr, timeStr, timezone)
 
     const otherPunches = allPunches.filter(p => p.punch_type !== type)
     const chronError = getChronologyError(combined, type, otherPunches)

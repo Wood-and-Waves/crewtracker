@@ -7,8 +7,13 @@ import Chip from '@/components/ui/Chip'
 import { cn } from '@/lib/cn'
 import Link from 'next/link'
 
+// start_date/end_date are Postgres `date` columns, so they arrive as bare
+// 'YYYY-MM-DD'. A date-only string parses as UTC midnight, which renders as the
+// PREVIOUS day anywhere west of Greenwich; appending T00:00:00 makes it local
+// midnight and keeps the calendar date intact. Same pattern as the tracker,
+// reports, PDF and CSV.
 function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default async function DashboardPage({

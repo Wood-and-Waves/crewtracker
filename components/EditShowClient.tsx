@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { localDateStr } from '@/lib/datetime'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
@@ -122,7 +123,8 @@ export default function EditShowClient({
 
     const nextDate = new Date(lastDay.date + 'T00:00:00')
     nextDate.setDate(nextDate.getDate() + 1)
-    const nextDateStr = nextDate.toISOString().slice(0, 10)
+    // Local calendar date, not the UTC one — see localDateStr.
+    const nextDateStr = localDateStr(nextDate)
 
     if (nextDateStr > show.end_date) {
       await supabase.from('shows').update({ end_date: nextDateStr }).eq('id', show.id)

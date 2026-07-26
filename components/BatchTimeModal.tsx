@@ -8,6 +8,7 @@ import {
   isEligibleForBatch,
   ineligibilityReason,
 } from '@/lib/punches'
+import { zonedWallTimeToUtc } from '@/lib/datetime'
 import { cn } from '@/lib/cn'
 import Button from '@/components/ui/Button'
 
@@ -61,7 +62,8 @@ export default function BatchTimeModal({
   }
 
   function confirm() {
-    const when = new Date(`${dateStr}T${timeStr}:00`)
+    // The entered wall-clock time means the SHOW's timezone, not the browser's.
+    const when = zonedWallTimeToUtc(dateStr, timeStr, timezone)
     onConfirm(when, checked)
   }
 
