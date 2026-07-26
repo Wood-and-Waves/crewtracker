@@ -25,6 +25,7 @@ export default function StaffRoomModal({
   open: controlledOpen,
   onOpenChange,
   hideTrigger = false,
+  canEditRates = false,
 }: {
   organizationId: string
   roomId: string
@@ -35,6 +36,11 @@ export default function StaffRoomModal({
   open?: boolean
   onOpenChange?: (open: boolean) => void
   hideTrigger?: boolean
+  /** profiles.can_edit_pay_rates. Without it the rate field is hidden: the
+   *  database drops any rate such a caller submits (see
+   *  scripts/sql/enforce-pay-rate-writes.sql), so offering the field would be
+   *  showing someone a control that silently does nothing. */
+  canEditRates?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -458,25 +464,31 @@ export default function StaffRoomModal({
                             ))}
                             <option value={OTHER} className="bg-surface-2 text-ink">Other…</option>
                           </select>
-                          <input
-                            placeholder="Day rate"
-                            type="number"
-                            value={sel.dayRate}
-                            onChange={e => updateField(member.id, 'dayRate', e.target.value)}
-                            // Locked once the show has a rate for this role: the
-                            // database would override anything typed here, so
-                            // offering the field would be a lie. Changing a show
-                            // rate is a deliberate act, done in Edit Show or the
-                            // room's Edit Crew panel.
-                            readOnly={lockedRate !== null}
-                            title={lockedRate !== null ? 'Set for this show' : undefined}
-                            className={cn(
-                              inputCls, 'w-24 text-xs',
-                              lockedRate !== null && 'text-muted cursor-not-allowed',
-                            )}
-                          />
+                          {/* Hidden entirely without can_edit_pay_rates — the
+                              database drops any rate such a caller sends, so the
+                              field would do nothing. Staffing still works; the
+                              rate comes from the show via the inherit trigger. */}
+                          {canEditRates && (
+                            <input
+                              placeholder="Day rate"
+                              type="number"
+                              value={sel.dayRate}
+                              onChange={e => updateField(member.id, 'dayRate', e.target.value)}
+                              // Locked once the show has a rate for this role: the
+                              // database would override anything typed here, so
+                              // offering the field would be a lie. Changing a show
+                              // rate is a deliberate act, done in Edit Show or the
+                              // room's Edit Crew panel.
+                              readOnly={lockedRate !== null}
+                              title={lockedRate !== null ? 'Set for this show' : undefined}
+                              className={cn(
+                                inputCls, 'w-24 text-xs',
+                                lockedRate !== null && 'text-muted cursor-not-allowed',
+                              )}
+                            />
+                          )}
                         </div>
-                        {lockedRate !== null && (
+                        {canEditRates && lockedRate !== null && (
                           <p className="text-[11px] text-muted">
                             ${Math.round(lockedRate)} is {member.full_name.split(' ')[0]}&rsquo;s rate for
                             this show{sel.role ? ` as ${sel.role}` : ''} — change it in Edit Show.

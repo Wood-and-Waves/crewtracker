@@ -333,6 +333,7 @@ export default function MobileRoomTracker({
           currentWorkDayId={currentWorkDayId}
           remainingRoomIdsSameName={remainingRoomsByName[addCrewRoom.id] || []}
           dayAssignments={dayAssignments}
+          canEditRates={canEditRates}
         />
       )}
     </div>

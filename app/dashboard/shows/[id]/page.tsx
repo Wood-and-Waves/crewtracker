@@ -372,6 +372,7 @@ export default async function ShowDetailPage({
                   currentWorkDayId={activeDay.id}
                   remainingRoomIdsSameName={remainingRoomsByName[room.id] || []}
                   dayAssignments={dayAssignments}
+                  canEditRates={canEditRates}
                 />
               </div>
             </div>
