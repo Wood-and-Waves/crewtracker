@@ -1,6 +1,11 @@
 // Faithful TypeScript port of the CrewTracker iOS PayrollCalculator
 // (Models.swift). Stateless functions, no DB dependency.
 //
+// DIVERGENCE FROM iOS (2026-07-26): a third meal break was added, which iOS
+// does not have. Meal deduction and meal penalties are now driven by
+// MEAL_PAIRS in lib/punches.ts rather than being written out per meal, so both
+// cover three breaks on identical terms. Penalties cap at one per meal slot.
+//
 // NOTE: TravelRate raw values are assumed to be 'halfDay' / 'fullDay' in
 // the Postgres schema (per the web app brief), NOT the iOS raw strings
 // ("Half Day" / "Full Day"). This has not been verified against the actual
@@ -10,6 +15,8 @@
 // nearest 15 / nearest 30) via UserDefaults before computing net hours.
 // The web app has no equivalent setting yet, so calculateNetHours defaults
 // to exact-minute rounding (roundingMinutes = 1) until that setting exists.
+
+import { MEAL_PAIRS } from '@/lib/punches'
 
 export type PunchRecord = { punch_type: string; punched_at: string }
 
@@ -46,14 +53,16 @@ function getPunchTime(punches: PunchRecord[], type: string): Date | null {
   return p ? new Date(p.punched_at) : null
 }
 
+// Completed breaks only, in order. Driven by MEAL_PAIRS so the deduction rules
+// cover every meal automatically — a third break deducts on exactly the same
+// terms as the first two (minimum-break gate, then capped).
 function mealBreakPairs(tc: TimecardLike): [Date, Date][] {
   const pairs: [Date, Date][] = []
-  const m1Out = getPunchTime(tc.punches, 'meal_out')
-  const m1In = getPunchTime(tc.punches, 'meal_in')
-  const m2Out = getPunchTime(tc.punches, 'meal2_out')
-  const m2In = getPunchTime(tc.punches, 'meal2_in')
-  if (m1Out && m1In) pairs.push([m1Out, m1In])
-  if (m2Out && m2In) pairs.push([m2Out, m2In])
+  for (const [outType, inType] of MEAL_PAIRS) {
+    const out = getPunchTime(tc.punches, outType)
+    const back = getPunchTime(tc.punches, inType)
+    if (out && back) pairs.push([out, back])
+  }
   return pairs
 }
 
@@ -208,6 +217,18 @@ export function paidDoubleTimeHours(tc: TimecardLike, allTimecards: TimecardLike
 
 // MARK: Meal Penalties
 
+/**
+ * One penalty per stretch of work longer than the grace period without a break.
+ *
+ * The rule was already a repeating shape — measure from the last time the crew
+ * member was working (Start, or the previous meal's return) to the next time
+ * they stopped (the next meal's departure, or Wrap) — written out twice for two
+ * meals. Expressed as a walk over MEAL_PAIRS it covers any number of breaks, so
+ * three meals allows at most three penalties without a special case.
+ *
+ * A segment only counts once it is bounded: if the crew member is still working
+ * and hasn't wrapped, there's nothing to measure yet.
+ */
 export function mealPenaltyCount(tc: TimecardLike, ruleset: PayrollRuleset): number {
   if (tc.is_travel_day) return 0
   if (!ruleset.meal_penalty_enabled) return 0
@@ -215,27 +236,26 @@ export function mealPenaltyCount(tc: TimecardLike, ruleset: PayrollRuleset): num
   if (!start) return 0
 
   const graceSeconds = ruleset.meal_penalty_grace_period * 3600
-  let penalties = 0
-
-  const m1Out = getPunchTime(tc.punches, 'meal_out')
   const end = getPunchTime(tc.punches, 'end')
+  let penalties = 0
+  let segmentStart: Date | null = start
 
-  if (m1Out) {
-    if ((m1Out.getTime() - start.getTime()) / 1000 > graceSeconds) penalties += 1
-  } else if (end) {
-    if ((end.getTime() - start.getTime()) / 1000 > graceSeconds) penalties += 1
+  for (const [outType, inType] of MEAL_PAIRS) {
+    if (!segmentStart) break
+    const out = getPunchTime(tc.punches, outType)
+    // Closed by this meal if it was taken, otherwise by Wrap.
+    const segmentEnd = out ?? end
+    if (!segmentEnd) return penalties            // still working; nothing to judge
+    if ((segmentEnd.getTime() - segmentStart.getTime()) / 1000 > graceSeconds) penalties += 1
+    if (!out) return penalties                   // Wrap closed it; no later segments
+    // The next stretch begins when they came back.
+    segmentStart = getPunchTime(tc.punches, inType)
   }
 
-  const m1In = getPunchTime(tc.punches, 'meal_in')
-  if (m1In) {
-    const m2Out = getPunchTime(tc.punches, 'meal2_out')
-    if (m2Out) {
-      if ((m2Out.getTime() - m1In.getTime()) / 1000 > graceSeconds) penalties += 1
-    } else if (end) {
-      if ((end.getTime() - m1In.getTime()) / 1000 > graceSeconds) penalties += 1
-    }
-  }
-
+  // No trailing check beyond the loop: with three meal slots, the final stretch
+  // to Wrap is already measured as the segment leading into the meal that was
+  // never taken. Adding one here would allow a fourth penalty on a day that
+  // took all three breaks.
   return penalties
 }
 

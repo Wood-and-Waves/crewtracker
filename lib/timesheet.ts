@@ -21,7 +21,7 @@ import {
   type PayrollRuleset,
   type TimecardLike,
 } from '@/lib/payroll'
-import { formatPunchTime, type Punch, type PunchType } from '@/lib/punches'
+import { formatPunchTime, MEAL_PAIRS, mealLabel, type Punch, type PunchType } from '@/lib/punches'
 
 export type TimesheetEntry = {
   /** The work day's date, 'YYYY-MM-DD'. */
@@ -109,10 +109,8 @@ export function buildTimesheetText({
     // matches what was actually deducted — a 3hr hold with a 60min cap reads
     // "60 min", not "180 min". Pairs are walked explicitly rather than via
     // mealBreakDurations() so an M2-only break can't be mislabelled as M1.
-    for (const [outType, inType, label] of [
-      ['meal_out', 'meal_in', 'M1'],
-      ['meal2_out', 'meal2_in', 'M2'],
-    ] as const) {
+    for (const [index, [outType, inType]] of MEAL_PAIRS.entries()) {
+      const label = mealLabel(index)
       const o = punchAt(tc, outType)
       const i = punchAt(tc, inType)
       if (o && i) {

@@ -17,6 +17,7 @@ import {
   type TimecardLike, type PayrollRuleset,
 } from '@/lib/payroll'
 import { toTimecardLike, workDayFor } from '@/lib/reportCsv'
+import { MEAL_PAIRS, mealLabel } from '@/lib/punches'
 
 const fmt2 = (n: number) => n.toFixed(2)
 
@@ -304,8 +305,14 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
                     doubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
                   const shortTurn = isShortTurnaround(tc, allTimecards, ruleset)
                   const marks = markersFor(rawTc, shortTurn)
-                  const m1 = p('meal_out') && p('meal_in')
-                  const m2 = p('meal2_out') && p('meal2_in')
+                  // Every completed break, labelled by position, so a third one
+                  // appears without this needing another hardcoded pair.
+                  const breaks = MEAL_PAIRS
+                    .map(([outType, inType], i) =>
+                      p(outType) && p(inType)
+                        ? `${mealLabel(i)}: ${timeLabel(p(outType))} - ${timeLabel(p(inType))}`
+                        : null)
+                    .filter(Boolean)
 
                   return (
                     <View key={rawTc.id} style={styles.entryBox}>
@@ -319,11 +326,8 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
                         <Text style={styles.mealText}>{money(Number(rawTc.day_rate) || 0)} / day</Text>
                       ) : null}
                       {marks ? <Text style={styles.markers}>{marks}</Text> : null}
-                      {(m1 || m2) ? (
-                        <Text style={styles.mealText}>
-                          {m1 ? `M1: ${timeLabel(p('meal_out'))} - ${timeLabel(p('meal_in'))}  ` : ''}
-                          {m2 ? `M2: ${timeLabel(p('meal2_out'))} - ${timeLabel(p('meal2_in'))}` : ''}
-                        </Text>
+                      {breaks.length > 0 ? (
+                        <Text style={styles.mealText}>{breaks.join('   ')}</Text>
                       ) : null}
                     </View>
                   )

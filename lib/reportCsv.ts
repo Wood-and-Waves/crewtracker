@@ -34,9 +34,13 @@ const fmt2 = (n: number) => n.toFixed(2)
 // what rate" looks for it. Note this shifts every column after Role by one
 // relative to the iOS export, which has no rate column — the recipient
 // previously had to divide pay by hours to recover it.
+// Meal 3 columns are permanent rather than conditional: a stable column layout
+// means whoever imports this file never has to cope with the shape changing
+// between shows. They sit empty on the vast majority of days.
 export const CSV_HEADER =
   'Name,Role,Day Rate,Date,Room,Travel Day,Travel In,Travel Out,Half Day,Start Time,' +
-  'Meal 1 Out,Meal 1 In,Meal 2 Out,Meal 2 In,Wrap Time,ST Hours,OT Hours,DT Hours,' +
+  'Meal 1 Out,Meal 1 In,Meal 2 Out,Meal 2 In,Meal 3 Out,Meal 3 In,Wrap Time,' +
+  'ST Hours,OT Hours,DT Hours,' +
   'ST Paid,OT Paid,DT Paid,Meal Penalties,Meal Penalty Total,Short Turnaround,Travel Pay,Total Pay'
 
 /** Shapes a raw timecard row into what the payroll functions expect. */
@@ -136,6 +140,8 @@ export function buildReportCsv({
       csvField(timeLabel(p('meal_in'))),
       csvField(timeLabel(p('meal2_out'))),
       csvField(timeLabel(p('meal2_in'))),
+      csvField(timeLabel(p('meal3_out'))),
+      csvField(timeLabel(p('meal3_in'))),
       csvField(timeLabel(p('end'))),
       csvField(fmt2(st)),
       csvField(fmt2(ot)),
@@ -156,7 +162,9 @@ export function buildReportCsv({
     csvField('TOTALS'), csvField(''), csvField(''), csvField(''), csvField(''),
     csvField(String(travelDayCount)), csvField(String(travelInCount)),
     csvField(String(travelOutCount)), csvField(String(halfDayCount)),
+    // Start, M1 Out/In, M2 Out/In, M3 Out/In, Wrap — no meaningful total for a time.
     csvField(''), csvField(''), csvField(''), csvField(''), csvField(''), csvField(''),
+    csvField(''), csvField(''),
     csvField(fmt2(totalST)), csvField(fmt2(totalOT)), csvField(fmt2(totalDT)),
     csvField(fmt2(totalPaidST)), csvField(fmt2(totalPaidOT)), csvField(fmt2(totalPaidDT)),
     csvField(String(totalMealPenaltyCount)), csvField(showFinancials ? fmt2(totalMealPenalty) : ''),

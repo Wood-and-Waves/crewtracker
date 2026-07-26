@@ -1,4 +1,10 @@
-export const PUNCH_ORDER = ['start', 'meal_out', 'meal_in', 'meal2_out', 'meal2_in', 'end'] as const
+export const PUNCH_ORDER = [
+  'start',
+  'meal_out', 'meal_in',
+  'meal2_out', 'meal2_in',
+  'meal3_out', 'meal3_in',
+  'end',
+] as const
 export type PunchType = typeof PUNCH_ORDER[number]
 
 export const PUNCH_LABELS: Record<PunchType, string> = {
@@ -7,7 +13,57 @@ export const PUNCH_LABELS: Record<PunchType, string> = {
   meal_in: 'M1 In',
   meal2_out: 'M2 Out',
   meal2_in: 'M2 In',
+  meal3_out: 'M3 Out',
+  meal3_in: 'M3 In',
   end: 'Wrap',
+}
+
+/**
+ * Meal breaks in order, as [out, in] pairs.
+ *
+ * The single place that knows how many meals exist. Payroll deduction, meal
+ * penalties, the tracker columns, the CSV, the PDF and the crew timesheet all
+ * derive from this — adding a fourth meal should mean adding a row here and to
+ * PUNCH_ORDER/PUNCH_LABELS, and nothing else.
+ */
+export const MEAL_PAIRS: readonly (readonly [PunchType, PunchType])[] = [
+  ['meal_out', 'meal_in'],
+  ['meal2_out', 'meal2_in'],
+  ['meal3_out', 'meal3_in'],
+] as const
+
+/** Short label for a meal break by index: 0 -> "M1". */
+export const mealLabel = (index: number) => `M${index + 1}`
+
+/**
+ * The punch columns to render when `mealCount` meals are visible.
+ * Start, then that many meal pairs, then Wrap.
+ */
+export function visiblePunchTypes(mealCount: number): PunchType[] {
+  const meals = MEAL_PAIRS.slice(0, Math.max(1, Math.min(mealCount, MEAL_PAIRS.length)))
+  return ['start', ...meals.flatMap(pair => [...pair]), 'end']
+}
+
+/**
+ * How many meal breaks to SHOW for a set of timecards.
+ *
+ * A third meal is rare, so the columns for one shouldn't sit empty on every
+ * show. A meal is revealed once the previous one has been taken — the count is
+ * computed across a whole room rather than per person, because the tracker is a
+ * ruled grid: per-person visibility would give each row a different number of
+ * columns and the table would stop lining up.
+ *
+ * Always at least one meal, so there's somewhere to punch the first break.
+ */
+export function visibleMealCount(punchSets: Punch[][]): number {
+  let visible = 1
+  for (let i = 0; i < MEAL_PAIRS.length - 1; i++) {
+    const [outType] = MEAL_PAIRS[i]
+    // Reveal the next meal once anyone has started this one.
+    const anyStartedThis = punchSets.some(ps => ps.some(p => p.punch_type === outType))
+    if (anyStartedThis) visible = i + 2
+  }
+  return Math.min(visible, MEAL_PAIRS.length)
 }
 
 export type Punch = { id: string; punch_type: PunchType; punched_at: string }
@@ -38,48 +94,36 @@ function getPunch(punches: Punch[], type: PunchType): Date | null {
   return p ? new Date(p.punched_at) : null
 }
 
-// Faithful port of iOS TimeEntrySheetView.getChronologyError(for:type:card:).
-// Validates a proposed punch time against the OTHER punches already on this
-// timecard, ensuring they stay in chronological order.
+/**
+ * Validates a proposed punch time against the other punches on this timecard.
+ *
+ * Derived from PUNCH_ORDER rather than written out per type. The old version
+ * was a switch listing the specific neighbours to compare against, which had to
+ * grow for every new meal and quietly missed cases: `meal_in`, for instance,
+ * only checked M1 Out and M2 Out, so an M1 In set before Start passed whenever
+ * M1 Out happened to be missing. Comparing against *every* punch on either side
+ * closes those gaps and needs no changes when a meal is added.
+ *
+ * Walks outward from the punch's own position so the message names the nearest
+ * conflict, which is the one a PM can act on.
+ */
 export function getChronologyError(time: Date, type: PunchType, punches: Punch[]): string | null {
-  const start = getPunch(punches, 'start')
-  const mealOut = getPunch(punches, 'meal_out')
-  const mealIn = getPunch(punches, 'meal_in')
-  const meal2Out = getPunch(punches, 'meal2_out')
-  const meal2In = getPunch(punches, 'meal2_in')
-  const end = getPunch(punches, 'end')
+  const idx = PUNCH_ORDER.indexOf(type)
 
-  switch (type) {
-    case 'start':
-      if (mealOut && time >= mealOut) return 'Start time must be before M1 Out.'
-      if (end && time >= end) return 'Start time must be before Wrap time.'
-      break
-    case 'meal_out':
-      if (start && time <= start) return 'M1 Out must be after Start time.'
-      if (mealIn && time >= mealIn) return 'M1 Out must be before M1 In.'
-      if (end && time >= end) return 'M1 Out must be before Wrap time.'
-      break
-    case 'meal_in':
-      if (mealOut && time <= mealOut) return 'M1 In must be after M1 Out.'
-      if (meal2Out && time >= meal2Out) return 'M1 In must be before M2 Out.'
-      if (end && time >= end) return 'M1 In must be before Wrap time.'
-      break
-    case 'meal2_out':
-      if (mealIn && time <= mealIn) return 'M2 Out must be after M1 In.'
-      if (meal2In && time >= meal2In) return 'M2 Out must be before M2 In.'
-      if (end && time >= end) return 'M2 Out must be before Wrap time.'
-      break
-    case 'meal2_in':
-      if (meal2Out && time <= meal2Out) return 'M2 In must be after M2 Out.'
-      if (end && time >= end) return 'M2 In must be before Wrap time.'
-      break
-    case 'end':
-      if (meal2In && time <= meal2In) return 'Wrap time must be after M2 In.'
-      if (meal2Out && !meal2In && time <= meal2Out) return 'Wrap time must be after M2 Out.'
-      if (mealIn && !meal2Out && time <= mealIn) return 'Wrap time must be after M1 In.'
-      if (start && time <= start) return 'Wrap time must be after Start time.'
-      break
+  for (let i = idx - 1; i >= 0; i--) {
+    const earlier = getPunch(punches, PUNCH_ORDER[i])
+    if (earlier && time <= earlier) {
+      return `${PUNCH_LABELS[type]} must be after ${PUNCH_LABELS[PUNCH_ORDER[i]]}.`
+    }
   }
+
+  for (let i = idx + 1; i < PUNCH_ORDER.length; i++) {
+    const later = getPunch(punches, PUNCH_ORDER[i])
+    if (later && time >= later) {
+      return `${PUNCH_LABELS[type]} must be before ${PUNCH_LABELS[PUNCH_ORDER[i]]}.`
+    }
+  }
+
   return null
 }
 
@@ -103,19 +147,20 @@ function has(punches: Punch[], type: PunchType): boolean {
   return punches.some(p => p.punch_type === type)
 }
 
-// Should this crew member RECEIVE a batch punch of `type`? Requires the
-// prior punch in the sequence to exist, this punch to be absent, and (for
-// meal punches) the day not yet wrapped. Travel-day crew are never eligible.
+// Should this crew member RECEIVE a batch punch of `type`? Requires the prior
+// punch in the sequence to exist, this punch to be absent, and (for meal
+// punches) the day not yet wrapped. Travel-day crew are never eligible.
+//
+// Derived from PUNCH_ORDER, so a new meal needs no case added here.
 export function isEligibleForBatch(punches: Punch[], isTravelDay: boolean, type: PunchType): boolean {
   if (isTravelDay) return false
-  switch (type) {
-    case 'start': return !has(punches, 'start')
-    case 'meal_out': return has(punches, 'start') && !has(punches, 'meal_out') && !has(punches, 'end')
-    case 'meal_in': return has(punches, 'meal_out') && !has(punches, 'meal_in') && !has(punches, 'end')
-    case 'meal2_out': return has(punches, 'meal_in') && !has(punches, 'meal2_out') && !has(punches, 'end')
-    case 'meal2_in': return has(punches, 'meal2_out') && !has(punches, 'meal2_in') && !has(punches, 'end')
-    case 'end': return has(punches, 'start') && !has(punches, 'end')
-  }
+  if (has(punches, type)) return false          // already punched
+  if (type === 'start') return true
+  if (type === 'end') return has(punches, 'start')
+  // Meal punches: the previous punch must exist and the day must be open.
+  if (has(punches, 'end')) return false
+  const previous = PUNCH_ORDER[PUNCH_ORDER.indexOf(type) - 1]
+  return has(punches, previous)
 }
 
 // A batch button is "active" (highlighted) if at least one crew member in
@@ -128,35 +173,23 @@ export function canApplyBatch(timecards: BatchTimecard[], type: PunchType): bool
 // summary. Only meaningful for crew who did NOT receive the punch.
 export function ineligibilityReason(punches: Punch[], isTravelDay: boolean, type: PunchType): string {
   if (isTravelDay) return 'Travel Day'
-  switch (type) {
-    case 'start':
-      if (has(punches, 'start')) return 'Already Started'
-      break
-    case 'meal_out':
-      if (!has(punches, 'start')) return 'Not Started Yet'
-      if (has(punches, 'end')) return 'Already Wrapped'
-      if (has(punches, 'meal_out')) return 'Already Punched'
-      break
-    case 'meal_in':
-      if (!has(punches, 'meal_out')) return 'M1 Out Not Set'
-      if (has(punches, 'end')) return 'Already Wrapped'
-      if (has(punches, 'meal_in')) return 'Already Punched'
-      break
-    case 'meal2_out':
-      if (!has(punches, 'meal_in')) return 'M1 In Not Set'
-      if (has(punches, 'end')) return 'Already Wrapped'
-      if (has(punches, 'meal2_out')) return 'Already Punched'
-      break
-    case 'meal2_in':
-      if (!has(punches, 'meal2_out')) return 'M2 Out Not Set'
-      if (has(punches, 'end')) return 'Already Wrapped'
-      if (has(punches, 'meal2_in')) return 'Already Punched'
-      break
-    case 'end':
-      if (!has(punches, 'start')) return 'Not Started Yet'
-      if (has(punches, 'end')) return 'Already Wrapped'
-      break
+
+  if (type === 'start') {
+    return has(punches, 'start') ? 'Already Started' : 'Excluded'
   }
+  if (type === 'end') {
+    if (!has(punches, 'start')) return 'Not Started Yet'
+    if (has(punches, 'end')) return 'Already Wrapped'
+    return 'Excluded'
+  }
+
+  // Meal punches, in the order the checks should fire.
+  const previous = PUNCH_ORDER[PUNCH_ORDER.indexOf(type) - 1]
+  if (!has(punches, previous)) {
+    return previous === 'start' ? 'Not Started Yet' : `${PUNCH_LABELS[previous]} Not Set`
+  }
+  if (has(punches, 'end')) return 'Already Wrapped'
+  if (has(punches, type)) return 'Already Punched'
   return 'Excluded'
 }
 

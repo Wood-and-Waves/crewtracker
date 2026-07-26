@@ -10,9 +10,9 @@ import CopyCrewButton from '@/components/CopyCrewButton'
 import AddDayButton from '@/components/AddDayButton'
 import UnlockShowButton from '@/components/UnlockShowButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
-import { PUNCH_ORDER, PUNCH_LABELS, isWrapped } from '@/lib/punches'
+import { PUNCH_LABELS, isWrapped, visibleMealCount, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
-import { PUNCH_GRID_COLS } from '@/lib/trackerLayout'
+import { punchGridCols } from '@/lib/trackerLayout'
 import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
@@ -311,6 +311,10 @@ export default async function ShowDetailPage({
       <div className="hidden lg:grid min-w-0 grid-cols-1 2xl:grid-cols-2 gap-4">
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
+          // Meal columns are revealed progressively and per ROOM: a third break
+          // is rare, so its columns shouldn't sit empty on every show, and the
+          // count has to be room-wide or the ruled rows stop lining up.
+          const mealCount = visibleMealCount(crew.map(tc => tc.punches))
           return (
             <div key={room.id} className="rounded-card border border-line bg-surface">
               <div className="flex items-center justify-between p-4 border-b border-line">
@@ -324,9 +328,9 @@ export default async function ShowDetailPage({
                   to head; hidden on mobile where TimecardRow renders labeled
                   cards instead. Must stay in sync with TimecardRow's grid. */}
               {crew.length > 0 && (
-                <div className={cn('hidden lg:grid gap-3 px-4 pt-3 pb-1', PUNCH_GRID_COLS)}>
+                <div className={cn('hidden lg:grid gap-3 px-4 pt-3 pb-1', punchGridCols(mealCount))}>
                   <div className="text-[10px] font-bold uppercase tracking-wide text-muted">Crew</div>
-                  {PUNCH_ORDER.map(type => (
+                  {visiblePunchTypes(mealCount).map(type => (
                     <div key={type} className="text-[10px] font-bold uppercase tracking-wide text-muted text-center">
                       {PUNCH_LABELS[type]}
                     </div>
@@ -360,6 +364,7 @@ export default async function ShowDetailPage({
                     dayDate={activeDay.date}
                     use24Hour={profile?.use_24_hour_time || false}
                     roundingMinutes={roundingMinutes}
+                    mealCount={mealCount}
                   />
                 ))}
               </div>
