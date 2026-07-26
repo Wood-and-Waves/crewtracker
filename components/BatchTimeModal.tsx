@@ -31,8 +31,13 @@ export default function BatchTimeModal({
   dayDate: string
   timezone: string
   onCancel: () => void
-  onConfirm: (when: Date, checkedIds: Set<string>) => void
+  onConfirm: (when: Date, checkedIds: Set<string>, markTravel: boolean) => void
 }) {
+  // A travel day is usually a whole-room event — everyone flies in together.
+  // iOS offers this on the Start sheet in both single and batch mode; without it
+  // marking a room meant opening one modal per person. Start only, like iOS.
+  const canMarkTravel = type === 'start'
+  const [markTravel, setMarkTravel] = useState(false)
   // Default the time to the current wall-clock time in the show's timezone
   // (live punching), keeping the DATE on the show-day being viewed — never the
   // browser's real "today". Mirrors TimeEntryModal.
@@ -64,7 +69,7 @@ export default function BatchTimeModal({
   function confirm() {
     // The entered wall-clock time means the SHOW's timezone, not the browser's.
     const when = zonedWallTimeToUtc(dateStr, timeStr, timezone)
-    onConfirm(when, checked)
+    onConfirm(when, checked, canMarkTravel && markTravel)
   }
 
   return (
@@ -75,22 +80,39 @@ export default function BatchTimeModal({
           <p className="text-xs text-muted mb-4">
             {mode === 'change'
               ? 'Update the time for everyone who already has this punch.'
-              : 'Set the time and choose who gets this punch.'}
+              : markTravel
+                ? 'Marks the checked crew as a travel day. No punches are recorded.'
+                : 'Set the time and choose who gets this punch.'}
           </p>
-          <div className="flex gap-3">
-            <input
-              type="date"
-              value={dateStr}
-              onChange={e => setDateStr(e.target.value)}
-              className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-            />
-            <input
-              type="time"
-              value={timeStr}
-              onChange={e => setTimeStr(e.target.value)}
-              className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-            />
-          </div>
+
+          {canMarkTravel && (
+            <label className="flex items-center gap-2 text-sm text-ink mb-4 pb-4 border-b border-line cursor-pointer">
+              <input
+                type="checkbox"
+                checked={markTravel}
+                onChange={e => setMarkTravel(e.target.checked)}
+                className="h-4 w-4 rounded accent-accent"
+              />
+              Mark as Travel Day
+            </label>
+          )}
+
+          {!markTravel && (
+            <div className="flex gap-3">
+              <input
+                type="date"
+                value={dateStr}
+                onChange={e => setDateStr(e.target.value)}
+                className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+              />
+              <input
+                type="time"
+                value={timeStr}
+                onChange={e => setTimeStr(e.target.value)}
+                className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+              />
+            </div>
+          )}
         </div>
 
         <div className="overflow-y-auto px-6 border-t border-line divide-y divide-line">
@@ -126,7 +148,7 @@ export default function BatchTimeModal({
         <div className="flex gap-3 p-6 pt-4 border-t border-line">
           <Button variant="ghost" className="flex-1 py-3" onClick={onCancel}>Cancel</Button>
           <Button className="flex-1 py-3" onClick={confirm} disabled={checked.size === 0}>
-            Apply to {checked.size}
+            {markTravel ? `Travel Day for ${checked.size}` : `Apply to ${checked.size}`}
           </Button>
         </div>
       </div>

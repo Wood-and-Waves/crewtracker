@@ -53,7 +53,29 @@ export default function BatchPunchBar({
     }
   }
 
-  async function applyPicked(type: PunchType, when: Date, checkedIds: Set<string>) {
+  async function applyPicked(type: PunchType, when: Date, checkedIds: Set<string>, markTravel = false) {
+    // Travel day is a state, not a punch: flag the checked crew and record no
+    // times. Chronology validation doesn't apply, so it bypasses planBatchApply.
+    if (markTravel) {
+      const ids = [...checkedIds]
+      setBusy(true)
+      const { error } = await supabase.from('timecards').update({ is_travel_day: true }).in('id', ids)
+      setBusy(false)
+
+      const applied = timecards.filter(t => checkedIds.has(t.id)).map(t => ({ id: t.id, name: t.crew_member_name }))
+      const skipped = timecards
+        .filter(t => !checkedIds.has(t.id))
+        .map(t => ({ name: t.crew_member_name, reason: 'Excluded' }))
+
+      setOverlay(
+        error
+          ? { kind: 'warning', type }
+          : { kind: 'summary', type, plan: { applied, skipped } }
+      )
+      router.refresh()
+      return
+    }
+
     const plan = planBatchApply(timecards, type, when, checkedIds)
     setBusy(true)
 
@@ -121,7 +143,7 @@ export default function BatchPunchBar({
           dayDate={dayDate}
           timezone={timezone}
           onCancel={() => setOverlay({ kind: 'none' })}
-          onConfirm={(when, checkedIds) => applyPicked(overlay.type, when, checkedIds)}
+          onConfirm={(when, checkedIds, markTravel) => applyPicked(overlay.type, when, checkedIds, markTravel)}
         />
       )}
 

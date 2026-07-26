@@ -31,6 +31,8 @@ export default function TimecardRow({
   const router = useRouter()
   const supabase = createClient()
   const [editingType, setEditingType] = useState<PunchType | null>(null)
+  const [rowError, setRowError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const next = nextPunchType(punches)
   const wrapped = isWrapped(punches)
@@ -61,12 +63,65 @@ export default function TimecardRow({
     wrapped &&
     calculateNetHours(timecardInput, ruleset, roundingMinutes) <= 5
 
+  // Anything to clear? Drives whether the reset control is offered at all.
+  const hasAnything =
+    punches.length > 0 ||
+    timecard.is_travel_day ||
+    timecard.travel_in_day ||
+    timecard.travel_out_day ||
+    timecard.pay_as_half_day
+
   async function toggleFlag(field: 'travel_in_day' | 'travel_out_day' | 'pay_as_half_day') {
+    setRowError('')
     const { error } = await supabase
       .from('timecards')
       .update({ [field]: !timecard[field] })
       .eq('id', timecard.id)
-    if (!error) router.refresh()
+    if (error) {
+      setRowError(error.message)
+      return
+    }
+    router.refresh()
+  }
+
+  // Wipes this person's day: all six punches plus the travel and half-day
+  // flags — the same set iOS's resetPunches clears.
+  async function resetRow() {
+    const n = punches.length
+    const punchPart = n > 0 ? `${n} punch${n === 1 ? '' : 'es'}` : 'no punches'
+    if (!confirm(
+      `Reset ${timecard.crew_member_name}'s day?\n\n` +
+      `Deletes ${punchPart} and clears the travel and half-day flags. This can't be undone.`
+    )) return
+
+    setBusy(true)
+    setRowError('')
+
+    if (n > 0) {
+      const { error } = await supabase.from('punches').delete().eq('timecard_id', timecard.id)
+      if (error) {
+        setBusy(false)
+        setRowError(error.message)
+        return
+      }
+    }
+
+    const { error } = await supabase
+      .from('timecards')
+      .update({
+        is_travel_day: false,
+        travel_in_day: false,
+        travel_out_day: false,
+        pay_as_half_day: false,
+      })
+      .eq('id', timecard.id)
+
+    setBusy(false)
+    if (error) {
+      setRowError(error.message)
+      return
+    }
+    router.refresh()
   }
 
   function isDisabled(type: PunchType): boolean {
@@ -180,7 +235,20 @@ export default function TimecardRow({
             ◑ Half Day
           </button>
         )}
+        {hasAnything && (
+          <button
+            onClick={resetRow}
+            disabled={busy}
+            title={`Reset ${timecard.crew_member_name}'s day — clears all punches and flags`}
+            aria-label={`Reset ${timecard.crew_member_name}'s day`}
+            className="ml-auto rounded-pill px-3 py-1 text-xs text-muted transition-colors hover:text-danger disabled:opacity-40"
+          >
+            ↺ Reset
+          </button>
+        )}
       </div>
+
+      {rowError && <p className="px-4 pb-3 text-xs text-danger">{rowError}</p>}
 
       {editingType && (
         <TimeEntryModal

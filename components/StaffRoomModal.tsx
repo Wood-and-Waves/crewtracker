@@ -3,10 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/cn'
 import Button from '@/components/ui/Button'
 
 type CrewMember = { id: string; full_name: string }
 type RateCard = { crew_member_id: string; role: string; day_rate: number }
+type Sel = { role: string; dayRate: string; other: boolean }
+
+const OTHER = '__other__'
 
 const inputCls =
   'rounded-field bg-surface-2 border border-line px-3 py-2 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
@@ -42,7 +46,9 @@ export default function StaffRoomModal({
   }
   const [crew, setCrew] = useState<CrewMember[]>([])
   const [rateCards, setRateCards] = useState<RateCard[]>([])
-  const [selected, setSelected] = useState<Record<string, { role: string; dayRate: string }>>({})
+  const [roles, setRoles] = useState<string[]>([])
+  // `other` puts the role field into free-text mode for a one-off title.
+  const [selected, setSelected] = useState<Record<string, Sel>>({})
   const [applyAll, setApplyAll] = useState(true)
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -72,13 +78,32 @@ export default function StaffRoomModal({
         .order('full_name')
       setCrew(crewData || [])
 
+      // Ordered so the pre-filled rate is deterministic. Unordered, `.find()`
+      // returned an arbitrary card, so anyone holding a $0 placeholder rate
+      // alongside a real one could silently be staffed at $0.
       const { data: rateData } = await supabase
         .from('rate_cards')
         .select('crew_member_id, role, day_rate')
+        .order('role')
       setRateCards(rateData || [])
+
+      // The org's curated job titles — the same list the directory and the
+      // room's Edit Crew panel use. Staffing used to bypass it entirely with a
+      // free-text field, so "A1", "a1" and "A-1" became distinct roles and
+      // split one person into separate rows in By Crew.
+      const { data: roleData } = await supabase
+        .from('av_roles')
+        .select('name')
+        .eq('organization_id', organizationId)
+        .order('sort_order')
+      setRoles((roleData || []).map(r => r.name))
     }
     load()
-  }, [open])
+  }, [open, organizationId])
+
+  function cardsFor(id: string) {
+    return rateCards.filter(rc => rc.crew_member_id === id)
+  }
 
   function toggleCrew(id: string) {
     setSelected(prev => {
@@ -86,10 +111,11 @@ export default function StaffRoomModal({
       if (next[id]) {
         delete next[id]
       } else {
-        const existingRate = rateCards.find(rc => rc.crew_member_id === id)
+        const first = cardsFor(id)[0]
         next[id] = {
-          role: existingRate?.role || '',
-          dayRate: existingRate ? String(existingRate.day_rate) : '',
+          role: first?.role || '',
+          dayRate: first ? String(first.day_rate) : '',
+          other: false,
         }
       }
       return next
@@ -98,6 +124,31 @@ export default function StaffRoomModal({
 
   function updateField(id: string, field: 'role' | 'dayRate', value: string) {
     setSelected(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  function chooseRole(id: string, value: string) {
+    setSelected(prev => {
+      const cur = prev[id]
+      if (value === OTHER) return { ...prev, [id]: { ...cur, other: true, role: '' } }
+      // Picking a role the person has a saved rate for brings the rate with it.
+      const card = cardsFor(id).find(c => c.role === value)
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          other: false,
+          role: value,
+          dayRate: card ? String(card.day_rate) : cur.dayRate,
+        },
+      }
+    })
+  }
+
+  function applyCard(id: string, card: RateCard) {
+    setSelected(prev => ({
+      ...prev,
+      [id]: { role: card.role, dayRate: String(card.day_rate), other: false },
+    }))
   }
 
   async function addCrewMember() {
@@ -297,23 +348,71 @@ export default function StaffRoomModal({
                       <span className="ml-auto text-xs text-ot">Also in {elsewhere.join(', ')}</span>
                     )}
                   </label>
-                  {isSelected && !alreadyHere && (
-                    <div className="mt-2 flex gap-2 pl-7">
-                      <input
-                        placeholder="Role"
-                        value={selected[member.id].role}
-                        onChange={e => updateField(member.id, 'role', e.target.value)}
-                        className={`${inputCls} flex-1 text-xs`}
-                      />
-                      <input
-                        placeholder="Day rate"
-                        type="number"
-                        value={selected[member.id].dayRate}
-                        onChange={e => updateField(member.id, 'dayRate', e.target.value)}
-                        className={`${inputCls} w-28 text-xs`}
-                      />
-                    </div>
-                  )}
+                  {isSelected && !alreadyHere && (() => {
+                    const sel = selected[member.id]
+                    const cards = cardsFor(member.id)
+                    // Keep a saved role that isn't in the org list selectable.
+                    const roleOptions = [...new Set([
+                      ...(sel.role && !sel.other ? [sel.role] : []),
+                      ...roles,
+                    ])]
+                    return (
+                      <div className="mt-2 pl-7 flex flex-col gap-2">
+                        {cards.length > 1 && (
+                          <div className="flex flex-wrap gap-1">
+                            <span className="text-[10px] uppercase tracking-wide text-muted self-center mr-1">Saved</span>
+                            {cards.map(cd => {
+                              const active = !sel.other && sel.role === cd.role && sel.dayRate === String(cd.day_rate)
+                              return (
+                                <button
+                                  key={cd.role}
+                                  onClick={() => applyCard(member.id, cd)}
+                                  className={cn(
+                                    'rounded-pill px-2 py-0.5 text-[11px] transition-colors',
+                                    active ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted hover:text-ink',
+                                  )}
+                                >
+                                  {cd.role} · ${Math.round(cd.day_rate)}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <select
+                            key={roleOptions.join(',')}
+                            value={sel.other ? OTHER : sel.role}
+                            onChange={e => chooseRole(member.id, e.target.value)}
+                            className={`${inputCls} flex-1 text-xs`}
+                          >
+                            {!sel.role && !sel.other && (
+                              <option value="" className="bg-surface-2 text-ink">Select a role…</option>
+                            )}
+                            {roleOptions.map(r => (
+                              <option key={r} value={r} className="bg-surface-2 text-ink">{r}</option>
+                            ))}
+                            <option value={OTHER} className="bg-surface-2 text-ink">Other…</option>
+                          </select>
+                          <input
+                            placeholder="Day rate"
+                            type="number"
+                            value={sel.dayRate}
+                            onChange={e => updateField(member.id, 'dayRate', e.target.value)}
+                            className={`${inputCls} w-24 text-xs`}
+                          />
+                        </div>
+                        {sel.other && (
+                          <input
+                            autoFocus
+                            placeholder="Custom role title"
+                            value={sel.role}
+                            onChange={e => updateField(member.id, 'role', e.target.value)}
+                            className={`${inputCls} text-xs`}
+                          />
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}
