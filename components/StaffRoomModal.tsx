@@ -17,6 +17,7 @@ export default function StaffRoomModal({
   roomName,
   currentWorkDayId,
   remainingRoomIdsSameName,
+  dayAssignments = [],
   open: controlledOpen,
   onOpenChange,
   hideTrigger = false,
@@ -26,6 +27,7 @@ export default function StaffRoomModal({
   roomName: string
   currentWorkDayId: string
   remainingRoomIdsSameName: string[]
+  dayAssignments?: { crewMemberId: string; roomId: string; roomName: string }[]
   open?: boolean
   onOpenChange?: (open: boolean) => void
   hideTrigger?: boolean
@@ -45,6 +47,18 @@ export default function StaffRoomModal({
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Names of selected crew already staffed in OTHER rooms today, awaiting a
+  // confirm before we also add them here.
+  const [pendingCrossRoom, setPendingCrossRoom] = useState<string[] | null>(null)
+
+  function inThisRoom(memberId: string) {
+    return dayAssignments.some(a => a.crewMemberId === memberId && a.roomId === roomId)
+  }
+  function otherRoomsFor(memberId: string) {
+    return [...new Set(
+      dayAssignments.filter(a => a.crewMemberId === memberId && a.roomId !== roomId).map(a => a.roomName)
+    )]
+  }
 
   useEffect(() => {
     if (!open) return
@@ -101,7 +115,26 @@ export default function StaffRoomModal({
     setNewName('')
   }
 
-  async function submit() {
+  function submit() {
+    setError('')
+    const selectedIds = Object.keys(selected).filter(id => !inThisRoom(id))
+    if (selectedIds.length === 0) {
+      setError('Select at least one crew member')
+      return
+    }
+    // If any selected crew are already in another room today, confirm first.
+    const crossRoom = selectedIds
+      .filter(id => otherRoomsFor(id).length > 0)
+      .map(id => crew.find(c => c.id === id)?.full_name || 'Someone')
+    if (crossRoom.length > 0) {
+      setPendingCrossRoom(crossRoom)
+      return
+    }
+    doInsert()
+  }
+
+  async function doInsert() {
+    setPendingCrossRoom(null)
     setError('')
     setLoading(true)
 
@@ -110,6 +143,7 @@ export default function StaffRoomModal({
     const rateCardUpserts: any[] = []
 
     for (const [crewId, info] of Object.entries(selected)) {
+      if (inThisRoom(crewId)) continue // never re-add to the same room
       const member = crew.find(c => c.id === crewId)
       if (!member) continue
       const dayRate = parseFloat(info.dayRate) || 0
@@ -193,18 +227,25 @@ export default function StaffRoomModal({
             )}
             {crew.map(member => {
               const isSelected = !!selected[member.id]
+              const alreadyHere = inThisRoom(member.id)
+              const elsewhere = otherRoomsFor(member.id)
               return (
                 <div key={member.id} className="rounded-field bg-surface-2 p-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  <label className={`flex items-center gap-3 ${alreadyHere ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                     <input
                       type="checkbox"
                       checked={isSelected}
+                      disabled={alreadyHere}
                       onChange={() => toggleCrew(member.id)}
                       className="h-4 w-4 rounded accent-accent"
                     />
                     <span className="text-sm text-ink">{member.full_name}</span>
+                    {alreadyHere && <span className="ml-auto text-xs text-muted">Already in this room</span>}
+                    {!alreadyHere && elsewhere.length > 0 && (
+                      <span className="ml-auto text-xs text-ot">Also in {elsewhere.join(', ')}</span>
+                    )}
                   </label>
-                  {isSelected && (
+                  {isSelected && !alreadyHere && (
                     <div className="mt-2 flex gap-2 pl-7">
                       <input
                         placeholder="Role"
@@ -247,6 +288,21 @@ export default function StaffRoomModal({
             </Button>
           </div>
         </div>
+
+        {pendingCrossRoom && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-card bg-black/60 p-4">
+            <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+              <h3 className="text-lg font-bold text-ink mb-2">Already staffed elsewhere</h3>
+              <p className="text-sm text-muted mb-5">
+                {pendingCrossRoom.join(', ')} {pendingCrossRoom.length === 1 ? 'is' : 'are'} already in another room today. Add to {roomName} as well?
+              </p>
+              <div className="flex gap-3">
+                <Button variant="ghost" className="flex-1 py-3" onClick={() => setPendingCrossRoom(null)}>Cancel</Button>
+                <Button className="flex-1 py-3" onClick={doInsert} disabled={loading}>Add to {roomName}</Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -82,7 +82,7 @@ export default function TimecardRow({
           'rounded-[5px] h-12 lg:h-auto lg:aspect-[2/1] px-2 py-1 lg:px-1 lg:py-2 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
           'flex flex-col items-center justify-center gap-0.5 lg:gap-0',
           done && 'bg-surface-2 text-ink hover:opacity-90',
-          !done && !disabled && 'bg-accent/25 text-accent font-bold hover:opacity-90',
+          !done && !disabled && 'bg-accent/25 text-ink font-bold hover:opacity-90',
           disabled && 'bg-surface-3 text-muted cursor-not-allowed',
         )}
       >

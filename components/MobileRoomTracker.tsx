@@ -36,6 +36,9 @@ export default function MobileRoomTracker({
   currentWorkDayId,
   remainingWorkDayIds,
   remainingRoomsByName,
+  dayAssignments,
+  canViewRates,
+  canEditRates,
 }: {
   className?: string
   showId: string
@@ -61,6 +64,9 @@ export default function MobileRoomTracker({
   currentWorkDayId: string
   remainingWorkDayIds: string[]
   remainingRoomsByName: Record<string, string[]>
+  dayAssignments: { crewMemberId: string; roomId: string; roomName: string }[]
+  canViewRates: boolean
+  canEditRates: boolean
 }) {
   const [selected, setSelected] = useState<'all' | string>('all')
   const [addCrewOpen, setAddCrewOpen] = useState(false)
@@ -223,7 +229,7 @@ export default function MobileRoomTracker({
               <div key={room.id} className="rounded-card border border-line bg-surface overflow-hidden">
                 <div className="flex items-center justify-between p-4 border-b border-line">
                   <h2 className="text-lg font-bold text-ink">{room.name}</h2>
-                  <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} />
+                  <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }))} canViewRates={canViewRates} canEditRates={canEditRates} />
                 </div>
                 <div>
                   {crew.length === 0 && <p className="text-sm text-muted p-4">No crew staffed yet.</p>}
@@ -240,7 +246,7 @@ export default function MobileRoomTracker({
             <div className="rounded-card border border-line bg-surface overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{activeRoom!.name}</h2>
-                <RoomActionsMenu roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} />
+                <RoomActionsMenu roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
               {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} />}
               <div>
@@ -293,6 +299,7 @@ export default function MobileRoomTracker({
           roomName={addCrewRoom.name}
           currentWorkDayId={currentWorkDayId}
           remainingRoomIdsSameName={remainingRoomsByName[addCrewRoom.id] || []}
+          dayAssignments={dayAssignments}
         />
       )}
     </div>

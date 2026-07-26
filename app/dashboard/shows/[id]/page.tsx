@@ -35,7 +35,7 @@ export default async function ShowDetailPage({
     { data: ruleset },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id, use_24_hour_time').eq('id', user.id).single(),
+    supabase.from('profiles').select('organization_id, use_24_hour_time, can_view_pay_rates, can_edit_pay_rates').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -49,6 +49,12 @@ export default async function ShowDetailPage({
     ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', profile.organization_id).single()
     : { data: null }
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
+
+  // Pay-rate visibility/edit in Edit Crew is gated by permission only — the
+  // day rate lives on the timecard regardless of whether the show displays $
+  // in reports (that's what show_financials controls, separately).
+  const canViewRates = profile?.can_view_pay_rates ?? false
+  const canEditRates = profile?.can_edit_pay_rates ?? false
 
   if (!workDays || workDays.length === 0) {
     return (
@@ -132,6 +138,13 @@ export default async function ShowDetailPage({
   // displays them: only wrapped cards contribute, using the raw ST/OT/DT
   // worked-hours convention (not the ceiling-rounded "paid" totals).
   const dayTimecards = roomsList.flatMap(r => roomTimecards[r.id] || [])
+
+  // Who is already staffed where today — powers the duplicate-staffing
+  // safeguard in StaffRoomModal (block same room, confirm cross-room).
+  const roomNameById: Record<string, string> = Object.fromEntries(roomsList.map(r => [r.id, r.name]))
+  const dayAssignments = (allShowTimecards || [])
+    .filter(t => t.crew_member_id && roomNameById[t.room_id])
+    .map(t => ({ crewMemberId: t.crew_member_id as string, roomId: t.room_id as string, roomName: roomNameById[t.room_id] }))
   let sumST = 0, sumOT = 0, sumDT = 0
   if (ruleset) {
     for (const tc of dayTimecards) {
@@ -235,7 +248,7 @@ export default async function ShowDetailPage({
             <div key={room.id} className="rounded-card border border-line bg-surface overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
-                <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} />
+                <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
 
               {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} />}
@@ -281,6 +294,7 @@ export default async function ShowDetailPage({
                   roomName={room.name}
                   currentWorkDayId={activeDay.id}
                   remainingRoomIdsSameName={remainingRoomsByName[room.id] || []}
+                  dayAssignments={dayAssignments}
                 />
               </div>
             </div>
@@ -313,6 +327,9 @@ export default async function ShowDetailPage({
         currentWorkDayId={activeDay.id}
         remainingWorkDayIds={remainingWorkDayIds}
         remainingRoomsByName={remainingRoomsByName}
+        dayAssignments={dayAssignments}
+        canViewRates={canViewRates}
+        canEditRates={canEditRates}
       />
     </div>
   )

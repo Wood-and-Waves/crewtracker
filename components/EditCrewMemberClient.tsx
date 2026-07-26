@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
+import { formatPhone } from '@/lib/phone'
+import { removeCrewMemberKeepHistory } from '@/lib/crew'
 
 type RateCard = { id: string; role: string; day_rate: number }
 type CrewMember = { id: string; full_name: string; phone: string | null; email: string | null; rate_cards: RateCard[] }
@@ -21,9 +24,10 @@ export default function EditCrewMemberClient({
   availableRoles: AVRole[]
 }) {
   const supabase = createClient()
+  const router = useRouter()
 
   const [name, setName] = useState(crew.full_name)
-  const [phone, setPhone] = useState(crew.phone || '')
+  const [phone, setPhone] = useState(formatPhone(crew.phone))
   const [email, setEmail] = useState(crew.email || '')
   const [rateCards, setRateCards] = useState<RateCard[]>(crew.rate_cards)
 
@@ -36,6 +40,34 @@ export default function EditCrewMemberClient({
 
   async function saveField(field: 'full_name' | 'phone' | 'email', value: string) {
     await supabase.from('crew_members').update({ [field]: value || null }).eq('id', crew.id)
+  }
+
+  function saveToContacts() {
+    const parts = name.trim().split(/\s+/)
+    const first = parts[0] || name
+    const last = parts.length > 1 ? parts.slice(1).join(' ') : ''
+    const lines = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${name}`, `N:${last};${first};;;`]
+    if (phone.trim()) lines.push(`TEL;TYPE=CELL:${phone.trim()}`)
+    if (email.trim()) lines.push(`EMAIL;TYPE=INTERNET:${email.trim()}`)
+    lines.push('END:VCARD')
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/vcard' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${name || 'contact'}.vcf`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function deleteCrewMember() {
+    if (!confirm(`Remove ${name} from the directory? Their past show records (hours and punches) are kept.`)) return
+    const { error } = await removeCrewMemberKeepHistory(supabase, crew.id)
+    if (error) {
+      alert(`Couldn't remove ${name}: ${error.message}`)
+      return
+    }
+    router.push('/dashboard/directory')
+    router.refresh()
   }
 
   async function saveRate() {
@@ -86,11 +118,24 @@ export default function EditCrewMemberClient({
 
         <Card className="p-5 mb-4">
           <p className="text-xs uppercase tracking-wide text-muted mb-3">Contact Info (Optional)</p>
+          {(phone.trim() || email.trim()) && (
+            <button
+              onClick={saveToContacts}
+              className="w-full flex items-center justify-center gap-2 rounded-field bg-accent-wash px-4 py-3 mb-3 text-sm font-semibold text-accent hover:opacity-80"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="7" r="3" />
+                <path d="M3 21v-1a5 5 0 0 1 5-5h2.5" />
+                <path d="M16 11h6M19 8v6" />
+              </svg>
+              Save to Contacts
+            </button>
+          )}
           <input
             placeholder="Phone Number"
             value={phone}
             onChange={e => setPhone(e.target.value)}
-            onBlur={() => saveField('phone', phone)}
+            onBlur={() => { const f = formatPhone(phone); setPhone(f); saveField('phone', f) }}
             className={`${inputCls} mb-3`}
           />
           <input
@@ -129,6 +174,10 @@ export default function EditCrewMemberClient({
         </button>
         <p className="text-xs text-muted mt-2">Tap a role to edit its day rate, or use the ✕ to remove it.</p>
       </Card>
+
+      <div className="mt-6">
+        <Button variant="danger" onClick={deleteCrewMember}>Delete Crew Member</Button>
+      </div>
 
       {editingCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

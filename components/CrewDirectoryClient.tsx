@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
 import Dropdown from '@/components/ui/Dropdown'
+import { formatPhone } from '@/lib/phone'
+import { removeCrewMemberKeepHistory } from '@/lib/crew'
 
 type RateCard = { id: string; role: string; day_rate: number }
 type CrewMember = { id: string; full_name: string; phone: string | null; email: string | null; rate_cards: RateCard[] }
@@ -33,6 +35,34 @@ function csvField(value: string) {
 
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
+
+const svgProps = {
+  width: 17, height: 17, viewBox: '0 0 24 24', fill: 'none',
+  stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
+}
+const PhoneIcon = () => (
+  <svg {...svgProps}><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" /></svg>
+)
+const MessageIcon = () => (
+  <svg {...svgProps}><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z" /></svg>
+)
+const MailIcon = () => (
+  <svg {...svgProps}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+)
+
+// Blue circular contact button (call / message / email), matching the iOS app.
+function ContactCircle({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      aria-label={label}
+      onClick={e => e.stopPropagation()}
+      className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-ink transition-opacity hover:opacity-80"
+    >
+      {children}
+    </a>
+  )
+}
 
 export default function CrewDirectoryClient({
   organizationId,
@@ -79,6 +109,8 @@ export default function CrewDirectoryClient({
   async function addPerson() {
     const trimmed = newName.trim()
     if (!trimmed) return
+    const dupe = crew.find(c => c.full_name.trim().toLowerCase() === trimmed.toLowerCase())
+    if (dupe && !confirm(`A crew member named "${dupe.full_name}" already exists. Add another anyway?`)) return
     const { data, error } = await supabase
       .from('crew_members')
       .insert({ organization_id: organizationId, full_name: trimmed })
@@ -91,9 +123,15 @@ export default function CrewDirectoryClient({
   }
 
   async function deleteCrew(id: string) {
-    if (!confirm('Delete this crew member? This cannot be undone.')) return
-    const { error } = await supabase.from('crew_members').delete().eq('id', id)
-    if (!error) setCrew(prev => prev.filter(c => c.id !== id))
+    const person = crew.find(c => c.id === id)
+    const name = person?.full_name || 'this crew member'
+    if (!confirm(`Remove ${name} from the directory? Their past show records (hours and punches) are kept.`)) return
+    const { error } = await removeCrewMemberKeepHistory(supabase, id)
+    if (error) {
+      alert(`Couldn't remove ${name}: ${error.message}`)
+      return
+    }
+    setCrew(prev => prev.filter(c => c.id !== id))
   }
 
   function exportCSV() {
@@ -155,7 +193,7 @@ export default function CrewDirectoryClient({
       if (!name) continue
       const role = cols[1]
       const rate = parseFloat(cols[2].replace('$', '')) || 0
-      const phone = cols[3]
+      const phone = formatPhone(cols[3])
       const email = cols[4]
 
       const lowerName = name.toLowerCase()
@@ -246,23 +284,30 @@ export default function CrewDirectoryClient({
         <>
           {/* Desktop: dense data table */}
           <div className="hidden lg:block rounded-card border border-line bg-surface overflow-hidden">
-            <div className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_88px] gap-3 px-5 py-2.5 border-b border-line text-[10.5px] font-bold uppercase tracking-wide text-muted">
+            <div className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 px-5 py-2.5 border-b border-line text-[10.5px] font-bold uppercase tracking-wide text-muted">
               <div>Name</div><div>Role</div><div>Phone</div><div>Email</div><div className="text-right">Actions</div>
             </div>
             {sorted.map(person => (
               <div
                 key={person.id}
-                className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_88px] gap-3 items-center px-5 py-3 border-b border-line last:border-b-0 hover:bg-surface-2 cursor-pointer"
+                className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 items-center px-5 py-3 border-b border-line last:border-b-0 hover:bg-surface-2 cursor-pointer"
                 onClick={() => router.push(`/dashboard/directory/${person.id}`)}
               >
                 <div className="font-semibold text-ink truncate">{formatForDisplay(person.full_name, sort)}</div>
                 <div className="text-muted truncate">{person.rate_cards.map(rc => rc.role).join(', ') || '—'}</div>
-                <div className="text-muted truncate">{person.phone || '—'}</div>
+                <div className="text-muted truncate">{person.phone ? formatPhone(person.phone) : '—'}</div>
                 <div className="text-muted truncate">{person.email || '—'}</div>
-                <div className="flex justify-end gap-3" onClick={e => e.stopPropagation()}>
-                  {person.phone && <a href={`tel:${person.phone}`} className="text-accent hover:opacity-80" title="Call">☎</a>}
-                  {person.email && <a href={`mailto:${person.email}`} className="text-accent hover:opacity-80" title="Email">✉</a>}
-                  <button onClick={() => deleteCrew(person.id)} className="text-muted hover:text-danger" title="Delete">✕</button>
+                <div className="flex justify-end items-center gap-2" onClick={e => e.stopPropagation()}>
+                  {person.phone && (
+                    <>
+                      <ContactCircle href={`tel:${person.phone}`} label="Call"><PhoneIcon /></ContactCircle>
+                      <ContactCircle href={`sms:${person.phone}`} label="Text"><MessageIcon /></ContactCircle>
+                    </>
+                  )}
+                  {person.email && <ContactCircle href={`mailto:${person.email}`} label="Email"><MailIcon /></ContactCircle>}
+                  <button onClick={() => deleteCrew(person.id)} className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-surface-3 hover:text-danger" title="Delete" aria-label="Delete">
+                    <svg {...svgProps}><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
+                  </button>
                 </div>
               </div>
             ))}
@@ -271,23 +316,27 @@ export default function CrewDirectoryClient({
           {/* Portrait iPad / phone: tappable list */}
           <div className="lg:hidden rounded-card bg-surface border border-line divide-y divide-line">
             {sorted.map(person => (
-              <div key={person.id} className="flex items-center justify-between p-4">
-                <button onClick={() => router.push(`/dashboard/directory/${person.id}`)} className="flex-1 text-left">
-                  <p className="text-sm font-medium text-ink">{formatForDisplay(person.full_name, sort)}</p>
-                  <p className="text-xs text-muted">
+              <div
+                key={person.id}
+                className="flex items-center gap-3 p-4 active:bg-surface-2"
+                onClick={() => router.push(`/dashboard/directory/${person.id}`)}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-semibold text-ink truncate">{formatForDisplay(person.full_name, sort)}</p>
+                  <p className="text-sm text-muted truncate">
                     {person.rate_cards.length > 0 ? person.rate_cards.map(rc => rc.role).join(', ') : 'No roles assigned'}
                   </p>
-                </button>
-                <div className="flex items-center gap-3">
+                </div>
+                <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
                   {person.phone && (
                     <>
-                      <a href={`tel:${person.phone}`} className="text-accent hover:opacity-80" title="Call">☎</a>
-                      <a href={`sms:${person.phone}`} className="text-accent hover:opacity-80" title="Text">✉</a>
+                      <ContactCircle href={`tel:${person.phone}`} label="Call"><PhoneIcon /></ContactCircle>
+                      <ContactCircle href={`sms:${person.phone}`} label="Text"><MessageIcon /></ContactCircle>
                     </>
                   )}
-                  {person.email && <a href={`mailto:${person.email}`} className="text-accent hover:opacity-80" title="Email">✉️</a>}
-                  <button onClick={() => deleteCrew(person.id)} className="text-muted hover:text-danger text-sm" title="Delete">✕</button>
+                  {person.email && <ContactCircle href={`mailto:${person.email}`} label="Email"><MailIcon /></ContactCircle>}
                 </div>
+                <span className="text-muted shrink-0" aria-hidden="true">›</span>
               </div>
             ))}
           </div>
