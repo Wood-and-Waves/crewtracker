@@ -11,6 +11,7 @@ import { buildTimesheetText, buildSmsMessage } from '@/lib/timesheet'
 import ExportCSVButton from '@/components/ExportCSVButton'
 import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
+import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
 import { cn } from '@/lib/cn'
 
 function fmt(n: number): string {
@@ -63,9 +64,15 @@ export default async function ShowReportPage({
   const timezone = show.timezone_identifier || 'America/Chicago'
 
   const { data: organization } = profile?.organization_id
-    ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', profile.organization_id).single()
+    ? await supabase.from('organizations').select('timecard_rounding_minutes, final_report_emails').eq('id', profile.organization_id).single()
     : { data: null }
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
+
+  // Recipients are only counted here so the PM can be told how many addresses
+  // exist. The route reads the actual list server-side; the client never sees
+  // or supplies it.
+  const recipientCount = (organization?.final_report_emails || '')
+    .split(',').map((s: string) => s.trim()).filter(Boolean).length
 
   const workDayIds = (workDays || []).map(d => d.id)
 
@@ -126,6 +133,52 @@ export default async function ShowReportPage({
     totalLaborCost += totalPay(tc, allTimecards, ruleset, roundingMinutes)
   }
   const totalPaidHours = totalPaidST + totalPaidOT + totalPaidDT
+
+  // Pre-send checks for the Final Report. Strictly non-financial: the PM is
+  // asserting times are complete, so they see what looks unfinished — never an
+  // amount.
+  const preSendIssues: PreSendIssue[] = (() => {
+    const out: PreSendIssue[] = []
+    const punchesFor = (tcId: string) => (punches || []).filter(p => p.timecard_id === tcId)
+
+    const noStart = (timecards || []).filter(t =>
+      !t.is_travel_day && !punchesFor(t.id).some(p => p.punch_type === 'start'))
+    const noWrap = (timecards || []).filter(t =>
+      !t.is_travel_day &&
+      punchesFor(t.id).some(p => p.punch_type === 'start') &&
+      !punchesFor(t.id).some(p => p.punch_type === 'end'))
+
+    const nameList = (rows: any[]) => {
+      const names = [...new Set(rows.map(r => r.crew_member_name))]
+      return names.slice(0, 4).join(', ') + (names.length > 4 ? ` and ${names.length - 4} more` : '')
+    }
+
+    if (noStart.length) out.push({
+      label: `${noStart.length} not started`,
+      detail: nameList(noStart),
+    })
+    if (noWrap.length) out.push({
+      label: `${noWrap.length} never wrapped`,
+      detail: nameList(noWrap),
+    })
+
+    const emptyRooms = (rooms || []).filter(r => !(timecards || []).some(t => t.room_id === r.id))
+    if (emptyRooms.length) out.push({
+      label: `${emptyRooms.length} empty ${emptyRooms.length === 1 ? 'room' : 'rooms'}`,
+      detail: [...new Set(emptyRooms.map(r => r.name))].join(', '),
+    })
+
+    const emptyDays = (workDays || []).filter(d => {
+      const dayRoomIds = (rooms || []).filter(r => r.work_day_id === d.id).map(r => r.id)
+      return !(timecards || []).some(t => dayRoomIds.includes(t.room_id))
+    })
+    if (emptyDays.length) out.push({
+      label: `${emptyDays.length} ${emptyDays.length === 1 ? 'day' : 'days'} with no crew`,
+      detail: emptyDays.map(d => `Day ${d.day_number}`).join(', '),
+    })
+
+    return out
+  })()
 
   function dayLabel(dateStr: string) {
     return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
@@ -225,6 +278,9 @@ export default async function ShowReportPage({
             showFinancials={canSeeFinancials}
             startDate={show.start_date}
             endDate={show.end_date}
+            clientCompany={show.client_company}
+            jobNumber={show.job_number}
+            cityState={show.city_state}
             rooms={rooms || []}
             workDays={workDays || []}
             timecards={timecards || []}
@@ -234,8 +290,30 @@ export default async function ShowReportPage({
             use24Hour={profile?.use_24_hour_time || false}
             roundingMinutes={roundingMinutes}
           />
+          {profile?.can_send_reports && !show.finalized_at && (
+            <SendFinalReportButton
+              showId={id}
+              showName={show.name}
+              recipientCount={recipientCount}
+              issues={preSendIssues}
+            />
+          )}
         </div>
       </div>
+
+      {show.finalized_at && (
+        <div className="rounded-card border border-line bg-surface-2 px-4 py-3 mb-6 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold text-ink">Times locked</span>
+          <span className="text-sm text-muted">
+            Final report sent{' '}
+            {new Date(show.finalized_at).toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone,
+            })}
+            {show.final_report_recipients ? ` to ${show.final_report_recipients}` : ''}.
+            Punches and staffing are read-only until an admin unlocks the show.
+          </span>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-6">
         <Link

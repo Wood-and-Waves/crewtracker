@@ -13,15 +13,18 @@ export default function OrgSettingsClient({
   organizationId,
   timecardRoundingMinutes,
   defaultCcEmail,
+  finalReportEmails,
 }: {
   organizationId: string
   timecardRoundingMinutes: number
   defaultCcEmail: string | null
+  finalReportEmails: string | null
 }) {
   const router = useRouter()
   const supabase = createClient()
   const [rounding, setRounding] = useState(timecardRoundingMinutes)
   const [ccEmail, setCcEmail] = useState(defaultCcEmail || '')
+  const [finalEmails, setFinalEmails] = useState(finalReportEmails || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -35,6 +38,7 @@ export default function OrgSettingsClient({
       .update({
         timecard_rounding_minutes: rounding,
         default_cc_email: ccEmail.trim() || null,
+        final_report_emails: finalEmails.trim() || null,
       })
       .eq('id', organizationId)
     setSaving(false)
@@ -75,6 +79,22 @@ export default function OrgSettingsClient({
           className={inputCls}
         />
         <p className="text-xs text-muted mt-1">Used as a default CC when report email delivery is built.</p>
+      </div>
+
+      <div className="mb-4">
+        <label className="block text-sm text-muted mb-2">Final Report Recipients</label>
+        <input
+          type="text"
+          value={finalEmails}
+          onChange={e => setFinalEmails(e.target.value)}
+          placeholder="payroll@example.com, bookkeeper@example.com"
+          className={inputCls}
+        />
+        <p className="text-xs text-muted mt-1">
+          Comma-separated. Where a PM&apos;s end-of-show Final Report is sent, complete with
+          pay figures. Only admins can change this — a PM never chooses the recipients, and
+          never sees the numbers.
+        </p>
       </div>
 
       {error && <p className="text-xs text-danger mb-3">{error}</p>}

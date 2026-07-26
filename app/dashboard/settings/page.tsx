@@ -26,7 +26,7 @@ export default async function SettingsPage() {
   }
 
   const [{ data: organization }, { data: avRoles }, { data: presets }] = await Promise.all([
-    supabase.from('organizations').select('id, timecard_rounding_minutes, default_cc_email').eq('id', profile.organization_id).single(),
+    supabase.from('organizations').select('id, timecard_rounding_minutes, default_cc_email, final_report_emails').eq('id', profile.organization_id).single(),
     supabase.from('av_roles').select('id, name, sort_order').eq('organization_id', profile.organization_id).order('sort_order'),
     supabase.from('payroll_presets').select('*').eq('organization_id', profile.organization_id).order('sort_order'),
   ])
@@ -49,6 +49,7 @@ export default async function SettingsPage() {
               organizationId={organization.id}
               timecardRoundingMinutes={organization.timecard_rounding_minutes ?? 1}
               defaultCcEmail={organization.default_cc_email}
+              finalReportEmails={organization.final_report_emails}
             />
           </div>
         )}

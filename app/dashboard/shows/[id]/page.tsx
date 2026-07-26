@@ -8,6 +8,7 @@ import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
 import CopyCrewButton from '@/components/CopyCrewButton'
 import AddDayButton from '@/components/AddDayButton'
+import UnlockShowButton from '@/components/UnlockShowButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
 import { PUNCH_ORDER, PUNCH_LABELS, isWrapped } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
@@ -37,7 +38,7 @@ export default async function ShowDetailPage({
     { data: ruleset },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id, use_24_hour_time, can_view_pay_rates, can_edit_pay_rates').eq('id', user.id).single(),
+    supabase.from('profiles').select('organization_id, use_24_hour_time, can_view_pay_rates, can_edit_pay_rates, can_manage_users').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -218,6 +219,22 @@ export default async function ShowDetailPage({
           <h1 className="text-2xl font-extrabold tracking-tight mt-2">{show.name}</h1>
           {showMeta && <p className="text-sm text-muted mt-1">{showMeta}</p>}
         </div>
+
+        {show.finalized_at && (
+          <div className="rounded-card border border-line bg-surface-2 p-3">
+            <p className="text-sm font-semibold text-ink">Times locked</p>
+            <p className="text-xs text-muted mt-1">
+              The final report was sent{' '}
+              {new Date(show.finalized_at).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone,
+              })}
+              . Punches and staffing are rejected by the database until the show is unlocked.
+            </p>
+            {profile?.can_manage_users && (
+              <div className="mt-2"><UnlockShowButton showId={id} /></div>
+            )}
+          </div>
+        )}
 
         <div className="rounded-card border border-line bg-surface p-3">
           <div className="flex items-center justify-between gap-2">
