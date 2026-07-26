@@ -28,10 +28,18 @@ export default function BatchPunchBar({
   timecards,
   dayDate,
   timezone,
+  label = 'Batch Actions',
 }: {
   timecards: BatchTimecard[]
   dayDate: string
   timezone: string
+  /**
+   * Heading above the buttons. The same component drives a room's own bar and
+   * the day-level "All Rooms" bar, and those need telling apart — two
+   * identically-labelled bars on one screen is a good way to wrap the wrong
+   * people. Scope is whatever `timecards` is; this just names it.
+   */
+  label?: string
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -113,7 +121,7 @@ export default function BatchPunchBar({
 
   return (
     <div className="px-4 pt-3 pb-1">
-      <p className="text-[10.5px] uppercase tracking-wide text-muted font-bold mb-2">Batch Actions</p>
+      <p className="text-[10.5px] uppercase tracking-wide text-muted font-bold mb-2">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {/* Same reveal as the punch table: no M3 button until someone in scope
             has finished a second break. Derived from the timecards this bar

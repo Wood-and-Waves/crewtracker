@@ -53,6 +53,13 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // manifest.webmanifest is excluded by name for the same reason favicon.ico
+    // is: it's a static asset that must be fetchable without a session. The
+    // extension list below doesn't cover .webmanifest, so without this the
+    // middleware answered it with a 307 to /login — meaning iOS and Chrome
+    // received an HTML login page instead of the manifest, and the Home Screen
+    // app got no name, no icon and no standalone mode. Same trap the keepalive
+    // cron hit (see CLAUDE.md).
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }

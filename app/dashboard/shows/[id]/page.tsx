@@ -323,6 +323,22 @@ export default async function ShowDetailPage({
           The desktop/mobile distinction still holds — this is the ruled grid,
           mobile renders labelled cards. */}
       <div className="hidden lg:grid min-w-0 grid-cols-1 gap-4">
+        {/* Punch everyone on the day at once, across every room — the same thing
+            mobile offers in its "All Rooms" view. Only worth showing with more
+            than one room: with a single room it would duplicate that room's own
+            bar exactly. Matters more now rooms stack one per row, since reaching
+            each room's bar means scrolling past the one above it. */}
+        {roomsList.length > 1 && dayTimecards.length > 0 && (
+          <div className="rounded-card border border-line bg-surface">
+            <BatchPunchBar
+              timecards={dayTimecards}
+              dayDate={activeDay.date}
+              timezone={timezone}
+              label={`All Rooms · ${dayTimecards.length} crew`}
+            />
+          </div>
+        )}
+
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
           return (
