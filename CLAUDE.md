@@ -2,9 +2,11 @@
 
 Web app (Next.js 16 + Supabase + Vercel) for production managers running corporate AV shows. Tracks crew time and calculates payroll — day rates, overtime, double time, meal penalties, short turnarounds, travel pay, half-day pay. The PM enters punch times on-site; the app does the math and generates reports (on-screen, PDF, CSV).
 
-This is a migration from a native SwiftUI/SwiftData iPhone app (v1.3, shipped to TestFlight, no longer actively developed — all new feature work happens here). The iOS app remains the reference implementation for payroll business logic; `lib/payroll.ts` is a line-by-line-verified port of its `PayrollCalculator` struct.
+This began as a migration from a native SwiftUI/SwiftData iPhone app (v1.3, shipped to TestFlight, now frozen — not developed further).
 
-Dan (the developer) has no professional dev background. Claude writes the code; work now happens directly in this repo via Claude Code (file read/write + git access) rather than pasting file contents back and forth.
+**iOS is the reference for `lib/payroll.ts` and nothing else.** That file is a line-by-line-verified port of the Swift `PayrollCalculator` struct, and changes to the payroll *math* should still be checked against the Swift source. It is **not** a product roadmap or a design authority. The web app has deliberately moved past it — Final Report email and show locking, payroll presets, show-wide day rates, the permissions model, multi-user orgs, org-wide rounding, dollar-free crew timesheets — none of which exist in iOS. "iOS doesn't do it that way" is not a reason to reject a design, and "iOS doesn't have it" is never a reason not to build something.
+
+Dan (the developer) has no professional dev background — so explain the *why* in plain language, skip unexplained jargon, and lead with a recommendation rather than a menu of options. Claude writes the code, working directly in this repo via Claude Code (file read/write, git, SQL).
 
 ## Tech stack
 
@@ -23,10 +25,10 @@ Dan (the developer) has no professional dev background. Claude writes the code; 
 ## How we work
 
 - Read the actual current file before editing it — never guess at existing code.
-- Complete file replacements are preferred over fragile multi-point patches when a change touches many interdependent spots in one file.
+- **Prefer targeted edits over whole-file rewrites.** A rewrite turns a three-line change into an unreadable diff, forces every unrelated line to be reproduced from memory (which is how code gets silently dropped), and throws away the way a targeted edit *fails loudly* when the text doesn't match — the main defence against acting on a stale read, which Dropbox sync has caused in this repo before. Rewrite a whole file only when genuinely restructuring it.
 - Always run `npm run build` before considering a change complete; fix errors before moving on.
 - Commit messages: clear, one line (e.g. `Fix invite RLS: move org invite creation to server-side admin API route.`).
-- Dan prefers concise, list-based responses during active coding — ask only when a real decision is needed.
+- Concise, list-based responses during **active coding**. Design and trade-off conversations are the opposite: they want prose and reasoning, not a terse menu of options. When Dan is choosing a direction, explain the choices in plain language and say which one you recommend and why — a list of jargon-labelled options is not a substitute for an explanation. Ask only when a real decision is needed; make routine calls yourself.
 - When setting up multi-step infrastructure (auth, tooling, etc.), Dan prefers going one step at a time and confirming each works before moving to the next, rather than being handed a full checklist up front.
 - Surface errors instead of failing silently. This has bitten the project before: RLS gaps that silently blocked saves, updates that "didn't take" with no visible error.
 - If a new table is added, don't assume RLS policies exist — check `pg_policies` before assuming a feature "should just work." The schema was originally built SELECT-only in several places and INSERT/UPDATE/DELETE policies had to be retrofitted per table as features hit walls.
@@ -43,7 +45,9 @@ The app was fully redesigned from the original pure-black/zinc/iOS-blue look to 
 
 **Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
 
-**Reusable primitives** in `components/ui/`: `Button` (variants: primary/ghost/danger), `Card`, `Chip` (tones: neutral/live/ot/good/danger — semantic status color, kept separate from the brand accent), `Toggle` (on/off switch, replaces native checkboxes everywhere), `ThemeToggle`. Compose new UI from these rather than writing raw styled `<button>`/`<div>` markup.
+**Reusable primitives** in `components/ui/`: `Button` (variants: primary/ghost/danger), `Card`, `Chip` (tones: neutral/live/ot/good/danger — semantic status color, kept separate from the brand accent), `Toggle` (on/off switch, replaces native checkboxes everywhere), `ThemeToggle`, `Dropdown`, `AccountMenu`. Compose new UI from these rather than writing raw styled `<button>`/`<div>` markup.
+
+**One deliberate exception to the token rule:** `lib/reportPdf.tsx` uses literal hex colors. `@react-pdf/renderer` renders outside the browser, so CSS variables don't exist there, and a PDF is a fixed document with no light/dark mode to respond to. Don't "fix" it into tokens.
 
 **Responsive nav, not just responsive layout:**
 - **≥1024px** (landscape iPad + desktop): `AppShell.tsx` renders a sticky **top nav bar** (logo, Shows/Directory/Settings links, theme toggle) — a mouse-driven desktop experience, not a shrunk sidebar.
@@ -63,48 +67,71 @@ The app was fully redesigned from the original pure-black/zinc/iOS-blue look to 
 app/
   page.tsx                     — public marketing landing page (logged-in visitors redirect straight to /dashboard); styles scoped via page.module.css so they can't leak into the app
   icon.png / favicon.ico       — real app icons (Next's file-based convention, auto-wired)
+  join-beta/page.tsx           — "Join the Beta" interest form (emails Dan via Resend, writes nothing to the DB)
   auth/callback/route.ts       — OAuth callback; also finalizes invite acceptance
+  auth/reset-password/page.tsx — sets a new password after a recovery-link redirect
   dashboard/
     layout.tsx                 — wraps dashboard pages in AppShell
     page.tsx                   — shows dashboard (list + New Show modal); onboarding fallback if no org
     directory/page.tsx         — Crew Directory list
     directory/[crewId]/page.tsx — Edit Crew Member
+    team/page.tsx              — org member list (admin)
+    team/[userId]/page.tsx     — per-user role + permission editor, gated on can_manage_users
     shows/[id]/page.tsx        — Show workspace: day nav, room columns, tracker console
     shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset
-    shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export
-    settings/page.tsx           — personal prefs, org settings, AV Roles editor
+    shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
+    settings/page.tsx           — personal prefs, org settings, AV Roles editor, payroll presets
   api/
     admin/create-invite/route.ts — server-side invite creation (service role, bypasses RLS)
     invite/accept/route.ts       — finalizes invite acceptance for password sign-in path
+    beta-signup/route.ts         — Join the Beta form submissions -> Resend
+    reports/final/route.ts       — Final Report: renders CSV+PDF server-side, emails admin-designated recipients, locks the show
+    keepalive/route.ts           — daily cron ping so Supabase's free tier doesn't pause (see Notes)
   invite/[token]/page.tsx      — invite landing page
   invite/[token]/InviteAuthForm.tsx — client auth form for invite flow
   login/page.tsx               — Google SSO + email/password + magic link + forgot-password link
-  auth/reset-password/page.tsx — sets a new password after a recovery-link redirect
   superadmin/page.tsx          — super admin panel
   superadmin/invite-org/page.tsx — generate new org invite links
 components/
   AppShell.tsx                 — responsive top-nav (>=1024px) / fixed bottom tab-bar (<1024px)
-  Logo.tsx                      — placeholder brand mark, isolated for an easy future swap
+  Logo.tsx                      — the real CrewTracker mark (see Design system above); never render it bare
   ThemeScript.tsx               — inline pre-paint script, applies saved light/dark theme with no flash
-  ui/                           — Signal design-system primitives: Button, Card, Chip, Toggle, ThemeToggle
-  NewShowModal.tsx              — create show, auto-generates work_days
+  ui/                           — Signal primitives: Button, Card, Chip, Toggle, ThemeToggle, Dropdown, AccountMenu
+  NewShowModal.tsx              — create show: rooms field, timezone, payroll preset; auto-generates work_days
   AddRoomModal.tsx               — add room to a work day (optionally all remaining days); blocks duplicate room names on the same day
-  RoomActionsMenu.tsx            — rename/delete a room (per-day, matches the room model)
-  StaffRoomModal.tsx             — bulk staff crew into a room ("apply to all remaining days" defaults checked)
+  RoomActionsMenu.tsx            — rename/delete a room, plus an "Edit crew" panel (per-crew remove, role dropdown, day-rate edit)
+  StaffRoomModal.tsx             — bulk staff crew into a room ("apply to all remaining days" defaults checked); role dropdown from av_roles, rate picker
+  AddDayButton.tsx / CopyCrewButton.tsx — extend the show a day; copy the previous day's roster into an empty room
   TimecardRow.tsx / TimeEntryModal.tsx — punch rows + manual time entry w/ chronology validation; TimecardRow renders as a ruled grid row on desktop, a labeled card on mobile
-  BatchPunchBar.tsx              — room-level batch punch actions
+  BatchPunchBar.tsx / BatchTimeModal.tsx — room-level batch punch actions and batch time entry
+  MobileRoomTracker.tsx          — the <1024px tracker layout
   CrewDirectoryClient.tsx / EditCrewMemberClient.tsx — Directory goes to a real data table on desktop
+  TeamListClient.tsx / EditMemberClient.tsx / PermissionsEditor.tsx / InviteTeammateModal.tsx — org member admin
   EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode; two-column on desktop
+  RulesetFields.tsx              — the shared payroll-rule form, used by Edit Show and the presets editor
+  PayrollPresetsEditor.tsx       — named org-level payroll presets (Settings)
   ExportCSVButton.tsx / ExportPDFButton.tsx — gated by financials permission
+  SendHoursButton.tsx            — per-crew timesheet via Text / Share / Copy, hours only, never dollars
+  SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
   supabase/client.ts / server.ts / admin.ts
   payroll.ts    — TypeScript port of iOS PayrollCalculator
   punches.ts    — punch ordering/labels + chronology validation; formatPunchTime takes a use24Hour flag
+  datetime.ts   — wall-clock <-> instant conversion in a named timezone (see Past incidents)
+  reportCsv.ts / reportPdf.tsx — the CSV and PDF documents, as plain modules so the browser download
+                  buttons and the server-side Final Report render the identical file. reportPdf takes
+                  @react-pdf's parts as an argument so it works in both environments.
+  timesheet.ts  — per-crew plain-text timesheet for SendHoursButton (deliberately dollar-free)
+  ruleset.ts    — payroll ruleset field list + the Continuous Time / Working Lunch mutual exclusion
+  permissions.ts — role presets and permission metadata, shared by the team screens
+  timezones.ts  — the one shared timezone list (New Show and Edit Show used to disagree)
+  crew.ts       — crew-member helpers
+  phone.ts      — phone formatting/normalisation
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
   trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
-proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, and exactly "/")
+proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, the keepalive cron, and exactly "/")
 scripts/
   run-sql.mjs   — runs a .sql file against DATABASE_URL (npm run db:sql -- file.sql)
   sql/          — one-off SQL scripts kept for reference (RLS policies, migrations, checks)
@@ -112,23 +139,24 @@ scripts/
 
 ## Database schema
 
-- `organizations` — id, name, created_at, timecard_rounding_minutes (default 1 = exact minute; 15/30 also valid), default_cc_email (nullable, unused until email delivery is built). Has an UPDATE policy gated to `can_manage_users`.
+- `organizations` — id, name, created_at, timecard_rounding_minutes (default 1 = exact minute; 15/30 also valid), final_report_emails (comma-separated recipient list for the Final Report), default_cc_email. Has an UPDATE policy gated to `can_manage_users`. **`default_cc_email` is orphaned** — it predates the Final Report, which shipped using `final_report_emails` instead. It is still written by the Settings page but read by nothing. Wire it up or delete it; don't assume it does anything.
 - `profiles` — id (= auth.uid), organization_id, full_name, email, base_role, use_24_hour_time (bool), shoulder_surfer_mode (bool), + permission booleans
 - `subscriptions` — one per org, auto-created via `handle_new_organization()` trigger
 - `invitations` — token-based invites; `token`/`expires_at` have DB defaults
-- `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool, no UI yet), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), created_by
-- `show_assignments` — links users to specific shows
-- `payroll_rulesets` — one per show; fields match iOS `PayrollRuleset` exactly
+- `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to)
+- `show_assignments` — links users to specific shows; carries a denormalized `organization_id` (see Past incidents)
+- `payroll_rulesets` — one per show; mirrors iOS `PayrollRuleset`, plus `continuous_time_enabled`
+- `payroll_presets` — org-level named rule sets (one flagged `is_default`), **copied** into a show's `payroll_rulesets` at creation. Never a live link — a live link would retroactively rewrite closed shows. Writes gated on `can_manage_rulesets`.
 - `work_days` — id, show_id, date, day_number
 - `rooms` — id, work_day_id, name (scoped to a day, not persistent across the show). Has full SELECT/INSERT/UPDATE/DELETE policies (UPDATE/DELETE added when room rename/delete UI was built).
-- `timecards` — id, room_id, crew_member_id, crew_member_name, role, day_rate, is_travel_day, travel_in_day, travel_out_day, pay_as_half_day
+- `timecards` — id, room_id, crew_member_id, crew_member_name, role, day_rate, is_travel_day, travel_in_day, travel_out_day, pay_as_half_day. Partial unique index on `(room_id, crew_member_id) where crew_member_id is not null`. Four triggers: the finalized-show write block, and the two that keep `day_rate` show-wide (see Payroll business logic).
 - `punches` — id, timecard_id, punch_type (`start|meal_out|meal_in|meal2_out|meal2_in|end`), punched_at
 - `crew_members` — id, organization_id, full_name, email, phone, notes
 - `rate_cards` — id, crew_member_id, role, day_rate
-- `av_roles` — id, organization_id, name, sort_order, created_at — per-org job title list, auto-seeded with 13 defaults on org creation (guarded against duplicate seeding — this broke once, see below)
+- `av_roles` — id, organization_id, name, sort_order, created_at — per-org job title list, auto-seeded with 31 defaults on org creation (guarded against duplicate seeding — this broke once, see below). Existing orgs are never backfilled when the seed list changes.
 
-Helper functions: `my_organization_id()`, `can_see_all_shows()`.
-Triggers: `on_auth_user_created → handle_new_user()` (had a `search_path` bug that broke all signups — needs `SET search_path = public`), `on_organization_created → handle_new_organization()`.
+Helper functions: `my_organization_id()`, `can_see_all_shows()`, `show_id_for_room()`.
+Triggers: `on_auth_user_created → handle_new_user()` (had a `search_path` bug that broke all signups — needs `SET search_path = public`), `on_organization_created → handle_new_organization()`, plus the `timecards`/`punches` triggers noted above.
 
 ## Permissions system
 
@@ -139,6 +167,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 ## Payroll business logic (`lib/payroll.ts`)
 
 - Day rate base: hourly = `dayRate / overtimeAfterHours`. Crew always get at least their full day rate (minimum guarantee).
+- **A day rate is a property of the SHOW, not of a day.** It is keyed on (show, crew member, role) and must never differ between days — a per-day rate is a data-entry mistake. Role is in the key because one person legitimately holds different rates in different roles on the same show, and reports group on `name|role`. Enforced by two triggers on `timecards` (`scripts/sql/show-wide-day-rate.sql`): a BEFORE INSERT that makes a new timecard inherit the show's existing rate — **overriding whatever the caller supplied**, which is why StaffRoomModal locks its rate field — and an AFTER UPDATE that propagates a change to every day of the show. A blank role counts as a role to both, and `0` is a real rate (unpaid crew), so never test `day_rate` for truthiness. Nothing writing to `timecards` needs special handling; the triggers cover it.
 - OT/DT thresholds configurable per show ruleset (default OT after 10hr @1.5x, DT optional after 12hr @2x).
 - Meal breaks: under `minimum_meal_break_minutes` (default 60) = no deduction; over that, deduct up to `meal_break_deduction_cap` (default 60).
 - Meal penalties: triggered after `meal_penalty_grace_period` (default 6hr) without a break; max 2/day.
@@ -151,20 +180,30 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 ## Known gaps / not yet built
 
-- **Admin UI for user privileges** — the backend exists (`profiles.base_role` + the full set of `can_*` permission booleans, see Permissions system above), but there's no screen for an admin to actually edit another user's role/permissions. `can_manage_users` currently only gates org-wide Settings fields (name, rounding); it doesn't unlock a per-user editor yet. Needs a UI (likely on the Settings page or a new Directory-adjacent screen) listing org members with role/permission toggles, gated by `can_manage_users`, writing to `profiles` for users in the same `organization_id`.
-- SMS/text timesheet delivery is explicitly **not** being built — decided against a web texting service (Twilio, etc.); device-native share/SMS (e.g. `sms:` links or the OS share sheet) is the intended path, matching how iOS did it natively.
-- **Email report delivery via Resend** — planned, not yet wired up. `organizations.default_cc_email` already exists in schema for this, just unused. Will need a Resend API key/env var and a send path (likely a server route, similar pattern to `api/admin/create-invite`).
-- **"Join the Beta" interest form** — the landing page's "Get Started" CTA currently points at `/login`; it should instead go to a new interest-form page/route titled "Join the Beta" (rename the CTA label too). The form asks something like "Are you interested in joining the CrewTracker Beta?" plus qualifying questions (team size, number of admin users needed, and similar — current company/role, expected show volume/month, and how they heard about it are reasonable additions). On submit it emails Dan (via Resend, once wired up) rather than writing to the database — this is the interest-capture funnel ahead of any self-serve signup, not a replacement for the superadmin-invite onboarding path.
-- **Stripe billing** — planned (was previously listed as indefinitely deferred). `can_manage_billing` permission column and `subscriptions` table already exist as placeholders; actual Stripe integration (checkout, webhooks, plan gating) not started.
-- **No-show / cancelled day flag** — need a per-crew-member, per-day flag (alongside the existing `is_travel_day` / `pay_as_half_day` style toggles on `timecards`) to mark a day as a no-show or cancellation, distinct from a day with punches. Affects payroll (likely $0/no hours counted) and probably short-turnaround detection (a flagged day likely shouldn't count as the "previous day" for rest-period math) — needs a design pass against the iOS reference behavior (if any) before implementing.
+- **No-show / cancelled day flag** — a per-crew-member, per-day flag (alongside the existing `is_travel_day` / `pay_as_half_day` toggles on `timecards`) marking a day as a no-show or cancellation, distinct from a day with punches. The one remaining gap with real payroll consequences. **There is no iOS reference — verified 2026-07-26 that the Swift `Timecard` has only the same four flags we do**, so this is new design, not a port. Open questions for Dan, all contractual rather than technical: does a cancelled day pay anything (notice-window cancellation fees are common)? Is "crew no-showed" the same state as "we cancelled" — different fault, probably different pay? Should a flagged day count as the "previous day" for short-turnaround rest math (probably not — nobody worked)? Does it appear in reports as a $0 line or vanish?
+- **`day_rate` column-level lockdown** — `authenticated` still holds column `SELECT` on `timecards.day_rate` and `rate_cards.day_rate`, and Postgres RLS is row-level, so a PM without `can_view_pay_rates` could read rates straight from the REST API. Today that permission is a UI gate only. Closing it means revoking column SELECT and routing financial reads through a `SECURITY DEFINER` view/RPC, touching the reports page, both export buttons, Edit Show's Crew & Rates, the staffing rate picker and `RoomActionsMenu`. This is what would make the Final Report's "the PM never sees the numbers" a real security boundary rather than a convention. Scoped by Dan as its own project.
+- **Per-control UI disabling on a locked show** — the database correctly rejects writes once `finalized_at` is set, but the UI still presents live controls and surfaces the error on the row afterwards. Controls should be visibly disabled instead.
+- **Stripe billing** — planned. `can_manage_billing` and the `subscriptions` table exist as placeholders; no integration started.
 - Microsoft/Azure SSO, Capacitor iOS/Android wrapping — still deferred
 - Crew app access (crew role) — schema ready, UI deferred
-- Room delete/rename, show archiving, and the Settings page (24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, default CC email, AV Roles editor) are all built — see File structure above.
+- **A web texting service (Twilio et al.) is deliberately not being used.** Crew timesheet delivery is device-native — `SendHoursButton` offers `sms:` / Web Share / clipboard depending on what the browser supports. That feature is **built**; this note is about not replacing it with a paid SMS gateway.
 - Superadmin pages (`app/superadmin/*`) were **not** included in the Signal redesign pass — still on the old zinc palette. Low priority (Dan-only, rarely used), but convert them to tokens if you're ever in that file.
-- No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links; that stays true even after the "Join the Beta" form ships (the form is a lead-capture funnel, not an auto-provisioning flow).
+- No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The "Join the Beta" form is a lead-capture funnel, not an auto-provisioning flow, so this stays true.
+
+### Already built — do not rebuild these
+
+This list drifted badly once and sent a session off to re-implement finished work. If something here looks missing, search the repo before believing it.
+
+- **Admin UI for user privileges** — `app/dashboard/team/` + `PermissionsEditor.tsx`, gated on `can_manage_users`.
+- **Email report delivery via Resend** — the Final Report (`api/reports/final/route.ts`), which also locks the show.
+- **"Join the Beta" interest form** — `/join-beta` + `api/beta-signup/route.ts`.
+- **Per-crew timesheet Text/Share/Copy** — `SendHoursButton.tsx`.
+- **Named payroll presets, Continuous Time, Pay As Half Day UI, room rename/delete, per-crew removal, show archiving, batch travel-day toggle, reset punches, Copy Crew, Add Day from the tracker** — all shipped.
+- The whole Settings page: 24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, AV Roles editor, payroll presets, Final Report recipients.
 
 ## Past incidents worth remembering
 
+- **The repo lives inside Dropbox, including `.git`.** Mid-session, working-tree files *and* `.git` were replaced by Dropbox sync: `git show HEAD:components/RoomActionsMenu.tsx` returned 131 lines early on and 260 lines later, with `HEAD` reported as the same commit both times. Any file read before that sync completed was stale. Practical consequences: a two-machine edit can corrupt the index or produce torn commits, `git status` can disagree with disk, and analysis done against a partly-synced tree is unreliable. **Re-read files rather than trusting an earlier read in the same session** — and this is a large part of why targeted edits beat whole-file rewrites here, since a targeted edit fails loudly on a stale read while a rewrite silently overwrites from memory. Running only one Claude session at a time avoids the worst of it.
 - Invite-seeding logic once fired twice for one org, creating duplicate `av_roles` rows — surfaced as doubled dropdown options on iPad Safari. Fixed via SQL cleanup + guarding on `existingRoleCount` before seeding.
 - `TimeEntryModal` used to default new punches to the browser's real-world "today" instead of the show-day being viewed — silently produced a 33.5-hour day and broke short-turnaround detection. Fixed (see [components/TimeEntryModal.tsx](components/TimeEntryModal.tsx)).
 - Same bug, different spot: the tracker console picked "today" via `new Date().toISOString()` (UTC), which rolls to tomorrow's date in the evening in any US timezone — opened the wrong day by default. Fixed by computing today's date via `Intl.DateTimeFormat('en-CA', { timeZone })`. **Any "what day is it" logic in this app must derive from the show's timezone, never from UTC or raw `Date()` — this class of bug has now recurred twice.**
