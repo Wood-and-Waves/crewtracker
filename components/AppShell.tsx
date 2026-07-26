@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/cn'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import AccountMenu from '@/components/ui/AccountMenu'
 import Logo from '@/components/Logo'
 
 const baseNavItems = [
@@ -50,9 +51,13 @@ function Icon({ name }: { name: string }) {
 export default function AppShell({
   children,
   canManageUsers = false,
+  userName,
+  userEmail,
 }: {
   children: React.ReactNode
   canManageUsers?: boolean
+  userName?: string
+  userEmail?: string
 }) {
   const pathname = usePathname()
   const navItems = canManageUsers ? [...baseNavItems, teamNavItem] : baseNavItems
@@ -80,7 +85,10 @@ export default function AppShell({
             </Link>
           )
         })}
-        <ThemeToggle className="ml-auto" />
+        <div className="ml-auto flex items-center gap-3">
+          <ThemeToggle />
+          <AccountMenu userName={userName} userEmail={userEmail} />
+        </div>
       </header>
 
       <main className="flex-1 pb-28 lg:pb-0">{children}</main>

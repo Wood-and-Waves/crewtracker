@@ -6,14 +6,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const { data: { user } } = await supabase.auth.getUser()
 
   let canManageUsers = false
+  let userName: string | undefined
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('can_manage_users')
+      .select('can_manage_users, full_name')
       .eq('id', user.id)
       .single()
     canManageUsers = profile?.can_manage_users ?? false
+    userName = profile?.full_name ?? undefined
   }
 
-  return <AppShell canManageUsers={canManageUsers}>{children}</AppShell>
+  return (
+    <AppShell
+      canManageUsers={canManageUsers}
+      userName={userName}
+      userEmail={user?.email ?? undefined}
+    >
+      {children}
+    </AppShell>
+  )
 }

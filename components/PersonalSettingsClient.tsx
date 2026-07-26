@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import Card from '@/components/ui/Card'
 import Toggle from '@/components/ui/Toggle'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import Button from '@/components/ui/Button'
 
 export default function PersonalSettingsClient({
   use24HourTime,
@@ -17,6 +18,14 @@ export default function PersonalSettingsClient({
   const router = useRouter()
   const supabase = createClient()
   const [saving, setSaving] = useState<string | null>(null)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  async function logOut() {
+    setLoggingOut(true)
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   async function toggle(field: 'use_24_hour_time' | 'shoulder_surfer_mode', value: boolean) {
     setSaving(field)
@@ -64,6 +73,16 @@ export default function PersonalSettingsClient({
           disabled={saving === 'shoulder_surfer_mode'}
           label="Shoulder Surfer Mode"
         />
+      </div>
+
+      <div className="flex items-center justify-between pt-4 mt-3 border-t border-line">
+        <div>
+          <p className="text-sm text-ink">Account</p>
+          <p className="text-xs text-muted">Sign out of CrewTracker on this device.</p>
+        </div>
+        <Button variant="danger" size="sm" onClick={logOut} disabled={loggingOut}>
+          {loggingOut ? 'Logging out…' : 'Log out'}
+        </Button>
       </div>
     </Card>
   )
