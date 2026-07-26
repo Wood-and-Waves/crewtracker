@@ -7,8 +7,10 @@ import {
   mealPenaltyCount, mealPenaltyTotal, totalPay, isShortTurnaround,
   TimecardLike, PayrollRuleset,
 } from '@/lib/payroll'
+import { buildTimesheetText, buildSmsMessage } from '@/lib/timesheet'
 import ExportCSVButton from '@/components/ExportCSVButton'
 import ExportPDFButton from '@/components/ExportPDFButton'
+import SendHoursButton from '@/components/SendHoursButton'
 import { cn } from '@/lib/cn'
 
 function fmt(n: number): string {
@@ -41,7 +43,7 @@ export default async function ShowReportPage({
     { data: rulesetRow },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id, can_view_pay_rates, use_24_hour_time, shoulder_surfer_mode').eq('id', user.id).single(),
+    supabase.from('profiles').select('organization_id, can_view_pay_rates, use_24_hour_time, shoulder_surfer_mode, can_send_reports').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -82,6 +84,16 @@ export default async function ShowReportPage({
   const { data: punches } = timecardIds.length > 0
     ? await supabase.from('punches').select('*').in('timecard_id', timecardIds)
     : { data: [] }
+
+  // Phones for "Text Hours", keyed by crew_member_id. iOS matches the crew
+  // member by NAME STRING, which breaks on duplicate names or a renamed
+  // directory entry — the timecard carries the id, so join on that instead.
+  const crewIdsOnShow = [...new Set((timecards || []).map(t => t.crew_member_id).filter(Boolean))]
+  const { data: crewContacts } = crewIdsOnShow.length > 0
+    ? await supabase.from('crew_members').select('id, phone').in('id', crewIdsOnShow)
+    : { data: [] }
+  const phoneById: Record<string, string | null> =
+    Object.fromEntries((crewContacts || []).map(c => [c.id, c.phone]))
 
   if (!rulesetRow) {
     return (
@@ -153,6 +165,31 @@ export default async function ShowReportPage({
       mpTotal: mealPenaltyTotal(tc, ruleset),
       pay: totalPay(tc, allTimecards, ruleset, roundingMinutes),
     }
+  }
+
+  // Builds a crew member's own timesheet, server-side. Deliberately carries no
+  // dollar figures, so it's always safe to hand to the crew member themselves.
+  function timesheetFor(crew: { name: string; role: string; entries: any[] }) {
+    const entries = crew.entries
+      .map((rawTc: any) => {
+        const room = (rooms || []).find(r => r.id === rawTc.room_id)
+        const wd = (workDays || []).find(d => d.id === room?.work_day_id)
+        return { date: wd?.date as string, timecard: findTc(rawTc) }
+      })
+      .filter(e => !!e.date)
+
+    const text = buildTimesheetText({
+      showName: show.name,
+      crewName: crew.name,
+      role: crew.role,
+      entries,
+      allTimecards,
+      ruleset,
+      roundingMinutes,
+      timezone,
+      use24Hour: profile?.use_24_hour_time || false,
+    })
+    return { text, sms: buildSmsMessage(crew.name, show.name, text) }
   }
 
   return (
@@ -300,7 +337,12 @@ export default async function ShowReportPage({
           {Object.values(
             (timecards || []).reduce((acc: Record<string, any>, tc) => {
               const key = `${tc.crew_member_name}|${tc.role}`
-              if (!acc[key]) acc[key] = { name: tc.crew_member_name, role: tc.role, entries: [] }
+              if (!acc[key]) acc[key] = {
+                name: tc.crew_member_name,
+                role: tc.role,
+                crewMemberId: tc.crew_member_id,
+                entries: [],
+              }
               acc[key].entries.push(tc)
               return acc
             }, {})
@@ -315,8 +357,23 @@ export default async function ShowReportPage({
                 // Keyed on name AND role — the grouping is by `name|role`, so one
                 // person billed in two roles would otherwise collide.
                 <div key={`${crew.name}|${crew.role}`} className="rounded-card border border-line bg-surface p-5">
-                  <h2 className="text-lg font-bold text-ink mb-1">{crew.name}</h2>
-                  <p className="text-xs text-muted mb-3">{crew.role}</p>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-bold text-ink">{crew.name}</h2>
+                      <p className="text-xs text-muted">{crew.role}</p>
+                    </div>
+                    {profile?.can_send_reports && (() => {
+                      const ts = timesheetFor(crew)
+                      return (
+                        <SendHoursButton
+                          crewName={crew.name}
+                          phone={crew.crewMemberId ? phoneById[crew.crewMemberId] ?? null : null}
+                          timesheetText={ts.text}
+                          smsMessage={ts.sms}
+                        />
+                      )
+                    })()}
+                  </div>
 
                   <div className="flex flex-col gap-2 mb-3">
                     {crew.entries
