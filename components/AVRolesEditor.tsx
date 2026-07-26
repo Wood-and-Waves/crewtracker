@@ -88,23 +88,12 @@ export default function AVRolesEditor({
     router.refresh()
   }
 
-  async function move(index: number, direction: -1 | 1) {
-    const target = index + direction
-    if (target < 0 || target >= roles.length) return
-    const a = roles[index]
-    const b = roles[target]
-    setBusy(true)
-    const { error } = await supabase.from('av_roles').update({ sort_order: b.sort_order }).eq('id', a.id)
-    if (!error) await supabase.from('av_roles').update({ sort_order: a.sort_order }).eq('id', b.id)
-    setBusy(false)
-    if (error) {
-      setError(error.message)
-      return
-    }
-    const next = [...roles]
-    ;[next[index], next[target]] = [{ ...b, sort_order: a.sort_order }, { ...a, sort_order: b.sort_order }]
-    setRoles(next.sort((x, y) => x.sort_order - y.sort_order))
-  }
+  // Roles are shown alphabetically everywhere. Manual up/down reordering used to
+  // live here and was more fiddly than useful — with 31 seeded roles, finding
+  // one alphabetically beats remembering where you put it. The sort_order column
+  // stays (new rows still get one) but nothing reads it for display any more.
+  const sortedRoles = [...roles].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
 
   return (
     <Card className="p-5">
@@ -112,13 +101,8 @@ export default function AVRolesEditor({
       <p className="text-xs text-muted mb-4">Standard job titles available when staffing crew, shared across your organization.</p>
 
       <div className="flex flex-wrap gap-2 mb-4">
-        {roles.map((role, i) => (
-          <div key={role.id} className="flex items-center gap-1.5 rounded-pill bg-surface-2 border border-line pl-1 pr-2 py-1">
-            <div className="flex flex-col">
-              <button onClick={() => move(i, -1)} disabled={i === 0 || busy} className="text-muted hover:text-ink disabled:opacity-30 leading-none text-[9px] px-1">▲</button>
-              <button onClick={() => move(i, 1)} disabled={i === roles.length - 1 || busy} className="text-muted hover:text-ink disabled:opacity-30 leading-none text-[9px] px-1">▼</button>
-            </div>
-
+        {sortedRoles.map(role => (
+          <div key={role.id} className="flex items-center gap-1.5 rounded-pill bg-surface-2 border border-line px-2 py-1">
             {editingId === role.id ? (
               <input
                 autoFocus

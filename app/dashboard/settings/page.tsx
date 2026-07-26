@@ -12,7 +12,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('organization_id, use_24_hour_time, shoulder_surfer_mode, can_manage_users, can_manage_rulesets')
+    .select('organization_id, use_24_hour_time, shoulder_surfer_mode, can_manage_users, can_manage_rulesets, full_name')
     .eq('id', user.id)
     .single()
 
@@ -26,8 +26,8 @@ export default async function SettingsPage() {
   }
 
   const [{ data: organization }, { data: avRoles }, { data: presets }] = await Promise.all([
-    supabase.from('organizations').select('id, timecard_rounding_minutes, default_cc_email, final_report_emails').eq('id', profile.organization_id).single(),
-    supabase.from('av_roles').select('id, name, sort_order').eq('organization_id', profile.organization_id).order('sort_order'),
+    supabase.from('organizations').select('id, timecard_rounding_minutes, final_report_emails').eq('id', profile.organization_id).single(),
+    supabase.from('av_roles').select('id, name, sort_order').eq('organization_id', profile.organization_id).order('name'),
     supabase.from('payroll_presets').select('*').eq('organization_id', profile.organization_id).order('sort_order'),
   ])
 
@@ -40,6 +40,7 @@ export default async function SettingsPage() {
           <PersonalSettingsClient
             use24HourTime={profile.use_24_hour_time || false}
             shoulderSurferMode={profile.shoulder_surfer_mode || false}
+            fullName={profile.full_name || ''}
           />
         </div>
 
@@ -48,7 +49,6 @@ export default async function SettingsPage() {
             <OrgSettingsClient
               organizationId={organization.id}
               timecardRoundingMinutes={organization.timecard_rounding_minutes ?? 1}
-              defaultCcEmail={organization.default_cc_email}
               finalReportEmails={organization.final_report_emails}
             />
           </div>

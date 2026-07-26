@@ -108,7 +108,7 @@ export default function StaffRoomModal({
         .from('av_roles')
         .select('name')
         .eq('organization_id', organizationId)
-        .order('sort_order')
+        .order('name')
       setRoles((roleData || []).map(r => r.name))
 
       // Every rate already in use anywhere on this show. Reached through

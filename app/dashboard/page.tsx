@@ -5,6 +5,7 @@ import ArchiveShowButton from '@/components/ArchiveShowButton'
 import Card from '@/components/ui/Card'
 import Chip from '@/components/ui/Chip'
 import { cn } from '@/lib/cn'
+import { showStatus, SHOW_STATUS_META } from '@/lib/showStatus'
 import Link from 'next/link'
 
 // start_date/end_date are Postgres `date` columns, so they arrive as bare
@@ -71,7 +72,9 @@ export default async function DashboardPage({
             !showingArchived ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink',
           )}
         >
-          Active
+          {/* "Current" rather than "Active": this tab is just not-archived, and
+              Active is now one of five real statuses on the cards below. */}
+          Current
         </Link>
         <Link
           href="?archived=1"
@@ -105,9 +108,16 @@ export default async function DashboardPage({
                     </p>
                   )}
                   <div className="mt-4">
-                    {show.archived
-                      ? <Chip>Archived</Chip>
-                      : <Chip tone="live"><span className="h-1.5 w-1.5 rounded-full bg-accent" />Active</Chip>}
+                    {(() => {
+                      const status = showStatus(show)
+                      const { label, tone } = SHOW_STATUS_META[status]
+                      return (
+                        <Chip tone={tone}>
+                          {status === 'active' && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                          {label}
+                        </Chip>
+                      )
+                    })()}
                   </div>
                 </Card>
               </Link>

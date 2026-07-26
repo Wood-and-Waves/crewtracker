@@ -11,14 +11,35 @@ import Button from '@/components/ui/Button'
 export default function PersonalSettingsClient({
   use24HourTime,
   shoulderSurferMode,
+  fullName = '',
 }: {
   use24HourTime: boolean
   shoulderSurferMode: boolean
+  /** profiles.full_name. Empty for anyone who signed up with email and password:
+   *  the invite flow never captured a name, and only Google SSO supplied one, so
+   *  those members showed as "—" everywhere. */
+  fullName?: string
 }) {
   const router = useRouter()
   const supabase = createClient()
   const [saving, setSaving] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [name, setName] = useState(fullName)
+  const [nameSaved, setNameSaved] = useState(false)
+
+  async function saveName() {
+    const trimmed = name.trim()
+    if (trimmed === (fullName || '').trim()) return
+    setSaving('full_name')
+    setNameSaved(false)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('profiles').update({ full_name: trimmed || null }).eq('id', user.id)
+    }
+    setSaving(null)
+    setNameSaved(true)
+    router.refresh()
+  }
 
   async function logOut() {
     setLoggingOut(true)
@@ -40,6 +61,26 @@ export default function PersonalSettingsClient({
   return (
     <Card className="p-5">
       <h2 className="text-lg font-bold text-ink mb-4">Personal Preferences</h2>
+
+      <div className="py-3 border-b border-line">
+        <label htmlFor="full-name" className="block text-sm text-ink">Your name</label>
+        <p className="text-xs text-muted mb-2">
+          Shown to your team and on the shows you&rsquo;re assigned to.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            id="full-name"
+            value={name}
+            onChange={e => { setName(e.target.value); setNameSaved(false) }}
+            onBlur={saveName}
+            onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            placeholder="e.g. Dan Smith"
+            className="flex-1 rounded-field bg-surface-2 border border-line px-3 py-2 text-sm text-ink placeholder:text-muted outline-none focus:border-accent"
+          />
+          {saving === 'full_name' && <span className="text-xs text-muted">Saving…</span>}
+          {nameSaved && saving !== 'full_name' && <span className="text-xs text-good">Saved</span>}
+        </div>
+      </div>
 
       <div className="flex items-center justify-between py-3 border-b border-line">
         <div>

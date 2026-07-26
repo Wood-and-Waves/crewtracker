@@ -21,6 +21,7 @@ export default function InviteAuthForm({
   const supabase = createClient()
   const [email, setEmail] = useState(restrictedEmail || '')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
   const [isSignUp, setIsSignUp] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -53,10 +54,17 @@ export default function InviteAuthForm({
     setError('')
     setLoading(true)
     if (isSignUp) {
+      // full_name rides along in user metadata because handle_new_user() reads
+      // raw_user_meta_data->>'full_name' when it creates the profile row. Google
+      // SSO supplies that field automatically, which is why Google sign-ups had
+      // names and email/password ones showed as "—" forever after.
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: callbackUrl },
+        options: {
+          emailRedirectTo: callbackUrl,
+          data: { full_name: name.trim() || null },
+        },
       })
       if (error) setError(error.message)
       else setMagicSent(true)
@@ -122,6 +130,15 @@ export default function InviteAuthForm({
         </div>
 
         <div className="flex flex-col gap-3">
+          {isSignUp && (
+            <input
+              type="text"
+              placeholder="Your name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className={inputCls}
+            />
+          )}
           <input
             type="email"
             placeholder="Email address"

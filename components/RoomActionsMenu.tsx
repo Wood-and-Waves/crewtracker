@@ -37,7 +37,7 @@ export default function RoomActionsMenu({
   useEffect(() => {
     if (mode !== 'editCrew') return
     let active = true
-    supabase.from('av_roles').select('name').order('sort_order').then(({ data }) => {
+    supabase.from('av_roles').select('name').order('name').then(({ data }) => {
       if (active) setRoles((data || []).map(r => r.name))
     })
     return () => { active = false }
@@ -229,7 +229,12 @@ export default function RoomActionsMenu({
                         onChange={e => updateRole(tc, e.target.value)}
                         className="flex-1 rounded-field bg-surface-3 border border-line px-3 py-2 text-sm text-ink outline-none focus:border-accent"
                       >
-                        {roleOptions.length === 0 && <option value="" className="bg-surface-2 text-ink">No role</option>}
+                        {/* Someone staffed without a role has role === '', which
+                            matches no <option> — so the browser displayed the
+                            first one instead and a blank role read as
+                            "Production Manager". An explicit empty option makes
+                            the real state visible and selectable. */}
+                        {!tc.role && <option value="" className="bg-surface-2 text-ink">No role</option>}
                         {roleOptions.map(r => (
                           <option key={r} value={r} className="bg-surface-2 text-ink">{r}</option>
                         ))}

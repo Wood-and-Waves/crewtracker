@@ -40,7 +40,8 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
     .from('av_roles')
     .select('*')
     .eq('organization_id', profile?.organization_id)
-    .order('sort_order')
+    // Alphabetical everywhere; sort_order is no longer user-managed.
+    .order('name')
 
   return (
     <EditCrewMemberClient

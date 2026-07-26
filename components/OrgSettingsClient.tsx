@@ -12,18 +12,15 @@ const inputCls =
 export default function OrgSettingsClient({
   organizationId,
   timecardRoundingMinutes,
-  defaultCcEmail,
   finalReportEmails,
 }: {
   organizationId: string
   timecardRoundingMinutes: number
-  defaultCcEmail: string | null
   finalReportEmails: string | null
 }) {
   const router = useRouter()
   const supabase = createClient()
   const [rounding, setRounding] = useState(timecardRoundingMinutes)
-  const [ccEmail, setCcEmail] = useState(defaultCcEmail || '')
   const [finalEmails, setFinalEmails] = useState(finalReportEmails || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -37,7 +34,6 @@ export default function OrgSettingsClient({
       .from('organizations')
       .update({
         timecard_rounding_minutes: rounding,
-        default_cc_email: ccEmail.trim() || null,
         final_report_emails: finalEmails.trim() || null,
       })
       .eq('id', organizationId)
@@ -69,17 +65,11 @@ export default function OrgSettingsClient({
         <p className="text-xs text-muted mt-1">Rounds worked time up to the next interval before calculating pay.</p>
       </div>
 
-      <div className="mb-4">
-        <label className="block text-sm text-muted mb-2">Default CC Email</label>
-        <input
-          type="email"
-          value={ccEmail}
-          onChange={e => setCcEmail(e.target.value)}
-          placeholder="payroll@example.com"
-          className={inputCls}
-        />
-        <p className="text-xs text-muted mt-1">Used as a default CC when report email delivery is built.</p>
-      </div>
+      {/* "Default CC Email" used to sit here. It predated the Final Report,
+          which shipped using final_report_emails below, and was written by this
+          form but read by nothing — a setting that looked like it did something
+          and didn't. The organizations.default_cc_email column is left in place
+          (dropping it is irreversible and it costs nothing) but is now unused. */}
 
       <div className="mb-4">
         <label className="block text-sm text-muted mb-2">Final Report Recipients</label>
