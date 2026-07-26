@@ -6,7 +6,9 @@ import StaffRoomModal from '@/components/StaffRoomModal'
 import TimecardRow from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
-import { PUNCH_ORDER, PUNCH_LABELS } from '@/lib/punches'
+import MobileRoomTracker from '@/components/MobileRoomTracker'
+import { PUNCH_ORDER, PUNCH_LABELS, isWrapped } from '@/lib/punches'
+import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
 import { PUNCH_GRID_COLS } from '@/lib/trackerLayout'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
@@ -126,68 +128,162 @@ export default async function ShowDetailPage({
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
 
+  // Day summary — sum the day's worked hours the same way each TimecardRow
+  // displays them: only wrapped cards contribute, using the raw ST/OT/DT
+  // worked-hours convention (not the ceiling-rounded "paid" totals).
+  const dayTimecards = roomsList.flatMap(r => roomTimecards[r.id] || [])
+  let sumST = 0, sumOT = 0, sumDT = 0
+  if (ruleset) {
+    for (const tc of dayTimecards) {
+      if (!isWrapped(tc.punches)) continue
+      sumST += straightTimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes)
+      sumOT += overtimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes)
+      sumDT += doubleTimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes)
+    }
+  }
+  const summary = {
+    crew: dayTimecards.length,
+    rooms: roomsList.length,
+    st: sumST,
+    otdt: sumOT + sumDT,
+  }
+
+  const showMeta = [show.venue, show.client_company].filter(Boolean).join(' · ')
+
   return (
-    <div className="p-6 md:p-10">
-      <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tight mt-2">{show.name}</h1>
-        <div className="flex gap-2 mt-2">
-          <Link href={`/dashboard/shows/${id}/edit`}>
-            <Button variant="ghost" size="sm" aria-label="Edit Show">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="lg:hidden">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-              </svg>
-              <span className="hidden lg:inline">Edit Show</span>
-            </Button>
+    <div className="p-6 md:p-10 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8 lg:max-w-[1400px] lg:mx-auto">
+      {/* Mobile compact header: show info, small action icons, day nav.
+          Hidden on desktop, where the rail below takes over. */}
+      <div className="lg:hidden mb-6">
+        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+        <div className="flex items-start justify-between gap-3 mt-2">
+          <div className="min-w-0">
+            <h1 className="text-xl font-extrabold tracking-tight truncate">{show.name}</h1>
+            {showMeta && <p className="text-sm text-muted truncate">{showMeta}</p>}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href={`/dashboard/shows/${id}/edit`}>
+              <Button variant="ghost" size="sm" aria-label="Edit Show">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </Button>
+            </Link>
+            <Link href={`/dashboard/shows/${id}/reports`}>
+              <Button variant="ghost" size="sm" aria-label="View Report">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
+                  <path d="M14 3v6h6" />
+                  <path d="M9 14h6M9 17h6" />
+                </svg>
+              </Button>
+            </Link>
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-4 mt-5">
+          <Link
+            href={prevDay ? `?day=${prevDay.day_number}` : '#'}
+            aria-label="Previous day"
+            className={cn(
+              'rounded-full h-9 w-9 flex items-center justify-center shrink-0',
+              !prevDay ? 'pointer-events-none bg-surface-2 text-muted opacity-30' : 'bg-accent text-accent-ink',
+            )}
+          >
+            ‹
           </Link>
-          <Link href={`/dashboard/shows/${id}/reports`}>
-            <Button variant="ghost" size="sm" aria-label="View Report">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="lg:hidden">
-                <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
-                <path d="M14 3v6h6" />
-                <path d="M9 14h6M9 17h6" />
-              </svg>
-              <span className="hidden lg:inline">View Report</span>
-            </Button>
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {activeDay.day_number} of {workDays.length}</p>
+            <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
+          </div>
+          <Link
+            href={nextDay ? `?day=${nextDay.day_number}` : '#'}
+            aria-label="Next day"
+            className={cn(
+              'rounded-full h-9 w-9 flex items-center justify-center shrink-0',
+              !nextDay ? 'pointer-events-none bg-surface-2 text-muted opacity-30' : 'bg-accent text-accent-ink',
+            )}
+          >
+            ›
           </Link>
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-4 my-6">
-        <Link
-          href={prevDay ? `?day=${prevDay.day_number}` : '#'}
-          className={cn(
-            'rounded-full bg-surface-2 border border-line p-2 h-9 w-9 flex items-center justify-center',
-            !prevDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
-          )}
-        >
-          ‹
-        </Link>
-        <div className="text-center">
-          <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {activeDay.day_number} of {workDays.length}</p>
-          <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
+      {/* Left rail (desktop only): show info, day nav, day summary, actions. */}
+      <aside className="hidden lg:block space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <div>
+          <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+          <h1 className="text-2xl font-extrabold tracking-tight mt-2">{show.name}</h1>
+          {showMeta && <p className="text-sm text-muted mt-1">{showMeta}</p>}
         </div>
-        <Link
-          href={nextDay ? `?day=${nextDay.day_number}` : '#'}
-          className={cn(
-            'rounded-full bg-surface-2 border border-line p-2 h-9 w-9 flex items-center justify-center',
-            !nextDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
-          )}
-        >
-          ›
-        </Link>
-      </div>
 
-      <div className="flex justify-end mb-3">
-        <AddRoomModal
-          showId={id}
-          currentWorkDayId={activeDay.id}
-          remainingWorkDayIds={remainingWorkDayIds}
-        />
-      </div>
+        <div className="rounded-card border border-line bg-surface p-3">
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              href={prevDay ? `?day=${prevDay.day_number}` : '#'}
+              aria-label="Previous day"
+              className={cn(
+                'rounded-full bg-surface-2 border border-line h-9 w-9 flex items-center justify-center shrink-0',
+                !prevDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
+              )}
+            >
+              ‹
+            </Link>
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {activeDay.day_number} of {workDays.length}</p>
+              <p className="text-base font-bold text-ink tabular-nums">{dateLabel}</p>
+            </div>
+            <Link
+              href={nextDay ? `?day=${nextDay.day_number}` : '#'}
+              aria-label="Next day"
+              className={cn(
+                'rounded-full bg-surface-2 border border-line h-9 w-9 flex items-center justify-center shrink-0',
+                !nextDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
+              )}
+            >
+              ›
+            </Link>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted mb-2">Day summary</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-field bg-surface-2 px-3 py-2">
+              <p className="text-xs text-muted">Crew</p>
+              <p className="text-xl font-bold text-ink tabular-nums">{summary.crew}</p>
+            </div>
+            <div className="rounded-field bg-surface-2 px-3 py-2">
+              <p className="text-xs text-muted">Rooms</p>
+              <p className="text-xl font-bold text-ink tabular-nums">{summary.rooms}</p>
+            </div>
+            <div className="rounded-field bg-surface-2 px-3 py-2">
+              <p className="text-xs text-muted">ST hrs</p>
+              <p className="text-xl font-bold text-ink tabular-nums">{summary.st.toFixed(2)}</p>
+            </div>
+            <div className="rounded-field bg-surface-2 px-3 py-2">
+              <p className="text-xs text-muted">OT / DT</p>
+              <p className="text-xl font-bold text-ink tabular-nums">{summary.otdt.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-stretch gap-2">
+          <AddRoomModal
+            showId={id}
+            currentWorkDayId={activeDay.id}
+            remainingWorkDayIds={remainingWorkDayIds}
+          />
+          <Link href={`/dashboard/shows/${id}/edit`} className="w-full">
+            <Button variant="ghost" size="sm" className="w-full">Edit Show</Button>
+          </Link>
+          <Link href={`/dashboard/shows/${id}/reports`} className="w-full">
+            <Button variant="ghost" size="sm" className="w-full">View Report</Button>
+          </Link>
+        </div>
+      </aside>
+
+      <div className="hidden lg:grid min-w-0 grid-cols-1 2xl:grid-cols-2 gap-4">
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
           return (
@@ -246,6 +342,24 @@ export default async function ShowDetailPage({
           )
         })}
       </div>
+
+      <MobileRoomTracker
+        className="lg:hidden min-w-0"
+        showId={id}
+        rooms={roomsList.map(r => ({ id: r.id, name: r.name }))}
+        roomCrew={roomTimecards}
+        dayCrew={dayTimecards}
+        timezone={timezone}
+        ruleset={ruleset}
+        allTimecards={allTimecardsWithPunches}
+        dayDate={activeDay.date}
+        use24Hour={profile?.use_24_hour_time || false}
+        roundingMinutes={roundingMinutes}
+        organizationId={profile?.organization_id}
+        currentWorkDayId={activeDay.id}
+        remainingWorkDayIds={remainingWorkDayIds}
+        remainingRoomsByName={remainingRoomsByName}
+      />
     </div>
   )
 }
