@@ -387,7 +387,7 @@ export default function EditShowClient({
             <p className="text-sm text-muted mb-4">Name this rule set — e.g. a client or contract it applies to.</p>
             <input
               autoFocus
-              placeholder="e.g. PwC"
+              placeholder="e.g. Corporate Standard"
               value={presetName}
               onChange={e => setPresetName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveAsPreset()}
