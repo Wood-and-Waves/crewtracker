@@ -4,7 +4,7 @@ import Link from 'next/link'
 import {
   straightTimeHours, overtimeHours, doubleTimeHours,
   paidStraightTimeHours, paidOvertimeHours, paidDoubleTimeHours,
-  mealPenaltyCount, isShortTurnaround,
+  mealPenaltyCount, mealPenaltyTotal, totalPay, isShortTurnaround,
   TimecardLike, PayrollRuleset,
 } from '@/lib/payroll'
 import ExportCSVButton from '@/components/ExportCSVButton'
@@ -41,7 +41,7 @@ export default async function ShowReportPage({
     { data: rulesetRow },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id, can_view_pay_rates, use_24_hour_time').eq('id', user.id).single(),
+    supabase.from('profiles').select('organization_id, can_view_pay_rates, use_24_hour_time, shoulder_surfer_mode').eq('id', user.id).single(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
@@ -52,6 +52,11 @@ export default async function ShowReportPage({
   // Financials only show in exports if BOTH the show tracks dollar amounts
   // AND the current user has permission to view pay rates.
   const canSeeFinancials = (show.show_financials || false) && (profile?.can_view_pay_rates ?? false)
+
+  // Amounts on SCREEN are masked under Shoulder Surfer Mode (iOS hideFinancials).
+  // Exports stay unmasked — you deliberately asked for that file.
+  const shoulderSurfer = profile?.shoulder_surfer_mode ?? false
+  const money = (n: number) => (shoulderSurfer ? '•••' : `$${n.toFixed(2)}`)
 
   const timezone = show.timezone_identifier || 'America/Chicago'
 
@@ -101,11 +106,12 @@ export default async function ShowReportPage({
   }))
 
   // Master Summary: PAID (ceiling-rounded) totals across the whole show.
-  let totalPaidST = 0, totalPaidOT = 0, totalPaidDT = 0
+  let totalPaidST = 0, totalPaidOT = 0, totalPaidDT = 0, totalLaborCost = 0
   for (const tc of allTimecards) {
     totalPaidST += paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
     totalPaidOT += paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
     totalPaidDT += paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    totalLaborCost += totalPay(tc, allTimecards, ruleset, roundingMinutes)
   }
   const totalPaidHours = totalPaidST + totalPaidOT + totalPaidDT
 
@@ -139,7 +145,14 @@ export default async function ShowReportPage({
     if (ot > 0) parts.push(`${fmt(ot)} OT`)
     if (dt > 0) parts.push(`${fmt(dt)} DT`)
     if (mp > 0) parts.push(`${mp} MP`)
-    return { text: parts.join(' | '), dayTotal: st + ot + dt, shortTurn: isShortTurnaround(tc, allTimecards, ruleset) }
+    return {
+      text: parts.join(' | '),
+      dayTotal: st + ot + dt,
+      shortTurn: isShortTurnaround(tc, allTimecards, ruleset),
+      mpCount: mp,
+      mpTotal: mealPenaltyTotal(tc, ruleset),
+      pay: totalPay(tc, allTimecards, ruleset, roundingMinutes),
+    }
   }
 
   return (
@@ -217,6 +230,12 @@ export default async function ShowReportPage({
             <span className="tabular-nums">{fmt(totalPaidDT)} hrs</span>
           </div>
         )}
+        {canSeeFinancials && (
+          <div className="flex justify-between mt-3 pt-3 border-t border-line">
+            <span className="text-sm font-semibold text-ink">Direct Labor Total</span>
+            <span className="text-base font-bold text-good tabular-nums">{money(totalLaborCost)}</span>
+          </div>
+        )}
       </div>
 
       {activeView === 'day' ? (
@@ -264,6 +283,9 @@ export default async function ShowReportPage({
                             {fmt(b.dayTotal)} hrs
                           </p>
                           <p className="text-xs text-muted">{b.text}</p>
+                          {canSeeFinancials && b.mpTotal > 0 && (
+                            <p className="text-xs text-ot">{b.mpCount} MP — {money(b.mpTotal)}</p>
+                          )}
                         </div>
                       </div>
                     )
@@ -286,9 +308,13 @@ export default async function ShowReportPage({
             .sort((a: any, b: any) => a.name.localeCompare(b.name))
             .map((crew: any) => {
               let crewTotal = 0
+              let crewPay = 0
+              let crewMP = 0
 
               return (
-                <div key={crew.name} className="rounded-card border border-line bg-surface p-5">
+                // Keyed on name AND role — the grouping is by `name|role`, so one
+                // person billed in two roles would otherwise collide.
+                <div key={`${crew.name}|${crew.role}`} className="rounded-card border border-line bg-surface p-5">
                   <h2 className="text-lg font-bold text-ink mb-1">{crew.name}</h2>
                   <p className="text-xs text-muted mb-3">{crew.role}</p>
 
@@ -306,6 +332,12 @@ export default async function ShowReportPage({
                           return r?.work_day_id === d.id
                         })
 
+                        // Resolved before the travel-day branch: a pure travel day
+                        // contributes no hours but does contribute pay.
+                        const b = breakdownString(tc)
+                        crewPay += b.pay
+                        crewMP += b.mpTotal
+
                         if (tc.is_travel_day) {
                           return (
                             <div key={tc.id} className="flex justify-between text-sm">
@@ -315,7 +347,6 @@ export default async function ShowReportPage({
                           )
                         }
 
-                        const b = breakdownString(tc)
                         crewTotal += b.dayTotal
 
                         return (
@@ -340,6 +371,21 @@ export default async function ShowReportPage({
                     <span className="text-sm font-semibold text-ink">Total Show Hours</span>
                     <span className="text-sm font-semibold text-ink tabular-nums">{fmt(crewTotal)} hrs</span>
                   </div>
+
+                  {canSeeFinancials && (
+                    <>
+                      {crewMP > 0 && (
+                        <div className="flex justify-between mt-1">
+                          <span className="text-sm text-muted">Meal Penalties</span>
+                          <span className="text-sm text-muted tabular-nums">{money(crewMP)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between mt-1">
+                        <span className="text-sm font-semibold text-ink">Total Pay</span>
+                        <span className="text-sm font-bold text-good tabular-nums">{money(crewPay)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )
             })}

@@ -19,9 +19,11 @@ const inputCls =
 export default function EditCrewMemberClient({
   crew,
   availableRoles,
+  shoulderSurferMode = false,
 }: {
   crew: CrewMember
   availableRoles: AVRole[]
+  shoulderSurferMode?: boolean
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -160,7 +162,9 @@ export default function EditCrewMemberClient({
                 {card.role}
               </button>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-muted">${card.day_rate.toFixed(0)}</span>
+                <span className="text-sm text-muted">
+                  {shoulderSurferMode ? '•••' : `$${card.day_rate.toFixed(0)}`}
+                </span>
                 <button onClick={() => deleteRateCard(card.id)} className="text-muted hover:text-danger text-sm">✕</button>
               </div>
             </div>

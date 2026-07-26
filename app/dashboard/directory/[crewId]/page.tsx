@@ -10,7 +10,7 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('organization_id')
+    .select('organization_id, shoulder_surfer_mode')
     .eq('id', user.id)
     .single()
 
@@ -28,5 +28,11 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
     .eq('organization_id', profile?.organization_id)
     .order('sort_order')
 
-  return <EditCrewMemberClient crew={crew} availableRoles={roles || []} />
+  return (
+    <EditCrewMemberClient
+      crew={crew}
+      availableRoles={roles || []}
+      shoulderSurferMode={profile?.shoulder_surfer_mode || false}
+    />
+  )
 }

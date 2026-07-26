@@ -171,7 +171,7 @@ export default function ExportPDFButton({
               <Text style={[styles.tableHeaderText, { width: 60, textAlign: 'right' }]}>Paid OT</Text>
             </View>
             {crewSummaries.map(c => (
-              <View key={c.name} style={styles.tableRow}>
+              <View key={`${c.name}|${c.role}`} style={styles.tableRow}>
                 <Text style={[styles.tableCell, { width: 130 }]}>{c.name}</Text>
                 <Text style={[styles.tableCell, { width: 100, color: '#666' }]}>{c.role}</Text>
                 <Text style={[styles.tableCell, { width: 55, textAlign: 'right', color: '#666' }]}>{fmt2(c.worked)}</Text>
@@ -203,7 +203,7 @@ export default function ExportPDFButton({
               })
 
               return (
-                <View key={c.name} style={styles.crewCard} wrap={false}>
+                <View key={`${c.name}|${c.role}`} style={styles.crewCard} wrap={false}>
                   <Text style={styles.crewName}>{c.name} <Text style={styles.crewRole}>({c.role})</Text></Text>
 
                   <View style={{ marginTop: 4 }}>
