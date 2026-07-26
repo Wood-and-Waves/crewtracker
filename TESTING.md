@@ -19,6 +19,22 @@ session or an API probe.
 
 ---
 
+## ✅ Payroll confirmed correct by Dan, 2026-07-26
+
+The figures aren't just internally consistent — Dan checked them against how he actually
+pays people and confirmed they're right. That was the only item in this pass that no
+amount of automated checking could settle, and it's the one that matters most.
+
+## Claude's list — COMPLETE (production, as dan@smithcabinets.co)
+
+All boundaries held; all 11 integrity checks clean. Details in the session, summarised:
+rate reads/writes refused for an unpermitted user while staffing still works; every
+cross-organization probe empty; unassigned show 404s with no data in the response;
+anonymous blocked everywhere; six write paths refused on a finalized show including the
+new `add_show_day` function; production left exactly as found.
+
+Re-run `npm run db:sql -- scripts/sql/integrity-sweep.sql` after any manual testing session.
+
 ## Already verified — don't redo
 
 - **Payroll math recomputed independently from the database** and matches the app:
