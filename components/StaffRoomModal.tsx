@@ -50,6 +50,8 @@ export default function StaffRoomModal({
   // Names of selected crew already staffed in OTHER rooms today, awaiting a
   // confirm before we also add them here.
   const [pendingCrossRoom, setPendingCrossRoom] = useState<string[] | null>(null)
+  // Post-insert summary when some days were skipped as already-staffed.
+  const [notice, setNotice] = useState('')
 
   function inThisRoom(memberId: string) {
     return dayAssignments.some(a => a.crewMemberId === memberId && a.roomId === roomId)
@@ -117,6 +119,7 @@ export default function StaffRoomModal({
 
   function submit() {
     setError('')
+    setNotice('')
     const selectedIds = Object.keys(selected).filter(id => !inThisRoom(id))
     if (selectedIds.length === 0) {
       setError('Select at least one crew member')
@@ -139,16 +142,44 @@ export default function StaffRoomModal({
     setLoading(true)
 
     const roomIds = applyAll ? [roomId, ...remainingRoomIdsSameName] : [roomId]
+    const crewIds = Object.keys(selected)
+
+    // Ask the database who is ALREADY on these rosters, rather than trusting
+    // `dayAssignments`. Those props only cover the ACTIVE day, so "apply to all
+    // remaining days" had no guard at all on future days; and they go stale if
+    // the page hasn't re-rendered since a previous insert. Both routes produced
+    // duplicate timecards, which then feed batch punching and every report
+    // total. A unique index on (room_id, crew_member_id) backs this up.
+    const { data: existing, error: exError } = await supabase
+      .from('timecards')
+      .select('room_id, crew_member_id')
+      .in('room_id', roomIds)
+      .in('crew_member_id', crewIds)
+
+    if (exError) {
+      setError(exError.message)
+      setLoading(false)
+      return
+    }
+
+    const taken = new Set((existing || []).map(e => `${e.room_id}|${e.crew_member_id}`))
+
     const timecardRows: any[] = []
     const rateCardUpserts: any[] = []
+    let skippedDays = 0
+    const skippedNames = new Set<string>()
 
     for (const [crewId, info] of Object.entries(selected)) {
-      if (inThisRoom(crewId)) continue // never re-add to the same room
       const member = crew.find(c => c.id === crewId)
       if (!member) continue
       const dayRate = parseFloat(info.dayRate) || 0
 
       for (const rId of roomIds) {
+        if (taken.has(`${rId}|${crewId}`)) {
+          skippedDays++
+          skippedNames.add(member.full_name)
+          continue
+        }
         timecardRows.push({
           room_id: rId,
           crew_member_id: crewId,
@@ -164,14 +195,24 @@ export default function StaffRoomModal({
     }
 
     if (timecardRows.length === 0) {
-      setError('Select at least one crew member')
+      setError(
+        skippedDays > 0
+          ? `${[...skippedNames].join(', ')} ${skippedNames.size === 1 ? 'is' : 'are'} already on every day selected.`
+          : 'Select at least one crew member'
+      )
       setLoading(false)
       return
     }
 
     const { error: tcError } = await supabase.from('timecards').insert(timecardRows)
     if (tcError) {
-      setError(tcError.message)
+      // 23505 = the unique index caught a duplicate the check above missed
+      // (e.g. someone else staffed the same person concurrently).
+      setError(
+        tcError.code === '23505'
+          ? 'Someone was already added to one of these days. Reopen and try again.'
+          : tcError.message
+      )
       setLoading(false)
       return
     }
@@ -183,9 +224,20 @@ export default function StaffRoomModal({
     }
 
     setLoading(false)
-    setOpen(false)
     setSelected({})
     router.refresh()
+
+    // Don't close silently when days were skipped — the PM asked for N days and
+    // got fewer, so say so rather than leaving them to notice on the roster.
+    if (skippedDays > 0) {
+      const added = timecardRows.length
+      setNotice(
+        `Added ${added} ${added === 1 ? 'day' : 'days'}. Skipped ${skippedDays} — ` +
+        `${[...skippedNames].join(', ')} ${skippedNames.size === 1 ? 'was' : 'were'} already staffed there.`
+      )
+    } else {
+      setOpen(false)
+    }
   }
 
   if (!open) {
@@ -281,8 +333,11 @@ export default function StaffRoomModal({
             </label>
           )}
           {error && <p className="text-xs text-danger mb-3">{error}</p>}
+          {notice && <p className="text-xs text-ot mb-3">{notice}</p>}
           <div className="flex gap-3">
-            <Button variant="ghost" className="flex-1 py-3" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="flex-1 py-3" onClick={() => setOpen(false)}>
+              {notice ? 'Done' : 'Cancel'}
+            </Button>
             <Button className="flex-1 py-3" onClick={submit} disabled={loading || selectedCount === 0}>
               {loading ? 'Staffing...' : `Staff ${selectedCount || ''} Crew`}
             </Button>
