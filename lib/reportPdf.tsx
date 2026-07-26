@@ -20,6 +20,28 @@ import { toTimecardLike, workDayFor } from '@/lib/reportCsv'
 
 const fmt2 = (n: number) => n.toFixed(2)
 
+// Day rates are nearly always whole dollars; printing "$500" rather than
+// "$500.00" keeps the narrow Rate column from wrapping. Cents show when real.
+const money = (n: number) => Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`
+
+/**
+ * A crew member's day rate lives on each timecard, so one person can hold
+ * different rates across days of the same show. One rate prints plainly; more
+ * than one prints a range, and the per-day rate is then shown on every entry
+ * row so the range is never ambiguous.
+ */
+function rateLabel(rates: number[]): string {
+  if (rates.length === 0) return '—'
+  if (rates.length === 1) return money(rates[0])
+  const low = Math.round(rates[0])
+  const high = Math.round(rates[rates.length - 1])
+  return `$${low}–${high}`
+}
+
+// Column widths for the Crew Summary table, shared by the header, every row and
+// the totals row so a change can't misalign one of the three.
+const col = { name: 120, role: 95, rate: 55, worked: 55, paid: 55, wot: 60, pot: 60 }
+
 export type PdfParts = {
   Document: any; Page: any; Text: any; View: any; StyleSheet: any
 }
@@ -67,6 +89,7 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
     crewCard: { marginBottom: 14 },
     crewName: { fontSize: 13, fontWeight: 700 },
     crewRole: { fontSize: 10, color: '#666' },
+    crewRate: { fontSize: 10, fontWeight: 700 },
     entryBox: { backgroundColor: '#fafafa', borderRadius: 4, padding: 8, marginBottom: 4 },
     entryRow: { flexDirection: 'row', justifyContent: 'space-between' },
     entryText: { fontSize: 9 },
@@ -127,11 +150,14 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
       pay += totalPay(tc, allTimecards, ruleset, roundingMinutes)
       travel += travelLegPay(tc, ruleset)
     }
+    const rates = [...new Set(entries.map((e: any) => Number(e.day_rate) || 0))]
+      .sort((a, b) => a - b)
     return {
       name: entries[0].crew_member_name, role: entries[0].role, entries,
       st, ot, dt, worked: st + ot + dt,
       pST, pOT, pDT, paid: pST + pOT + pDT,
       pay, travel,
+      rates, ratesVary: rates.length > 1,
     }
   })
 
@@ -192,30 +218,38 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
 
         <Text style={styles.sectionTitle}>Crew Summary</Text>
         <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderText, { width: 130 }]}>Name</Text>
-          <Text style={[styles.tableHeaderText, { width: 100 }]}>Role</Text>
-          <Text style={[styles.tableHeaderText, { width: 55, textAlign: 'right' }]}>Worked</Text>
-          <Text style={[styles.tableHeaderText, { width: 55, textAlign: 'right' }]}>Paid</Text>
-          <Text style={[styles.tableHeaderText, { width: 60, textAlign: 'right' }]}>Worked OT</Text>
-          <Text style={[styles.tableHeaderText, { width: 60, textAlign: 'right' }]}>Paid OT</Text>
+          <Text style={[styles.tableHeaderText, { width: col.name }]}>Name</Text>
+          <Text style={[styles.tableHeaderText, { width: col.role }]}>Role</Text>
+          {showFinancials ? (
+            <Text style={[styles.tableHeaderText, { width: col.rate, textAlign: 'right' }]}>Day Rate</Text>
+          ) : null}
+          <Text style={[styles.tableHeaderText, { width: col.worked, textAlign: 'right' }]}>Worked</Text>
+          <Text style={[styles.tableHeaderText, { width: col.paid, textAlign: 'right' }]}>Paid</Text>
+          <Text style={[styles.tableHeaderText, { width: col.wot, textAlign: 'right' }]}>Worked OT</Text>
+          <Text style={[styles.tableHeaderText, { width: col.pot, textAlign: 'right' }]}>Paid OT</Text>
         </View>
         {crewSummaries.map(c => (
           <View key={`${c.name}|${c.role}`} style={styles.tableRow}>
-            <Text style={[styles.tableCell, { width: 130 }]}>{c.name}</Text>
-            <Text style={[styles.tableCell, { width: 100, color: '#666' }]}>{c.role}</Text>
-            <Text style={[styles.tableCell, { width: 55, textAlign: 'right', color: '#666' }]}>{fmt2(c.worked)}</Text>
-            <Text style={[styles.tableCell, { width: 55, textAlign: 'right', fontWeight: 700 }]}>{fmt2(c.paid)}</Text>
-            <Text style={[styles.tableCell, { width: 60, textAlign: 'right', color: '#666' }]}>{fmt2(c.ot)}</Text>
-            <Text style={[styles.tableCell, { width: 60, textAlign: 'right', fontWeight: 700 }]}>{fmt2(c.pOT)}</Text>
+            <Text style={[styles.tableCell, { width: col.name }]}>{c.name}</Text>
+            <Text style={[styles.tableCell, { width: col.role, color: '#666' }]}>{c.role}</Text>
+            {showFinancials ? (
+              <Text style={[styles.tableCell, { width: col.rate, textAlign: 'right' }]}>{rateLabel(c.rates)}</Text>
+            ) : null}
+            <Text style={[styles.tableCell, { width: col.worked, textAlign: 'right', color: '#666' }]}>{fmt2(c.worked)}</Text>
+            <Text style={[styles.tableCell, { width: col.paid, textAlign: 'right', fontWeight: 700 }]}>{fmt2(c.paid)}</Text>
+            <Text style={[styles.tableCell, { width: col.wot, textAlign: 'right', color: '#666' }]}>{fmt2(c.ot)}</Text>
+            <Text style={[styles.tableCell, { width: col.pot, textAlign: 'right', fontWeight: 700 }]}>{fmt2(c.pOT)}</Text>
           </View>
         ))}
         <View style={[styles.tableRow, { borderTopWidth: 1, borderTopColor: '#000', marginTop: 4, paddingTop: 4 }]}>
-          <Text style={[styles.tableCell, { width: 130, fontWeight: 700 }]}>Totals</Text>
-          <Text style={[styles.tableCell, { width: 100 }]}></Text>
-          <Text style={[styles.tableCell, { width: 55, textAlign: 'right', color: '#666' }]}>{fmt2(totalWorked)}</Text>
-          <Text style={[styles.tableCell, { width: 55, textAlign: 'right', fontWeight: 700 }]}>{fmt2(totalPaidHours)}</Text>
-          <Text style={[styles.tableCell, { width: 60, textAlign: 'right', color: '#666' }]}>{fmt2(totalWorkedOT)}</Text>
-          <Text style={[styles.tableCell, { width: 60, textAlign: 'right', fontWeight: 700 }]}>{fmt2(totalPaidOT)}</Text>
+          <Text style={[styles.tableCell, { width: col.name, fontWeight: 700 }]}>Totals</Text>
+          <Text style={[styles.tableCell, { width: col.role }]}></Text>
+          {/* No rate total — summing day rates across people is meaningless. */}
+          {showFinancials ? <Text style={[styles.tableCell, { width: col.rate }]}></Text> : null}
+          <Text style={[styles.tableCell, { width: col.worked, textAlign: 'right', color: '#666' }]}>{fmt2(totalWorked)}</Text>
+          <Text style={[styles.tableCell, { width: col.paid, textAlign: 'right', fontWeight: 700 }]}>{fmt2(totalPaidHours)}</Text>
+          <Text style={[styles.tableCell, { width: col.wot, textAlign: 'right', color: '#666' }]}>{fmt2(totalWorkedOT)}</Text>
+          <Text style={[styles.tableCell, { width: col.pot, textAlign: 'right', fontWeight: 700 }]}>{fmt2(totalPaidOT)}</Text>
         </View>
 
         <Footer />
@@ -230,9 +264,18 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
             return (wdA?.date || '').localeCompare(wdB?.date || '')
           })
 
+          // Only worth repeating the rate on every day when it actually differs
+          // between them — otherwise the header line above says it once.
+          const showEntryRate = showFinancials && c.ratesVary
+
           return (
             <View key={`${c.name}|${c.role}`} style={styles.crewCard} wrap={false}>
-              <Text style={styles.crewName}>{c.name} <Text style={styles.crewRole}>({c.role})</Text></Text>
+              <View style={styles.entryRow}>
+                <Text style={styles.crewName}>{c.name} <Text style={styles.crewRole}>({c.role})</Text></Text>
+                {showFinancials ? (
+                  <Text style={styles.crewRate}>{rateLabel(c.rates)} / day</Text>
+                ) : null}
+              </View>
 
               <View style={{ marginTop: 4 }}>
                 {sortedEntries.map((rawTc: any) => {
@@ -247,6 +290,9 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
                           <Text style={styles.entryText}>{dateLabel(wd?.date)} — Travel Day</Text>
                           <Text style={styles.mealText}>{ruleset.travel_rate === 'fullDay' ? 'Full Day' : 'Half Day'}</Text>
                         </View>
+                        {showEntryRate ? (
+                          <Text style={styles.mealText}>{money(Number(rawTc.day_rate) || 0)} / day</Text>
+                        ) : null}
                       </View>
                     )
                   }
@@ -269,6 +315,9 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
                         </Text>
                         <Text style={styles.entryText}>{fmt2(dayTotal)} hrs</Text>
                       </View>
+                      {showEntryRate ? (
+                        <Text style={styles.mealText}>{money(Number(rawTc.day_rate) || 0)} / day</Text>
+                      ) : null}
                       {marks ? <Text style={styles.markers}>{marks}</Text> : null}
                       {(m1 || m2) ? (
                         <Text style={styles.mealText}>

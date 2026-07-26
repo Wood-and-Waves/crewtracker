@@ -30,8 +30,12 @@ export type ReportData = {
 const csvField = (v: string) => `"${v.replace(/"/g, '""')}"`
 const fmt2 = (n: number) => n.toFixed(2)
 
+// Day Rate sits next to Role, where someone reconciling "who, in what role, at
+// what rate" looks for it. Note this shifts every column after Role by one
+// relative to the iOS export, which has no rate column — the recipient
+// previously had to divide pay by hours to recover it.
 export const CSV_HEADER =
-  'Name,Role,Date,Room,Travel Day,Travel In,Travel Out,Half Day,Start Time,' +
+  'Name,Role,Day Rate,Date,Room,Travel Day,Travel In,Travel Out,Half Day,Start Time,' +
   'Meal 1 Out,Meal 1 In,Meal 2 Out,Meal 2 In,Wrap Time,ST Hours,OT Hours,DT Hours,' +
   'ST Paid,OT Paid,DT Paid,Meal Penalties,Meal Penalty Total,Short Turnaround,Travel Pay,Total Pay'
 
@@ -118,6 +122,9 @@ export function buildReportCsv({
     rows.push([
       csvField(rawTc.crew_member_name),
       csvField(rawTc.role),
+      // Gated like every other money column, so the column count stays the
+      // same whether or not figures are included.
+      csvField(showFinancials ? fmt2(rawTc.day_rate ?? 0) : ''),
       csvField(dateLabel(wd?.date)),
       csvField(room?.name || ''),
       csvField(rawTc.is_travel_day ? 'Yes' : 'No'),
@@ -145,7 +152,8 @@ export function buildReportCsv({
   }
 
   rows.push([
-    csvField('TOTALS'), csvField(''), csvField(''), csvField(''),
+    // Name, Role, Day Rate, Date, Room — summing day rates would be meaningless.
+    csvField('TOTALS'), csvField(''), csvField(''), csvField(''), csvField(''),
     csvField(String(travelDayCount)), csvField(String(travelInCount)),
     csvField(String(travelOutCount)), csvField(String(halfDayCount)),
     csvField(''), csvField(''), csvField(''), csvField(''), csvField(''), csvField(''),
