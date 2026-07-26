@@ -13,7 +13,7 @@ export default function EditMemberClient({
   initialValues,
   isSelf,
 }: {
-  member: { id: string; full_name: string | null; email: string | null }
+  member: { id: string; full_name: string | null; email: string | null; deactivated_at?: string | null }
   initialRole: Role
   initialValues: PermissionValues
   isSelf: boolean
@@ -24,6 +24,34 @@ export default function EditMemberClient({
   const [values, setValues] = useState<PermissionValues>(initialValues)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [removing, setRemoving] = useState(false)
+
+  const removed = !!member.deactivated_at
+  const who = member.full_name || member.email || 'this person'
+
+  // Removing keeps the profile row: shows.created_by and shows.finalized_by
+  // point at it, and "who finalized this payroll report" shouldn't disappear
+  // when someone leaves. Their organization link is what's cut — enforced in the
+  // database via my_organization_id(), not just hidden here.
+  async function setRemoved(next: boolean) {
+    if (next && !confirm(
+      `Remove ${who} from your organization?\n\n` +
+      `They lose access immediately. Their name stays on the shows they worked, ` +
+      `and you can restore them at any time.\n\n` +
+      `This does not delete their CrewTracker login — it just no longer belongs to your organization.`
+    )) return
+
+    setRemoving(true)
+    setError('')
+    const { error: e } = await supabase
+      .from('profiles')
+      .update({ deactivated_at: next ? new Date().toISOString() : null })
+      .eq('id', member.id)
+    setRemoving(false)
+    if (e) { setError(e.message); return }
+    router.push('/dashboard/team')
+    router.refresh()
+  }
 
   const lockedKeys: PermissionKey[] = isSelf ? ['can_manage_users'] : []
 
@@ -74,6 +102,38 @@ export default function EditMemberClient({
             {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         </div>
+
+        {/* Kept away from Save so it can't be hit by accident, and hidden on your
+            own row — the database refuses self-removal anyway, but offering the
+            button would be inviting an error message. */}
+        {!isSelf && (
+          <div className="mt-8 border-t border-line pt-5">
+            {removed ? (
+              <>
+                <p className="text-sm text-ink">{who} has been removed from your organization.</p>
+                <p className="mt-1 text-xs text-muted">
+                  They can&rsquo;t sign in to anything here. Their name still appears on the shows they worked.
+                </p>
+                <Button variant="ghost" size="sm" className="mt-3" disabled={removing}
+                  onClick={() => setRemoved(false)}>
+                  {removing ? 'Restoring…' : 'Restore access'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-ink">Remove from organization</p>
+                <p className="mt-1 text-xs text-muted">
+                  Ends their access straight away. Their work history is kept and you can restore
+                  them later. Their CrewTracker login isn&rsquo;t deleted.
+                </p>
+                <Button variant="danger" size="sm" className="mt-3" disabled={removing}
+                  onClick={() => setRemoved(true)}>
+                  {removing ? 'Removing…' : `Remove ${who}`}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

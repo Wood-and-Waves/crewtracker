@@ -36,7 +36,12 @@ export default async function EditMemberPage({ params }: { params: Promise<{ use
 
   return (
     <EditMemberClient
-      member={{ id: member.id, full_name: member.full_name, email: member.email }}
+      member={{
+        id: member.id,
+        full_name: member.full_name,
+        email: member.email,
+        deactivated_at: member.deactivated_at,
+      }}
       initialRole={initialRole}
       initialValues={initialValues}
       isSelf={member.id === user.id}

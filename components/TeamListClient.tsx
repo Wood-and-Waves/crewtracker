@@ -4,8 +4,14 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
 import InviteTeammateModal from '@/components/InviteTeammateModal'
+import Chip from '@/components/ui/Chip'
+import { cn } from '@/lib/cn'
 
-type Member = { id: string; full_name: string | null; email: string | null; base_role: string | null }
+type Member = {
+  id: string; full_name: string | null; email: string | null; base_role: string | null
+  /** Set once an admin removes them; the row is kept so past shows still credit them. */
+  deactivated_at?: string | null
+}
 
 export default function TeamListClient({
   organizationId,
@@ -39,9 +45,15 @@ export default function TeamListClient({
               <div
                 key={m.id}
                 onClick={() => router.push(`/dashboard/team/${m.id}`)}
-                className="grid cursor-pointer grid-cols-[1.6fr_1.8fr_1fr] items-center gap-3 border-b border-line px-5 py-3 last:border-b-0 hover:bg-surface-2"
+                className={cn(
+                  'grid cursor-pointer grid-cols-[1.6fr_1.8fr_1fr] items-center gap-3 border-b border-line px-5 py-3 last:border-b-0 hover:bg-surface-2',
+                  m.deactivated_at && 'opacity-50',
+                )}
               >
-                <div className="truncate font-semibold text-ink">{m.full_name || '—'}</div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-semibold text-ink">{m.full_name || '—'}</span>
+                  {m.deactivated_at && <Chip tone="danger">Removed</Chip>}
+                </div>
                 <div className="truncate text-muted">{m.email || '—'}</div>
                 <div className="capitalize text-muted">{m.base_role || '—'}</div>
               </div>
@@ -54,11 +66,14 @@ export default function TeamListClient({
               <button
                 key={m.id}
                 onClick={() => router.push(`/dashboard/team/${m.id}`)}
-                className="flex w-full items-center justify-between p-4 text-left"
+                className={cn('flex w-full items-center justify-between p-4 text-left', m.deactivated_at && 'opacity-50')}
               >
-                <div>
-                  <p className="text-sm font-medium text-ink">{m.full_name || m.email || '—'}</p>
-                  <p className="text-xs capitalize text-muted">{m.base_role || '—'}</p>
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink">{m.full_name || m.email || '—'}</p>
+                    <p className="text-xs capitalize text-muted">{m.base_role || '—'}</p>
+                  </div>
+                  {m.deactivated_at && <Chip tone="danger">Removed</Chip>}
                 </div>
                 <span className="text-muted">›</span>
               </button>
