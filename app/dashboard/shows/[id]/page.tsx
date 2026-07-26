@@ -316,7 +316,14 @@ export default async function ShowDetailPage({
           // count has to be room-wide or the ruled rows stop lining up.
           const mealCount = visibleMealCount(crew.map(tc => tc.punches))
           return (
-            <div key={room.id} className="rounded-card border border-line bg-surface">
+            // A room showing all three meals needs ten columns, which is too
+            // many for a half-width card on a 2xl screen — the cells end up
+            // around 35px and the times become unreadable. Since a third break
+            // is rare, that room takes the full row and the others stay 2-up.
+            <div key={room.id} className={cn(
+              'rounded-card border border-line bg-surface',
+              mealCount === 3 && '2xl:col-span-2',
+            )}>
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
                 <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
