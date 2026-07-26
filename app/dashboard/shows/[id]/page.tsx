@@ -108,6 +108,14 @@ export default async function ShowDetailPage({
 
   const roomsList = (allShowRooms || []).filter(r => r.work_day_id === activeDay.id)
 
+  // Stable sort so toggling travel / refetching never reorders the cards:
+  // by first name, then full name, then id as a final tiebreaker.
+  const firstName = (n: string) => (n || '').trim().split(/\s+/)[0].toLowerCase()
+  const byFirstName = (a: any, b: any) =>
+    firstName(a.crew_member_name).localeCompare(firstName(b.crew_member_name)) ||
+    (a.crew_member_name || '').localeCompare(b.crew_member_name || '') ||
+    a.id.localeCompare(b.id)
+
   const roomTimecards: Record<string, any[]> = {}
   for (const room of roomsList) {
     roomTimecards[room.id] = (allShowTimecards || [])
@@ -116,6 +124,7 @@ export default async function ShowDetailPage({
         ...tc,
         punches: (allShowPunches || []).filter(p => p.timecard_id === tc.id),
       }))
+      .sort(byFirstName)
   }
 
   const remainingWorkDayIds = workDays.slice(activeIndex + 1).map(d => d.id)
@@ -137,7 +146,7 @@ export default async function ShowDetailPage({
   // Day summary — sum the day's worked hours the same way each TimecardRow
   // displays them: only wrapped cards contribute, using the raw ST/OT/DT
   // worked-hours convention (not the ceiling-rounded "paid" totals).
-  const dayTimecards = roomsList.flatMap(r => roomTimecards[r.id] || [])
+  const dayTimecards = roomsList.flatMap(r => roomTimecards[r.id] || []).sort(byFirstName)
 
   // Who is already staffed where today — powers the duplicate-staffing
   // safeguard in StaffRoomModal (block same room, confirm cross-room).
