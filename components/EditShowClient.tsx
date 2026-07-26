@@ -223,9 +223,6 @@ export default function EditShowClient({
             </span>
             <AddDayButton
               showId={show.id}
-              endDate={show.end_date}
-              workDays={workDays}
-              rooms={rooms}
               hasCrew={crewRateEntries.length > 0}
             />
           </div>

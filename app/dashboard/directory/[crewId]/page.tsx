@@ -10,7 +10,7 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('organization_id, shoulder_surfer_mode')
+    .select('organization_id, shoulder_surfer_mode, can_view_pay_rates, can_edit_pay_rates')
     .eq('id', user.id)
     .single()
 
@@ -47,6 +47,8 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
       crew={crew}
       availableRoles={roles || []}
       shoulderSurferMode={profile?.shoulder_surfer_mode || false}
+      canViewRates={profile?.can_view_pay_rates || false}
+      canEditRates={profile?.can_edit_pay_rates || false}
     />
   )
 }

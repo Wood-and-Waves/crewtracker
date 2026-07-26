@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { localDateStr } from '@/lib/datetime'
 import Button from '@/components/ui/Button'
 
 // Extends a show by one day, cloning the last day's rooms and optionally its
@@ -11,21 +10,15 @@ import Button from '@/components/ui/Button'
 // Show share one implementation — iOS offers this in both places, with a
 // three-way "Add Day & Copy Crew" / "Add Day (Empty)" / Cancel choice.
 
-type WorkDay = { id: string; date: string; day_number: number }
-type Room = { id: string; name: string; work_day_id: string }
-
+// endDate / workDays / rooms used to be props because the client worked out the
+// next date and cloned the rooms itself. add_show_day() derives all of that from
+// the show id, so passing them would only invite them to drift out of date.
 export default function AddDayButton({
   showId,
-  endDate,
-  workDays,
-  rooms,
   hasCrew,
   variant = 'button',
 }: {
   showId: string
-  endDate: string
-  workDays: WorkDay[]
-  rooms: Room[]
   /** Whether the last day has any crew — decides if copying is offered. */
   hasCrew: boolean
   /**
@@ -52,81 +45,23 @@ export default function AddDayButton({
     setBusy(true)
     setError('')
 
-    const sorted = [...workDays].sort((a, b) => a.date.localeCompare(b.date))
-    const lastDay = sorted[sorted.length - 1]
-    if (!lastDay) { setBusy(false); setError('This show has no days to extend.'); return }
-
-    const next = new Date(lastDay.date + 'T00:00:00')
-    next.setDate(next.getDate() + 1)
-    // Local calendar date, never the UTC one — see localDateStr.
-    const nextDateStr = localDateStr(next)
-
-    if (nextDateStr > endDate) {
-      const { error: e } = await supabase.from('shows').update({ end_date: nextDateStr }).eq('id', showId)
-      if (e) { setBusy(false); setError(e.message); return }
-    }
-
-    const { data: newDay, error: dayError } = await supabase
-      .from('work_days')
-      .insert({ show_id: showId, date: nextDateStr, day_number: lastDay.day_number + 1 })
-      .select()
-      .single()
-    if (dayError || !newDay) { setBusy(false); setError(dayError?.message || 'Could not add the day.'); return }
-
-    // Clone the rooms, nudging created_at so the new day lists them in the same
-    // order as the day they came from (the tracker orders rooms by created_at).
+    // One call, one transaction. This used to be four sequential writes —
+    // extend end_date, insert the day, insert the rooms, insert the crew — so a
+    // failure partway through left a half-built day, and retrying then collided
+    // with the day already sitting there on that date. The function does the
+    // whole thing or none of it; see scripts/sql/add-show-day-function.sql.
     //
-    // Deliberately NOT sorted: `rooms` arrives already ordered by created_at
-    // from the server, so filtering preserves the source day's display order.
-    // Sorting by name here used to override that, which is why a show whose
-    // rooms were created "Lobby, GS" got a new day ordered "GS, Lobby" — the
-    // rooms swapped places partway through the show, right where a PM is
-    // punching the same crew day after day.
-    const sourceRooms = rooms.filter(r => r.work_day_id === lastDay.id)
-    let newRooms: Room[] = []
-    if (sourceRooms.length > 0) {
-      const { data, error: roomError } = await supabase
-        .from('rooms')
-        .insert(sourceRooms.map((r, i) => ({
-          work_day_id: newDay.id,
-          name: r.name,
-          created_at: new Date(Date.now() + i).toISOString(),
-        })))
-        .select()
-      if (roomError) { setBusy(false); setError(roomError.message); return }
-      newRooms = (data || []) as Room[]
-    }
-
-    if (copyCrew && newRooms.length > 0) {
-      // No day_rate: the BEFORE INSERT trigger inherits the show's rate for this
-      // (crew member, role) — sourced from the very row being copied, which is on
-      // the same show — so reading it here would be redundant and the trigger
-      // would override it anyway. See scripts/sql/show-wide-day-rate.sql.
-      const { data: oldTimecards, error: tcReadError } = await supabase
-        .from('timecards')
-        .select('room_id, crew_member_id, crew_member_name, role')
-        .in('room_id', sourceRooms.map(r => r.id))
-      if (tcReadError) { setBusy(false); setError(tcReadError.message); return }
-
-      const rows: any[] = []
-      for (const oldTc of oldTimecards || []) {
-        const from = sourceRooms.find(r => r.id === oldTc.room_id)
-        const to = newRooms.find(nr => nr.name === from?.name)
-        if (!to) continue
-        rows.push({
-          room_id: to.id,
-          crew_member_id: oldTc.crew_member_id,
-          crew_member_name: oldTc.crew_member_name,
-          role: oldTc.role,
-        })
-      }
-      if (rows.length > 0) {
-        const { error: insError } = await supabase.from('timecards').insert(rows)
-        if (insError) { setBusy(false); setError(insError.message); return }
-      }
-    }
+    // Date arithmetic lives in SQL now too: `date + 1` on a date column carries
+    // no timezone, which is the safest possible version of a calculation this
+    // project has got wrong before.
+    const { error: rpcError } = await supabase.rpc('add_show_day', {
+      p_show_id: showId,
+      p_copy_crew: copyCrew,
+    })
 
     setBusy(false)
+    if (rpcError) { setError(rpcError.message); return }
+
     setAsking(false)
     router.refresh()
   }

@@ -20,10 +20,20 @@ export default function EditCrewMemberClient({
   crew,
   availableRoles,
   shoulderSurferMode = false,
+  canViewRates = false,
+  canEditRates = false,
 }: {
   crew: CrewMember
   availableRoles: AVRole[]
   shoulderSurferMode?: boolean
+  /** profiles.can_view_pay_rates. Without it the amounts are hidden entirely
+   *  rather than shown as $0 — the server sends zeros because the
+   *  permission-checked view returns no rates, and printing those would look
+   *  like real data. */
+  canViewRates?: boolean
+  /** profiles.can_edit_pay_rates. Gates the rate editor and the rate field on
+   *  the add-role form. */
+  canEditRates?: boolean
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -153,20 +163,28 @@ export default function EditCrewMemberClient({
       </div>
 
       <Card className="p-5">
-        <p className="text-xs uppercase tracking-wide text-muted mb-3">Saved Roles &amp; Rates</p>
+        <p className="text-xs uppercase tracking-wide text-muted mb-3">
+          {canViewRates ? 'Saved Roles & Rates' : 'Saved Roles'}
+        </p>
         <div className="flex flex-col gap-2 mb-4">
           {rateCards.map(card => (
             <div key={card.id} className="flex items-center justify-between rounded-field bg-surface-2 px-4 py-3">
-              <button
-                onClick={() => { setEditingCard(card); setEditRate(String(card.day_rate)) }}
-                className="text-sm text-ink hover:text-accent"
-              >
-                {card.role}
-              </button>
+              {canEditRates ? (
+                <button
+                  onClick={() => { setEditingCard(card); setEditRate(String(card.day_rate)) }}
+                  className="text-sm text-ink hover:text-accent"
+                >
+                  {card.role}
+                </button>
+              ) : (
+                <span className="text-sm text-ink">{card.role}</span>
+              )}
               <div className="flex items-center gap-3">
-                <span className="text-sm text-muted">
-                  {shoulderSurferMode ? '•••' : `$${card.day_rate.toFixed(0)}`}
-                </span>
+                {canViewRates && (
+                  <span className="text-sm text-muted">
+                    {shoulderSurferMode ? '•••' : `$${card.day_rate.toFixed(0)}`}
+                  </span>
+                )}
                 <button onClick={() => deleteRateCard(card.id)} className="text-muted hover:text-danger text-sm">✕</button>
               </div>
             </div>
@@ -218,13 +236,18 @@ export default function EditCrewMemberClient({
                 <option key={r.id} value={r.name} className="bg-surface-2 text-ink">{r.name}</option>
               ))}
             </select>
-            <input
-              placeholder="Day Rate"
-              type="number"
-              value={newRoleRate}
-              onChange={e => setNewRoleRate(e.target.value)}
-              className={inputCls}
-            />
+            {/* Adding a role is directory work; setting its rate is a pay
+                decision. Without can_edit_pay_rates the role is still addable,
+                it just starts at zero for someone who can to fill in. */}
+            {canEditRates && (
+              <input
+                placeholder="Day Rate"
+                type="number"
+                value={newRoleRate}
+                onChange={e => setNewRoleRate(e.target.value)}
+                className={inputCls}
+              />
+            )}
             {alreadyHasNewRole && (
               <p className="text-xs text-ot mt-2">{newRoleName} is already saved for this person.</p>
             )}

@@ -164,9 +164,6 @@ export default async function ShowDetailPage({
   const addDayControl = (
     <AddDayButton
       showId={id}
-      endDate={show.end_date}
-      workDays={workDays}
-      rooms={allShowRooms || []}
       hasCrew={lastDayHasCrew}
       variant="circle"
     />
