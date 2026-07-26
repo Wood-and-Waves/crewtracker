@@ -98,7 +98,12 @@ export default async function DashboardPage({
                   <p className="text-sm text-muted">
                     {fmtDate(show.start_date)} – {fmtDate(show.end_date)}
                   </p>
-                  {show.venue && <p className="mt-1 text-sm text-muted">{show.venue}</p>}
+                  {/* iOS shows city/state on the list row alongside the venue. */}
+                  {(show.venue || show.city_state) && (
+                    <p className="mt-1 text-sm text-muted">
+                      {[show.venue, show.city_state].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                   <div className="mt-4">
                     {show.archived
                       ? <Chip>Archived</Chip>

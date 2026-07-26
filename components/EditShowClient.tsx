@@ -4,10 +4,10 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { localDateStr } from '@/lib/datetime'
 import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES } from '@/lib/timezones'
 import RulesetFields from '@/components/RulesetFields'
+import AddDayButton from '@/components/AddDayButton'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
@@ -50,6 +50,7 @@ export default function EditShowClient({
 
   const [name, setName] = useState(show.name)
   const [venue, setVenue] = useState(show.venue || '')
+  const [cityState, setCityState] = useState(show.city_state || '')
   const [clientCompany, setClientCompany] = useState(show.client_company || '')
   const [jobNumber, setJobNumber] = useState(show.job_number || '')
   const [showNotes, setShowNotes] = useState(show.show_notes || '')
@@ -81,6 +82,7 @@ export default function EditShowClient({
       .update({
         name,
         venue,
+        city_state: cityState.trim() || null,
         client_company: clientCompany,
         job_number: jobNumber,
         show_notes: showNotes,
@@ -137,62 +139,6 @@ export default function EditShowClient({
     setPresetOpen(false)
     setPresetName('')
     setPresetSaved(trimmed)
-    router.refresh()
-  }
-
-  async function extendShow() {
-    const sortedDays = [...workDays].sort((a, b) => a.date.localeCompare(b.date))
-    const lastDay = sortedDays[sortedDays.length - 1]
-    if (!lastDay) return
-
-    const nextDate = new Date(lastDay.date + 'T00:00:00')
-    nextDate.setDate(nextDate.getDate() + 1)
-    // Local calendar date, not the UTC one — see localDateStr.
-    const nextDateStr = localDateStr(nextDate)
-
-    if (nextDateStr > show.end_date) {
-      await supabase.from('shows').update({ end_date: nextDateStr }).eq('id', show.id)
-    }
-
-    const { data: newDay } = await supabase
-      .from('work_days')
-      .insert({ show_id: show.id, date: nextDateStr, day_number: lastDay.day_number + 1 })
-      .select()
-      .single()
-    if (!newDay) return
-
-    const lastDayRooms = rooms.filter(r => r.work_day_id === lastDay.id)
-    const newRoomRows = lastDayRooms.map(r => ({ work_day_id: newDay.id, name: r.name }))
-    const { data: newRooms } = newRoomRows.length > 0
-      ? await supabase.from('rooms').insert(newRoomRows).select()
-      : { data: [] }
-
-    const hasCrew = crewRateEntries.length > 0
-    if (hasCrew && newRooms && confirm('Do you want to copy the crew roster from the previous day into this new day?')) {
-      const { data: oldTimecards } = await supabase
-        .from('timecards')
-        .select('*')
-        .in('room_id', lastDayRooms.map(r => r.id))
-
-      const newTimecardRows: any[] = []
-      for (const oldTc of oldTimecards || []) {
-        const oldRoom = lastDayRooms.find(r => r.id === oldTc.room_id)
-        const matchingNewRoom = newRooms.find((nr: any) => nr.name === oldRoom?.name)
-        if (matchingNewRoom) {
-          newTimecardRows.push({
-            room_id: matchingNewRoom.id,
-            crew_member_id: oldTc.crew_member_id,
-            crew_member_name: oldTc.crew_member_name,
-            role: oldTc.role,
-            day_rate: oldTc.day_rate,
-          })
-        }
-      }
-      if (newTimecardRows.length > 0) {
-        await supabase.from('timecards').insert(newTimecardRows)
-      }
-    }
-
     router.refresh()
   }
 
@@ -262,7 +208,13 @@ export default function EditShowClient({
             <span className="text-sm text-muted">
               {new Date(show.start_date + 'T00:00:00').toLocaleDateString()} – {new Date(show.end_date + 'T00:00:00').toLocaleDateString()}
             </span>
-            <Button variant="ghost" size="sm" onClick={extendShow}>+ Add Day</Button>
+            <AddDayButton
+              showId={show.id}
+              endDate={show.end_date}
+              workDays={workDays}
+              rooms={rooms}
+              hasCrew={crewRateEntries.length > 0}
+            />
           </div>
           <p className="text-xs text-muted mt-2">Adding a day happens immediately — it isn&apos;t part of the Save button above.</p>
         </Card>
@@ -304,6 +256,12 @@ export default function EditShowClient({
             placeholder="Venue Name (e.g. McCormick Place)"
             value={venue}
             onChange={e => setVenue(e.target.value)}
+            className={`${inputCls} mb-3`}
+          />
+          <input
+            placeholder="City & State (e.g. Chicago, IL)"
+            value={cityState}
+            onChange={e => setCityState(e.target.value)}
             className={inputCls}
           />
         </Card>

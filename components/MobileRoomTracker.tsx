@@ -7,7 +7,10 @@ import StaffRoomModal from '@/components/StaffRoomModal'
 import TimecardRow from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
+import CopyCrewButton from '@/components/CopyCrewButton'
 import { cn } from '@/lib/cn'
+
+type CopySource = { roomId: string; count: number; dayNumber: number } | null
 
 type Room = { id: string; name: string }
 
@@ -39,6 +42,8 @@ export default function MobileRoomTracker({
   dayAssignments,
   canViewRates,
   canEditRates,
+  copySourceByRoom = {},
+  addDayControl,
 }: {
   className?: string
   showId: string
@@ -67,6 +72,9 @@ export default function MobileRoomTracker({
   dayAssignments: { crewMemberId: string; roomId: string; roomName: string }[]
   canViewRates: boolean
   canEditRates: boolean
+  copySourceByRoom?: Record<string, CopySource>
+  /** Rendered in place of the next-day chevron on the last day. */
+  addDayControl?: React.ReactNode
 }) {
   const [selected, setSelected] = useState<'all' | string>('all')
   const [addCrewOpen, setAddCrewOpen] = useState(false)
@@ -90,6 +98,24 @@ export default function MobileRoomTracker({
     if (activeRoom) openAddCrew(activeRoom.id)
     else if (rooms.length === 1) openAddCrew(rooms[0].id)
     else setRoomPickerOpen(true)
+  }
+
+  // Empty roster: offer the previous day's same-named room, like iOS.
+  function emptyRoster(roomId: string) {
+    const src = copySourceByRoom[roomId]
+    return (
+      <>
+        <p className="text-sm text-muted p-4 pb-2">No crew staffed yet.</p>
+        {src && (
+          <CopyCrewButton
+            targetRoomId={roomId}
+            sourceRoomId={src.roomId}
+            sourceDayNumber={src.dayNumber}
+            count={src.count}
+          />
+        )}
+      </>
+    )
   }
 
   function rowsFor(crew: any[]) {
@@ -171,16 +197,19 @@ export default function MobileRoomTracker({
             <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {dayNumber} of {totalDays}</p>
             <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
           </div>
-          <Link
-            href={nextDayNumber ? `?day=${nextDayNumber}` : '#'}
-            aria-label="Next day"
-            className={cn(
-              'rounded-full h-9 w-9 flex items-center justify-center shrink-0',
-              !nextDayNumber ? 'pointer-events-none bg-surface-2 text-muted opacity-30' : 'bg-accent text-accent-ink',
-            )}
-          >
-            ›
-          </Link>
+          {nextDayNumber ? (
+            <Link
+              href={`?day=${nextDayNumber}`}
+              aria-label="Next day"
+              className="rounded-full h-9 w-9 flex items-center justify-center shrink-0 bg-accent text-accent-ink"
+            >
+              ›
+            </Link>
+          ) : (
+            addDayControl ?? (
+              <span className="rounded-full h-9 w-9 flex items-center justify-center shrink-0 bg-surface-2 text-muted opacity-30">›</span>
+            )
+          )}
         </div>
       </div>
 
@@ -232,7 +261,7 @@ export default function MobileRoomTracker({
                   <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: tc.day_rate }))} canViewRates={canViewRates} canEditRates={canEditRates} />
                 </div>
                 <div>
-                  {crew.length === 0 && <p className="text-sm text-muted p-4">No crew staffed yet.</p>}
+                  {crew.length === 0 && emptyRoster(room.id)}
                   {rowsFor(crew)}
                 </div>
               </div>
@@ -250,7 +279,7 @@ export default function MobileRoomTracker({
               </div>
               {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} />}
               <div>
-                {crew.length === 0 && <p className="text-sm text-muted p-4">No crew staffed yet.</p>}
+                {crew.length === 0 && emptyRoster(activeRoom!.id)}
                 {rowsFor(crew)}
               </div>
             </div>

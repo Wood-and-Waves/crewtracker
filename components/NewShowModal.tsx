@@ -50,6 +50,7 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
   const [venue, setVenue] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [cityState, setCityState] = useState('')
   const [roomsText, setRoomsText] = useState('')
   const [timezone, setTimezone] = useState(DEFAULT_SHOW_TIMEZONE)
   const [loading, setLoading] = useState(false)
@@ -96,6 +97,7 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
         organization_id: organizationId,
         name,
         venue: venue || null,
+        city_state: cityState.trim() || null,
         start_date: startDate,
         end_date: endDate,
         timezone_identifier: timezone,
@@ -185,6 +187,12 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
             placeholder="Venue (optional)"
             value={venue}
             onChange={e => setVenue(e.target.value)}
+            className={inputCls}
+          />
+          <input
+            placeholder="City & State (e.g. Chicago, IL)"
+            value={cityState}
+            onChange={e => setCityState(e.target.value)}
             className={inputCls}
           />
           <div className="flex gap-3">

@@ -196,7 +196,17 @@ export default async function ShowReportPage({
     <div className="p-6 md:p-10">
       <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
       <div className="flex items-center justify-between mt-2 mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tight">{show.name} — Report</h1>
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">{show.name} — Report</h1>
+          {/* Date range, matching iOS's "Show Info" section. Date-only columns
+              need the T00:00:00 suffix or they render a day early. */}
+          <p className="text-sm text-muted mt-1">
+            {new Date(show.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            {' – '}
+            {new Date(show.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            {show.city_state ? ` · ${show.city_state}` : ''}
+          </p>
+        </div>
         <div className="flex gap-2">
           <ExportCSVButton
             showName={show.name}

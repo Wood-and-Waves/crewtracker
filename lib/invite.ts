@@ -37,10 +37,22 @@ export async function acceptInvite(token: string, userId: string, userEmail: str
       .eq('organization_id', organizationId)
 
     if (!existingRoleCount || existingRoleCount === 0) {
+      // Union of the original web list and iOS's 26 defaults (ContentView.swift
+      // seedAVRoles). The first 13 keep their curated order — roughly
+      // department and seniority — and the 18 iOS-only titles are appended
+      // alphabetically. Notably this adds Carpenter, which the web list lacked
+      // despite crew already holding Carpenter rate cards.
+      // Existing orgs are untouched; this only seeds a brand-new org.
       const defaultRoles = [
         ['Production Manager', 1], ['Director', 2], ['A1', 3], ['A2', 4],
         ['L1', 5], ['V1', 6], ['Camera Operator', 7], ['Graphics Operator', 8],
         ['LD', 9], ['BO Tech', 10], ['Motors', 11], ['Riggers', 12], ['Stagehand', 13],
+        ['Assistant Stage Manager', 14], ['Carpenter', 15], ['Creative Director', 16],
+        ['Executive Producer', 17], ['Head Rigger', 18], ['L2', 19],
+        ['LED Technician', 20], ['Lighting Designer', 21], ['Master Electrician', 22],
+        ['Projectionist', 23], ['RF Technician', 24], ['Show Caller', 25],
+        ['Stage Manager', 26], ['Systems Engineer', 27], ['Technical Director', 28],
+        ['Teleprompter Operator', 29], ['V2', 30], ['Video Director', 31],
       ] as const
 
       await admin.from('av_roles').insert(

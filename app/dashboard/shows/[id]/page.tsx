@@ -6,6 +6,8 @@ import StaffRoomModal from '@/components/StaffRoomModal'
 import TimecardRow from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
+import CopyCrewButton from '@/components/CopyCrewButton'
+import AddDayButton from '@/components/AddDayButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
 import { PUNCH_ORDER, PUNCH_LABELS, isWrapped } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
@@ -142,6 +144,36 @@ export default async function ShowDetailPage({
   const prevDay = workDays[activeIndex - 1]
   const nextDay = workDays[activeIndex + 1]
 
+  // "Copy Crew from Day N" — for each room today, the same-named room on the
+  // previous day and how many crew it holds. Offered only when this room is
+  // empty and that one isn't, matching iOS's empty-roster shortcut.
+  // On the last day, the "next" chevron becomes Add Day — iOS puts it right on
+  // the day switcher rather than only inside Edit Show.
+  const lastDay = workDays[workDays.length - 1]
+  const lastDayRoomIds = (allShowRooms || []).filter(r => r.work_day_id === lastDay.id).map(r => r.id)
+  const lastDayHasCrew = (allShowTimecards || []).some(t => lastDayRoomIds.includes(t.room_id))
+  const addDayControl = (
+    <AddDayButton
+      showId={id}
+      endDate={show.end_date}
+      workDays={workDays}
+      rooms={allShowRooms || []}
+      hasCrew={lastDayHasCrew}
+      variant="circle"
+    />
+  )
+
+  const copySourceByRoom: Record<string, { roomId: string; count: number; dayNumber: number } | null> = {}
+  for (const room of roomsList) {
+    const src = prevDay
+      ? (allShowRooms || []).find(r => r.name === room.name && r.work_day_id === prevDay.id)
+      : undefined
+    const count = src ? (allShowTimecards || []).filter(t => t.room_id === src.id).length : 0
+    copySourceByRoom[room.id] = src && count > 0
+      ? { roomId: src.id, count, dayNumber: prevDay.day_number }
+      : null
+  }
+
   const dateLabel = new Date(activeDay.date + 'T00:00:00').toLocaleDateString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
@@ -173,7 +205,7 @@ export default async function ShowDetailPage({
     otdt: sumOT + sumDT,
   }
 
-  const showMeta = [show.venue, show.client_company].filter(Boolean).join(' · ')
+  const showMeta = [show.venue, show.city_state, show.client_company].filter(Boolean).join(' · ')
 
   return (
     <div className="p-6 md:p-10 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8 lg:max-w-[1400px] lg:mx-auto">
@@ -203,16 +235,17 @@ export default async function ShowDetailPage({
               <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {activeDay.day_number} of {workDays.length}</p>
               <p className="text-base font-bold text-ink tabular-nums">{dateLabel}</p>
             </div>
-            <Link
-              href={nextDay ? `?day=${nextDay.day_number}` : '#'}
-              aria-label="Next day"
-              className={cn(
-                'rounded-full bg-surface-2 border border-line h-9 w-9 flex items-center justify-center shrink-0',
-                !nextDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
-              )}
-            >
-              ›
-            </Link>
+            {nextDay ? (
+              <Link
+                href={`?day=${nextDay.day_number}`}
+                aria-label="Next day"
+                className="rounded-full bg-surface-2 border border-line h-9 w-9 flex items-center justify-center shrink-0 hover:border-accent hover:text-accent"
+              >
+                ›
+              </Link>
+            ) : (
+              addDayControl
+            )}
           </div>
         </div>
 
@@ -282,7 +315,17 @@ export default async function ShowDetailPage({
 
               <div>
                 {crew.length === 0 && (
-                  <p className="text-sm text-muted p-4">No crew staffed yet.</p>
+                  <>
+                    <p className="text-sm text-muted p-4 pb-2">No crew staffed yet.</p>
+                    {copySourceByRoom[room.id] && (
+                      <CopyCrewButton
+                        targetRoomId={room.id}
+                        sourceRoomId={copySourceByRoom[room.id]!.roomId}
+                        sourceDayNumber={copySourceByRoom[room.id]!.dayNumber}
+                        count={copySourceByRoom[room.id]!.count}
+                      />
+                    )}
+                  </>
                 )}
                 {crew.map(tc => (
                   <TimecardRow
@@ -340,6 +383,8 @@ export default async function ShowDetailPage({
         remainingWorkDayIds={remainingWorkDayIds}
         remainingRoomsByName={remainingRoomsByName}
         dayAssignments={dayAssignments}
+        copySourceByRoom={copySourceByRoom}
+        addDayControl={addDayControl}
         canViewRates={canViewRates}
         canEditRates={canEditRates}
       />
