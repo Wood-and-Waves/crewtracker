@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict YVGKy5PEUuoyQBAtY5gpw3BdQApdQiqnXbaYZuATY7XZCrQuBhEBjrgQqHPTuwO
+\restrict Lvnvmng4XY3vAUmU5d7WIUQiXcDPgkuF4hNl791PDLOBVdMADwO0Cps51GpySEc
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -141,9 +141,7 @@ $$;
 CREATE FUNCTION "public"."can_manage_users_me"() RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
-    AS $$
-  select can_manage_users from profiles where id = auth.uid();
-$$;
+    AS $$ select public.my_perm('can_manage_users'); $$;
 
 
 --
@@ -153,10 +151,7 @@ $$;
 CREATE FUNCTION "public"."can_see_all_shows"() RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
-    AS $$
-  select can_edit_all_shows from profiles
-  where id = auth.uid() and deactivated_at is null;
-$$;
+    AS $$ select public.my_perm('can_edit_all_shows'); $$;
 
 
 --
@@ -167,8 +162,6 @@ CREATE FUNCTION "public"."enforce_pay_rate_write_permission"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-declare
-  v_may_edit boolean;
 begin
   -- System cascade or no user in context: not a user-initiated rate change.
   if pg_trigger_depth() > 1 or auth.uid() is null then
@@ -183,10 +176,7 @@ begin
     return NEW;                       -- no rate supplied
   end if;
 
-  select coalesce(p.can_edit_pay_rates, false) into v_may_edit
-  from profiles p where p.id = auth.uid();
-
-  if coalesce(v_may_edit, false) then
+  if my_perm('can_edit_pay_rates') then
     return NEW;
   end if;
 
@@ -447,8 +437,49 @@ CREATE FUNCTION "public"."my_organization_id"() RETURNS "uuid"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-  select organization_id from profiles
-  where id = auth.uid() and deactivated_at is null;
+  select m.organization_id
+  from memberships m
+  join profiles p on p.id = m.profile_id
+  where m.profile_id = auth.uid()
+    and m.organization_id = p.active_organization_id
+    and m.deactivated_at is null;
+$$;
+
+
+--
+-- Name: my_perm("text"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."my_perm"("p" "text") RETURNS boolean
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  m memberships%rowtype;
+  v jsonb;
+begin
+  select mm.* into m
+  from memberships mm
+  join profiles pr on pr.id = mm.profile_id
+  where mm.profile_id = auth.uid()
+    and mm.organization_id = pr.active_organization_id
+    and mm.deactivated_at is null;
+
+  if not found then
+    return false;                       -- no live membership: grant nothing
+  end if;
+
+  v := to_jsonb(m) -> p;
+  if v is null then
+    -- A misspelled permission would otherwise silently deny everything, which
+    -- looks like a broken feature rather than a broken policy. Fail loudly; dev
+    -- is where this gets caught. (CLAUDE.md: surface errors, don't fail silently.)
+    raise exception 'my_perm: no such permission column %', p
+      using errcode = 'undefined_column';
+  end if;
+
+  return coalesce(v::boolean, false);
+end;
 $$;
 
 
@@ -527,6 +558,25 @@ $$;
 
 
 --
+-- Name: set_active_organization(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."set_active_organization"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.organization_id is null then
+    new.active_organization_id := null;
+  elsif new.active_organization_id is distinct from new.organization_id then
+    new.active_organization_id := new.organization_id;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: set_show_assignment_organization_id(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -553,6 +603,76 @@ CREATE FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") RETURNS "uuid"
   from rooms r
   join work_days w on w.id = r.work_day_id
   where r.id = p_room_id;
+$$;
+
+
+--
+-- Name: sync_membership_from_profile(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."sync_membership_from_profile"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.organization_id is null then
+    -- Left the org (or never joined). Remove the mirrored row so no stale
+    -- membership can keep granting access after profiles says they're out.
+    delete from memberships where profile_id = new.id;
+    return new;
+  end if;
+
+  insert into memberships (
+    profile_id, organization_id, base_role, deactivated_at,
+    can_manage_users, can_manage_billing, can_manage_crew_directory, can_import_crew,
+    can_view_crew_contacts, can_create_shows, can_edit_all_shows, can_archive_shows,
+    can_duplicate_shows, can_edit_timecards, can_approve_timecards, can_view_pay_rates,
+    can_edit_pay_rates, can_manage_rulesets, can_view_reports, can_export_reports,
+    can_send_reports, view_only
+  ) values (
+    new.id, new.organization_id, new.base_role, new.deactivated_at,
+    new.can_manage_users, new.can_manage_billing, new.can_manage_crew_directory, new.can_import_crew,
+    new.can_view_crew_contacts, new.can_create_shows, new.can_edit_all_shows, new.can_archive_shows,
+    new.can_duplicate_shows, new.can_edit_timecards, new.can_approve_timecards, new.can_view_pay_rates,
+    new.can_edit_pay_rates, new.can_manage_rulesets, new.can_view_reports, new.can_export_reports,
+    new.can_send_reports, new.view_only
+  )
+  on conflict (profile_id, organization_id) do update set
+    base_role                 = excluded.base_role,
+    deactivated_at            = excluded.deactivated_at,
+    can_manage_users          = excluded.can_manage_users,
+    can_manage_billing        = excluded.can_manage_billing,
+    can_manage_crew_directory = excluded.can_manage_crew_directory,
+    can_import_crew           = excluded.can_import_crew,
+    can_view_crew_contacts    = excluded.can_view_crew_contacts,
+    can_create_shows          = excluded.can_create_shows,
+    can_edit_all_shows        = excluded.can_edit_all_shows,
+    can_archive_shows         = excluded.can_archive_shows,
+    can_duplicate_shows       = excluded.can_duplicate_shows,
+    can_edit_timecards        = excluded.can_edit_timecards,
+    can_approve_timecards     = excluded.can_approve_timecards,
+    can_view_pay_rates        = excluded.can_view_pay_rates,
+    can_edit_pay_rates        = excluded.can_edit_pay_rates,
+    can_manage_rulesets       = excluded.can_manage_rulesets,
+    can_view_reports          = excluded.can_view_reports,
+    can_export_reports        = excluded.can_export_reports,
+    can_send_reports          = excluded.can_send_reports,
+    view_only                 = excluded.view_only,
+    updated_at                = now();
+
+  -- While profiles remains the source of truth it holds exactly one org, so a
+  -- profile must mirror to exactly one membership. If someone is moved from org
+  -- A to org B, drop the stale A row — otherwise it would keep granting access
+  -- to an organization they are no longer in.
+  --
+  -- This is also precisely what caps the system at one org per person for now,
+  -- and it is meant to: this pass builds the SHAPE. Genuine multi-org arrives
+  -- when the app writes memberships directly and this mirror is deleted.
+  delete from memberships
+   where profile_id = new.id and organization_id <> new.organization_id;
+
+  return new;
+end;
 $$;
 
 
@@ -623,6 +743,7 @@ CREATE TABLE "public"."profiles" (
     "shoulder_surfer_mode" boolean DEFAULT false NOT NULL,
     "is_super_admin" boolean DEFAULT false NOT NULL,
     "deactivated_at" timestamp with time zone,
+    "active_organization_id" "uuid",
     CONSTRAINT "profiles_base_role_check" CHECK (("base_role" = ANY (ARRAY['admin'::"text", 'staff'::"text", 'pm'::"text", 'crew'::"text"])))
 );
 
@@ -691,6 +812,39 @@ CREATE TABLE "public"."invitations" (
     "expires_at" timestamp with time zone DEFAULT ("now"() + '7 days'::interval),
     "created_at" timestamp with time zone DEFAULT "now"(),
     CONSTRAINT "invitations_base_role_check" CHECK (("base_role" = ANY (ARRAY['admin'::"text", 'staff'::"text", 'pm'::"text", 'crew'::"text"])))
+);
+
+
+--
+-- Name: memberships; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."memberships" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "organization_id" "uuid" NOT NULL,
+    "base_role" "text" DEFAULT 'crew'::"text",
+    "can_manage_users" boolean DEFAULT false,
+    "can_manage_billing" boolean DEFAULT false,
+    "can_manage_crew_directory" boolean DEFAULT false,
+    "can_import_crew" boolean DEFAULT false,
+    "can_view_crew_contacts" boolean DEFAULT false,
+    "can_create_shows" boolean DEFAULT false,
+    "can_edit_all_shows" boolean DEFAULT false,
+    "can_archive_shows" boolean DEFAULT false,
+    "can_duplicate_shows" boolean DEFAULT false,
+    "can_edit_timecards" boolean DEFAULT false,
+    "can_approve_timecards" boolean DEFAULT false,
+    "can_view_pay_rates" boolean DEFAULT false,
+    "can_edit_pay_rates" boolean DEFAULT false,
+    "can_manage_rulesets" boolean DEFAULT false,
+    "can_view_reports" boolean DEFAULT false,
+    "can_export_reports" boolean DEFAULT false,
+    "can_send_reports" boolean DEFAULT false,
+    "view_only" boolean DEFAULT false,
+    "deactivated_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
 
@@ -958,6 +1112,22 @@ ALTER TABLE ONLY "public"."invitations"
 
 
 --
+-- Name: memberships memberships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."memberships"
+    ADD CONSTRAINT "memberships_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: memberships memberships_profile_org_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."memberships"
+    ADD CONSTRAINT "memberships_profile_org_uniq" UNIQUE ("profile_id", "organization_id");
+
+
+--
 -- Name: organizations organizations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1094,6 +1264,20 @@ ALTER TABLE ONLY "public"."work_days"
 
 
 --
+-- Name: memberships_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "memberships_org_idx" ON "public"."memberships" USING "btree" ("organization_id");
+
+
+--
+-- Name: memberships_profile_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "memberships_profile_idx" ON "public"."memberships" USING "btree" ("profile_id");
+
+
+--
 -- Name: payroll_presets_one_default_per_org; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1147,6 +1331,20 @@ CREATE TRIGGER "profiles_guard_deactivation" BEFORE UPDATE ON "public"."profiles
 --
 
 CREATE TRIGGER "profiles_guard_super_admin" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."guard_profile_super_admin"();
+
+
+--
+-- Name: profiles profiles_mirror_membership; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "profiles_mirror_membership" AFTER INSERT OR UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."sync_membership_from_profile"();
+
+
+--
+-- Name: profiles profiles_set_active_organization; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "profiles_set_active_organization" BEFORE INSERT OR UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."set_active_organization"();
 
 
 --
@@ -1231,6 +1429,22 @@ ALTER TABLE ONLY "public"."invitations"
 
 
 --
+-- Name: memberships memberships_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."memberships"
+    ADD CONSTRAINT "memberships_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: memberships memberships_profile_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."memberships"
+    ADD CONSTRAINT "memberships_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+--
 -- Name: payroll_presets payroll_presets_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1244,6 +1458,14 @@ ALTER TABLE ONLY "public"."payroll_presets"
 
 ALTER TABLE ONLY "public"."payroll_rulesets"
     ADD CONSTRAINT "payroll_rulesets_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: profiles profiles_active_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_active_organization_id_fkey" FOREIGN KEY ("active_organization_id") REFERENCES "public"."organizations"("id") ON DELETE SET NULL;
 
 
 --
@@ -1370,20 +1592,16 @@ ALTER TABLE ONLY "public"."work_days"
 -- Name: show_assignments Admins assign members to shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins assign members to shows" ON "public"."show_assignments" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_users" = true)))) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "target"
-  WHERE (("target"."id" = "show_assignments"."profile_id") AND ("target"."organization_id" = "public"."my_organization_id"()))))));
+CREATE POLICY "Admins assign members to shows" ON "public"."show_assignments" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text") AND (EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."profile_id" = "show_assignments"."profile_id") AND ("m"."organization_id" = "public"."my_organization_id"()))))));
 
 
 --
 -- Name: invitations Admins can manage invitations; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can manage invitations" ON "public"."invitations" USING ((("organization_id" = "public"."my_organization_id"()) AND ( SELECT "profiles"."can_manage_users"
-   FROM "public"."profiles"
-  WHERE ("profiles"."id" = "auth"."uid"()))));
+CREATE POLICY "Admins can manage invitations" ON "public"."invitations" USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
 
 
 --
@@ -1397,18 +1615,14 @@ CREATE POLICY "Admins can manage org member permissions" ON "public"."profiles" 
 -- Name: show_assignments Admins revoke member show access; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins revoke member show access" ON "public"."show_assignments" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_users" = true))))));
+CREATE POLICY "Admins revoke member show access" ON "public"."show_assignments" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
 
 
 --
 -- Name: subscriptions Only admins can update subscription; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Only admins can update subscription" ON "public"."subscriptions" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND ( SELECT "profiles"."can_manage_billing"
-   FROM "public"."profiles"
-  WHERE ("profiles"."id" = "auth"."uid"()))));
+CREATE POLICY "Only admins can update subscription" ON "public"."subscriptions" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_billing'::"text")));
 
 
 --
@@ -1422,27 +1636,21 @@ CREATE POLICY "Org members can see their subscription" ON "public"."subscription
 -- Name: shows Users can create shows if permitted; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can create shows if permitted" ON "public"."shows" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND ( SELECT "profiles"."can_create_shows"
-   FROM "public"."profiles"
-  WHERE ("profiles"."id" = "auth"."uid"()))));
+CREATE POLICY "Users can create shows if permitted" ON "public"."shows" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_create_shows'::"text")));
 
 
 --
 -- Name: crew_members Users can manage crew if permitted; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can manage crew if permitted" ON "public"."crew_members" USING ((("organization_id" = "public"."my_organization_id"()) AND ( SELECT "profiles"."can_manage_crew_directory"
-   FROM "public"."profiles"
-  WHERE ("profiles"."id" = "auth"."uid"()))));
+CREATE POLICY "Users can manage crew if permitted" ON "public"."crew_members" USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_crew_directory'::"text")));
 
 
 --
 -- Name: shows Users can update shows they can see; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can update shows they can see" ON "public"."shows" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND ( SELECT "profiles"."can_edit_timecards"
-   FROM "public"."profiles"
-  WHERE ("profiles"."id" = "auth"."uid"())) AND ("public"."can_see_all_shows"() OR ("id" IN ( SELECT "show_assignments"."show_id"
+CREATE POLICY "Users can update shows they can see" ON "public"."shows" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text") AND ("public"."can_see_all_shows"() OR ("id" IN ( SELECT "show_assignments"."show_id"
    FROM "public"."show_assignments"
   WHERE ("show_assignments"."profile_id" = "auth"."uid"()))) OR ("created_by" = "auth"."uid"())))) WITH CHECK (("organization_id" = "public"."my_organization_id"()));
 
@@ -1623,6 +1831,13 @@ CREATE POLICY "Users see their own assignments" ON "public"."show_assignments" F
 
 
 --
+-- Name: memberships Users see their own memberships; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users see their own memberships" ON "public"."memberships" FOR SELECT USING (("profile_id" = "auth"."uid"()));
+
+
+--
 -- Name: organizations Users see their own organization; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1705,14 +1920,16 @@ ALTER TABLE "public"."crew_members" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."invitations" ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: memberships; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."memberships" ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: organizations org_admins_update_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "org_admins_update_own_org" ON "public"."organizations" FOR UPDATE USING ((("id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_users" = true)))))) WITH CHECK ((("id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_users" = true))))));
+CREATE POLICY "org_admins_update_own_org" ON "public"."organizations" FOR UPDATE USING ((("id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text"))) WITH CHECK ((("id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
 
 
 --
@@ -1737,18 +1954,14 @@ ALTER TABLE "public"."payroll_rulesets" ENABLE ROW LEVEL SECURITY;
 -- Name: payroll_presets presets_delete_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "presets_delete_own_org" ON "public"."payroll_presets" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_rulesets" = true))))));
+CREATE POLICY "presets_delete_own_org" ON "public"."payroll_presets" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text")));
 
 
 --
 -- Name: payroll_presets presets_insert_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "presets_insert_own_org" ON "public"."payroll_presets" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_rulesets" = true))))));
+CREATE POLICY "presets_insert_own_org" ON "public"."payroll_presets" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text")));
 
 
 --
@@ -1762,11 +1975,7 @@ CREATE POLICY "presets_select_own_org" ON "public"."payroll_presets" FOR SELECT 
 -- Name: payroll_presets presets_update_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "presets_update_own_org" ON "public"."payroll_presets" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_rulesets" = true)))))) WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND (EXISTS ( SELECT 1
-   FROM "public"."profiles" "p"
-  WHERE (("p"."id" = "auth"."uid"()) AND ("p"."can_manage_rulesets" = true))))));
+CREATE POLICY "presets_update_own_org" ON "public"."payroll_presets" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text"))) WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text")));
 
 
 --
@@ -1980,6 +2189,15 @@ GRANT ALL ON FUNCTION "public"."my_organization_id"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "my_perm"("p" "text"); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."my_perm"("p" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."my_perm"("p" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."my_perm"("p" "text") TO "service_role";
+
+
+--
 -- Name: FUNCTION "propagate_show_day_rate"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -1998,6 +2216,15 @@ GRANT ALL ON FUNCTION "public"."rls_auto_enable"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "set_active_organization"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."set_active_organization"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_active_organization"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_active_organization"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "set_show_assignment_organization_id"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2013,6 +2240,15 @@ GRANT ALL ON FUNCTION "public"."set_show_assignment_organization_id"() TO "servi
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "service_role";
+
+
+--
+-- Name: FUNCTION "sync_membership_from_profile"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."sync_membership_from_profile"() TO "anon";
+GRANT ALL ON FUNCTION "public"."sync_membership_from_profile"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_membership_from_profile"() TO "service_role";
 
 
 --
@@ -2093,6 +2329,14 @@ GRANT ALL ON TABLE "public"."crew_rate_cards_visible" TO "service_role";
 GRANT ALL ON TABLE "public"."invitations" TO "anon";
 GRANT ALL ON TABLE "public"."invitations" TO "authenticated";
 GRANT ALL ON TABLE "public"."invitations" TO "service_role";
+
+
+--
+-- Name: TABLE "memberships"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."memberships" TO "service_role";
+GRANT SELECT ON TABLE "public"."memberships" TO "authenticated";
 
 
 --
@@ -2340,5 +2584,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict YVGKy5PEUuoyQBAtY5gpw3BdQApdQiqnXbaYZuATY7XZCrQuBhEBjrgQqHPTuwO
+\unrestrict Lvnvmng4XY3vAUmU5d7WIUQiXcDPgkuF4hNl791PDLOBVdMADwO0Cps51GpySEc
 
