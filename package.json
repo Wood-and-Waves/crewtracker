@@ -10,7 +10,8 @@
     "db:sql": "node --env-file=.env.local scripts/run-sql.mjs",
     "db:dump": "node --env-file=.env.local scripts/db-dump.mjs",
     "db:schema": "node --env-file=.env.local scripts/db-dump.mjs --schema-only",
-    "db:seed": "node --env-file=.env.local scripts/db-seed.mjs"
+    "db:seed": "node --env-file=.env.local scripts/db-seed.mjs",
+    "db:grants": "node --env-file=.env.local scripts/db-grants.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
