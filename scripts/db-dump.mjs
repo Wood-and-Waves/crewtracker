@@ -115,7 +115,11 @@ if (schemaOnly) {
 }
 args.push('--file', out)
 
-console.log(`${schemaOnly ? 'Schema' : 'Full'} dump → ${out}`)
+// DATABASE_URL_SESSION is deliberately pinned to PRODUCTION even when the app
+// and db:sql point at dev — a backup that silently captured fake data would be
+// worse than no backup. Print the ref so that stays visible rather than assumed.
+const ref = (url.match(/postgres\.([a-z0-9]+)/) || [])[1] ?? 'unknown'
+console.log(`${schemaOnly ? 'Schema' : 'Full'} dump of ${ref} → ${out}`)
 try {
   execFileSync(pgDump, args, { stdio: ['ignore', 'inherit', 'inherit'] })
 } catch {
