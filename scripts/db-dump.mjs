@@ -23,12 +23,12 @@
 // NOT COVERED: the `auth` schema (logins). That belongs to Supabase and isn't
 // ours to dump — Supabase's own backups cover it.
 //
-// ALSO NOT COVERED: the **event trigger** binding. `rls_auto_enable()` is an
-// ordinary public function so it IS dumped, but the `ensure_rls` event trigger
-// that invokes it is cluster-level and `--schema=public` never sees it. That
-// trigger force-enables RLS on every newly created table — the safety net that
-// makes a forgotten policy fail closed. It lives in
-// scripts/sql/ensure-rls-event-trigger.sql instead.
+// ALSO NOT COVERED: **triggers anchored outside `public`**, even when the
+// function they call lives in public and dumps normally. Two of these matter —
+// `ensure_rls` (force-enables RLS on every new table) and `on_auth_user_created`
+// (creates a profiles row for a new login). Both are in
+// scripts/sql/out-of-schema.sql. Their absence is silent: the restore reports no
+// errors and the database just quietly stops enforcing something.
 //
 // AND NOT COVERED: revoked privileges. pg_dump emits GRANTs computed against
 // Postgres's built-in default, so a REVOKE is represented as an absence. On
@@ -38,13 +38,15 @@
 //
 // BUILDING A DATABASE FROM THIS DUMP — all four steps, in order:
 //   0. Create the project with "Automatically expose new tables" OFF.
-//   1. psql -f scripts/sql/ensure-rls-event-trigger.sql
-//   2. psql -f scripts/sql/schema.sql   (ALTER DEFAULT PRIVILEGES lines will
+//   1. psql -f scripts/sql/schema.sql   (ALTER DEFAULT PRIVILEGES lines will
 //      fail with "permission denied" — that is expected and desirable)
+//   2. psql -f scripts/sql/out-of-schema.sql   (after 1: it binds triggers to
+//      functions that schema.sql creates)
 //   3. psql -f scripts/sql/grants.sql
 // Verified 2026-07-26: this reproduces production exactly — 15 tables, 43
-// policies, 17 functions, 12 triggers, 2 views, 23 indexes, 47 constraints,
-// 7 event triggers, 208 table grants and 1390 column privileges.
+// policies, 17 functions, 12 public + 6 non-public triggers, 2 views, 23
+// indexes, 47 constraints, 7 event triggers, 208 table grants, 1390 column
+// privileges.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
