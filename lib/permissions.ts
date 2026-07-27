@@ -60,6 +60,15 @@ export const HIDDEN_PERMISSION_KEYS: PermissionKey[] = [
 ]
 
 // Exact preset matrix from the design spec. admin = full access.
+// Every permission column, derived from the two lists above rather than typed
+// out a third time — a hand-maintained copy would drift the first time a
+// permission is added, and the failure would be silent: a column simply missing
+// from a query, read as undefined, treated as false.
+export const ALL_PERMISSION_KEYS: PermissionKey[] = [
+  ...VISIBLE_PERMISSIONS.map((p) => p.key),
+  ...HIDDEN_PERMISSION_KEYS,
+]
+
 export const PERMISSION_PRESETS: Record<Role, PermissionValues> = {
   admin: {
     can_manage_users: true,
