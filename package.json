@@ -12,7 +12,8 @@
     "db:schema": "node --env-file=.env.local scripts/db-dump.mjs --schema-only",
     "db:seed": "node --env-file=.env.local scripts/db-seed.mjs",
     "db:grants": "node --env-file=.env.local scripts/db-grants.mjs",
-    "db:migrate": "node --env-file=.env.local scripts/db-migrate.mjs"
+    "db:migrate": "node --env-file=.env.local scripts/db-migrate.mjs",
+    "dev:login": "node --env-file=.env.local scripts/dev-login.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
