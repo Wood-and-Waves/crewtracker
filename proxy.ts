@@ -41,7 +41,13 @@ export async function proxy(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/invite") &&
     !request.nextUrl.pathname.startsWith("/api/beta-signup") &&
     !request.nextUrl.pathname.startsWith("/api/keepalive") &&
-    !request.nextUrl.pathname.startsWith("/join-beta")
+    !request.nextUrl.pathname.startsWith("/join-beta") &&
+    // Terms and Privacy must be readable by anyone, signed in or not — they are
+    // linked from the public site and from the Join the Beta form, and a policy
+    // you have to log in to read is not a published policy. Same trap the
+    // keepalive cron and manifest.webmanifest both hit.
+    !request.nextUrl.pathname.startsWith("/terms") &&
+    !request.nextUrl.pathname.startsWith("/privacy")
   ) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"

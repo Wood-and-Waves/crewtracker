@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import SiteFooter from "@/components/SiteFooter";
 import styles from "./page.module.css";
 
 export default async function LandingPage() {
@@ -51,9 +52,7 @@ export default async function LandingPage() {
         </section>
       </main>
 
-      <footer className={styles.footer}>
-        <p>&copy; 2026 CrewTracker. All rights reserved.</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
