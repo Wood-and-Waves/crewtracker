@@ -40,7 +40,9 @@ Dan (the developer) has no professional dev background — so explain the *why* 
   - **Production** — Supabase project `nfrvxkwemtittrqboebl`, owned by Dan's Wood-and-Waves login. What Vercel serves. Real customers eventually.
   - **Development** — project `oeflzwgtrkgjuvjdcwnv` (`crewtracker-dev`), owned by a *separate* Supabase login because the free-project limit is per account, not per organization. Built from `scripts/sql/schema.sql` and filled by `npm run db:seed`. Holds generated fake data only — never a copy of production, so real crew names, phones and rates can't land here.
 - **Direct SQL access**: `npm run db:sql -- path/to/file.sql` runs against **dev**. Production requires an explicit flag: `npm run db:sql -- --prod path/to/file.sql`, which prints a `⚠ PRODUCTION` banner with the project ref first. Every run names the database it connected to, so the target is never something to infer from context. (Wraps `scripts/run-sql.mjs`, a thin `pg` client; `DATABASE_URL`/`DATABASE_URL_PROD` are Supabase "Transaction pooler" strings — the "Direct connection" host is IPv6-only and won't resolve here.)
-- **Backups stay pinned to production** regardless of where the app points: `npm run db:dump` / `npm run db:schema` read `DATABASE_URL_SESSION`, which is always the production session pooler. Both print which project they dumped.
+- **Backups stay pinned to production** regardless of where the app points: `npm run db:dump` / `npm run db:schema` read `DATABASE_URL_SESSION_PROD`. Both print which project they dumped.
+- **Env var convention: unsuffixed is DEV, `_PROD` is production.** `DATABASE_URL` / `DATABASE_URL_SESSION` are dev (transaction and session poolers); `DATABASE_URL_PROD` / `DATABASE_URL_SESSION_PROD` are production. Anything touching production takes an explicit `--prod`.
+- **Schema changes go through migrations — `npm run db:migrate`.** Numbered files in `scripts/sql/migrations/` are applied in filename order, exactly once per database, each in a transaction, recorded in a `schema_migrations` table with a checksum. `--status` lists applied and pending; `--prod` targets production; `--baseline` records files as applied without running them (only ever right after building a database from `schema.sql`, which already contains them). **Editing an applied migration is refused** — the database still holds what the original did, so a new migration is the only honest fix. Write dev first, verify, then run `--prod`.
 - **Rebuilding a database from scratch takes four steps, and `schema.sql` is only one of them.** Create the project with *"Automatically expose new tables" OFF*, then apply `schema.sql`, `out-of-schema.sql`, and `grants.sql` in that order. Two things `pg_dump --schema=public` structurally cannot capture, both of which fail **silently** — the restore reports no errors and the database simply stops enforcing something:
   - **Triggers anchored outside `public`**, even where the function they call is in `public` and dumps fine. `ensure_rls` (force-enables RLS on every new table) and `on_auth_user_created` (creates the `profiles` row for a new login) are both this shape. Without the second, signing up produces a login with no profile. Both live in `scripts/sql/out-of-schema.sql`.
   - **Revoked privileges.** `pg_dump` emits GRANTs computed against Postgres's built-in default, so a REVOKE is an *absence* — and on Supabase an absence is inherited from `ALTER DEFAULT PRIVILEGES` rather than removed. The `day_rate` lockdown is written as an absence, so without `grants.sql` it silently doesn't exist in the rebuilt database. `npm run db:grants` regenerates it from production; re-run after changing any privilege.
@@ -142,8 +144,18 @@ lib/
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
 proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, the keepalive cron, and exactly "/")
 scripts/
-  run-sql.mjs   — runs a .sql file against DATABASE_URL (npm run db:sql -- file.sql)
-  sql/          — one-off SQL scripts kept for reference (RLS policies, migrations, checks)
+  run-sql.mjs   — runs a .sql file; dev by default, --prod for production (npm run db:sql)
+  db-dump.mjs   — pg_dump wrapper, always production (npm run db:dump / db:schema)
+  db-grants.mjs — regenerates sql/grants.sql from production (npm run db:grants)
+  db-migrate.mjs— applies sql/migrations/ in order, once each (npm run db:migrate)
+  db-seed.mjs   — fills a DEV database with generated fake data (npm run db:seed)
+  sql/
+    schema.sql       — generated baseline; the shape of the database. Do not hand-edit.
+    out-of-schema.sql— generated; triggers pg_dump --schema=public can't see
+    grants.sql       — generated; revoke-then-grant, carries the day_rate lockdown
+    migrations/      — numbered changes applied by db:migrate. Append only; never edit one that ran.
+    applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
+    checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
 
 ## Database schema
@@ -176,7 +188,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 ## Payroll business logic (`lib/payroll.ts`)
 
 - Day rate base: hourly = `dayRate / overtimeAfterHours`. Crew always get at least their full day rate (minimum guarantee).
-- **A day rate is a property of the SHOW, not of a day.** It is keyed on (show, crew member, role) and must never differ between days — a per-day rate is a data-entry mistake. Role is in the key because one person legitimately holds different rates in different roles on the same show, and reports group on `name|role`. Enforced by two triggers on `timecards` (`scripts/sql/show-wide-day-rate.sql`): a BEFORE INSERT that makes a new timecard inherit the show's existing rate — **overriding whatever the caller supplied**, which is why StaffRoomModal locks its rate field — and an AFTER UPDATE that propagates a change to every day of the show. A blank role counts as a role to both, and `0` is a real rate (unpaid crew), so never test `day_rate` for truthiness. Nothing writing to `timecards` needs special handling; the triggers cover it.
+- **A day rate is a property of the SHOW, not of a day.** It is keyed on (show, crew member, role) and must never differ between days — a per-day rate is a data-entry mistake. Role is in the key because one person legitimately holds different rates in different roles on the same show, and reports group on `name|role`. Enforced by two triggers on `timecards` (`scripts/sql/applied/show-wide-day-rate.sql`): a BEFORE INSERT that makes a new timecard inherit the show's existing rate — **overriding whatever the caller supplied**, which is why StaffRoomModal locks its rate field — and an AFTER UPDATE that propagates a change to every day of the show. A blank role counts as a role to both, and `0` is a real rate (unpaid crew), so never test `day_rate` for truthiness. Nothing writing to `timecards` needs special handling; the triggers cover it.
 - OT/DT thresholds configurable per show ruleset (default OT after 10hr @1.5x, DT optional after 12hr @2x).
 - Meal breaks: under `minimum_meal_break_minutes` (default 60) = no deduction; over that, deduct up to `meal_break_deduction_cap` (default 60).
 - Meal penalties: triggered after `meal_penalty_grace_period` (default 6hr) without a break; max 2/day.

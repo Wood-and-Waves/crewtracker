@@ -33,7 +33,7 @@ export default function CopyCrewButton({
 
     // No day_rate: the BEFORE INSERT trigger inherits the show's rate for this
     // (crew member, role) from the source row itself, which is on the same show.
-    // See scripts/sql/show-wide-day-rate.sql.
+    // See scripts/sql/applied/show-wide-day-rate.sql.
     const { data: source, error: srcError } = await supabase
       .from('timecards')
       .select('crew_member_id, crew_member_name, role')

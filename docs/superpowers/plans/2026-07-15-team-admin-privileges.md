@@ -26,9 +26,9 @@
 
 ## File Structure
 
-- Create: `scripts/sql/team-admin-privileges.sql` — the migration (helper fn, admin RLS policy, trigger + trigger fn, shows-policy rewrite). Idempotent, transactional.
-- Create: `scripts/sql/verify-team-admin-privileges.sql` — structural verification queries (objects exist / old policy gone).
-- Create: `scripts/sql/test-team-admin-privileges.sql` — behavioral tests (self-escalation blocked, self-demotion blocked), transaction-wrapped and rolled back.
+- Create: `scripts/sql/applied/team-admin-privileges.sql` — the migration (helper fn, admin RLS policy, trigger + trigger fn, shows-policy rewrite). Idempotent, transactional.
+- Create: `scripts/sql/checks/verify-team-admin-privileges.sql` — structural verification queries (objects exist / old policy gone).
+- Create: `scripts/sql/checks/test-team-admin-privileges.sql` — behavioral tests (self-escalation blocked, self-demotion blocked), transaction-wrapped and rolled back.
 - Create: `lib/permissions.ts` — role/permission types, preset table, visible-toggle list, `presetFor()`.
 - Create: `components/PermissionsEditor.tsx` — shared role-picker + Advanced-toggles editor (`'use client'`).
 - Create: `components/InviteTeammateModal.tsx` — invite modal using `PermissionsEditor` (`'use client'`).
@@ -44,16 +44,16 @@
 ### Task 1: Database migration — access-control layer
 
 **Files:**
-- Create: `scripts/sql/team-admin-privileges.sql`
-- Create: `scripts/sql/verify-team-admin-privileges.sql`
-- Create: `scripts/sql/test-team-admin-privileges.sql`
+- Create: `scripts/sql/applied/team-admin-privileges.sql`
+- Create: `scripts/sql/checks/verify-team-admin-privileges.sql`
+- Create: `scripts/sql/checks/test-team-admin-privileges.sql`
 
 **Interfaces:**
 - Produces (for later tasks): an RLS UPDATE policy `"Admins can manage org member permissions"` on `profiles` that lets a `can_manage_users` user update any profile row in their own org; a BEFORE UPDATE trigger `enforce_profile_permission_rules` on `profiles` enforcing (1) non-admin self-escalation lock, (2) self-demotion guard, (3) last-admin guard; a rewritten `shows` UPDATE policy requiring `can_edit_timecards` AND visibility. Task 5/6 rely on these being live.
 
 - [ ] **Step 1: Write the migration SQL**
 
-Create `scripts/sql/team-admin-privileges.sql`:
+Create `scripts/sql/applied/team-admin-privileges.sql`:
 
 ```sql
 -- Team / Admin Privileges migration.
@@ -189,12 +189,12 @@ commit;
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npm run db:sql -- scripts/sql/team-admin-privileges.sql`
+Run: `npm run db:sql -- scripts/sql/applied/team-admin-privileges.sql`
 Expected: output ends with `COMMIT — 0 row(s)` and no `SQL error:` line. (If it errors, do NOT proceed — report the exact error; a partial apply is impossible because the whole file is one transaction.)
 
 - [ ] **Step 3: Write structural verification SQL**
 
-Create `scripts/sql/verify-team-admin-privileges.sql`:
+Create `scripts/sql/checks/verify-team-admin-privileges.sql`:
 
 ```sql
 -- Expect: helper function present (1 row).
@@ -218,12 +218,12 @@ select policyname, qual from pg_policies
 where tablename = 'shows' and cmd = 'UPDATE';
 ```
 
-Run: `npm run db:sql -- scripts/sql/verify-team-admin-privileges.sql`
+Run: `npm run db:sql -- scripts/sql/checks/verify-team-admin-privileges.sql`
 Expected: helper=1 row, admin-policy=1 row, trigger=1 row, leftover-policy=0 rows, shows-UPDATE=1 row whose `qual` text contains `show_assignments`.
 
 - [ ] **Step 4: Write behavioral tests (transaction-wrapped, rolled back — mutates nothing)**
 
-Create `scripts/sql/test-team-admin-privileges.sql`. These simulate a specific user by setting the JWT claim `sub` (which `auth.uid()` reads), inside a transaction that is rolled back. The trigger fires regardless of connecting role, so this exercises the real rule logic.
+Create `scripts/sql/checks/test-team-admin-privileges.sql`. These simulate a specific user by setting the JWT claim `sub` (which `auth.uid()` reads), inside a transaction that is rolled back. The trigger fires regardless of connecting role, so this exercises the real rule logic.
 
 ```sql
 -- TEST A: a NON-admin cannot escalate their own permissions.
@@ -292,7 +292,7 @@ rollback;
 
 - [ ] **Step 5: Run the behavioral tests**
 
-Run: `npm run db:sql -- scripts/sql/test-team-admin-privileges.sql`
+Run: `npm run db:sql -- scripts/sql/checks/test-team-admin-privileges.sql`
 Expected: the output includes `TEST A PASS`, `TEST B PASS`, and `TEST C PASS` (as NOTICE lines). If any prints `FAIL` (or `SKIP` because the DB has no non-admin/admin row), report it — a `FAIL` means the trigger logic is wrong and must be fixed before proceeding; a `SKIP` means the implementer must note that this rule needs browser verification in Task 6 instead.
 
 Note: `set_config('request.jwt.claims', …, true)` relies on Supabase's `auth.uid()` reading the `sub` claim. If the runner errors on `set_config`/claims in this environment, report it — Rules 1/2 will instead be verified through the real app in Task 6, and this script can be left as documentation.
@@ -300,7 +300,7 @@ Note: `set_config('request.jwt.claims', …, true)` relies on Supabase's `auth.u
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/sql/team-admin-privileges.sql scripts/sql/verify-team-admin-privileges.sql scripts/sql/test-team-admin-privileges.sql
+git add scripts/sql/applied/team-admin-privileges.sql scripts/sql/checks/verify-team-admin-privileges.sql scripts/sql/checks/test-team-admin-privileges.sql
 git commit -m "Add Team admin-privileges DB migration: self-escalation trigger, admin profiles policy, shows-write visibility fix"
 ```
 
@@ -1158,7 +1158,7 @@ npm run db:sql -- /tmp/ct-prof-check.sql
 5. (Direct DB-layer confirmation) Re-run the Task 1 behavioral tests to confirm the trigger still guards after all changes:
 
 ```bash
-npm run db:sql -- scripts/sql/test-team-admin-privileges.sql
+npm run db:sql -- scripts/sql/checks/test-team-admin-privileges.sql
 ```
 
 Expected: `TEST A PASS`, `TEST B PASS`, `TEST C PASS`. Capture a screenshot of the Edit Member screen.

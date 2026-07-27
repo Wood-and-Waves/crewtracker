@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict qhL9hTEW8ERTIcyfb9T18iibHDXplCNQTjgglcETwE0gXhjqyR7xMLaycg4Vbx9
+\restrict YVGKy5PEUuoyQBAtY5gpw3BdQApdQiqnXbaYZuATY7XZCrQuBhEBjrgQqHPTuwO
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -795,6 +795,17 @@ CREATE TABLE "public"."rooms" (
 
 
 --
+-- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."schema_migrations" (
+    "filename" "text" NOT NULL,
+    "checksum" "text" NOT NULL,
+    "applied_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+--
 -- Name: show_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1008,6 +1019,14 @@ ALTER TABLE ONLY "public"."rate_cards"
 
 ALTER TABLE ONLY "public"."rooms"
     ADD CONSTRAINT "rooms_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."schema_migrations"
+    ADD CONSTRAINT "schema_migrations_pkey" PRIMARY KEY ("filename");
 
 
 --
@@ -1798,6 +1817,12 @@ CREATE POLICY "rooms_update_own_org" ON "public"."rooms" FOR UPDATE USING (("wor
 
 
 --
+-- Name: schema_migrations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."schema_migrations" ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: show_assignments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2116,6 +2141,13 @@ GRANT ALL ON TABLE "public"."rooms" TO "service_role";
 
 
 --
+-- Name: TABLE "schema_migrations"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."schema_migrations" TO "service_role";
+
+
+--
 -- Name: TABLE "show_assignments"; Type: ACL; Schema: public; Owner: -
 --
 
@@ -2308,5 +2340,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qhL9hTEW8ERTIcyfb9T18iibHDXplCNQTjgglcETwE0gXhjqyR7xMLaycg4Vbx9
+\unrestrict YVGKy5PEUuoyQBAtY5gpw3BdQApdQiqnXbaYZuATY7XZCrQuBhEBjrgQqHPTuwO
 

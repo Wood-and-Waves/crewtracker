@@ -19,7 +19,7 @@ export default async function TeamPage() {
     .from('profiles')
     // Removed members are still listed, greyed and last, so an admin can find
     // them to restore. Their row is kept on purpose — see
-    // scripts/sql/deactivate-team-members.sql.
+    // scripts/sql/applied/deactivate-team-members.sql.
     .select('id, full_name, email, base_role, deactivated_at')
     .eq('organization_id', profile.organization_id)
     .order('deactivated_at', { ascending: true, nullsFirst: true })

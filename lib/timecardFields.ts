@@ -56,7 +56,7 @@ export const TIMECARD_FIELDS_NO_RATE = [
  * The only column list the app should ever use against `timecards`.
  *
  * There is deliberately no "include the rate" option: rates come from the
- * `timecard_day_rates` view (scripts/sql/rate-views.sql), which checks
+ * `timecard_day_rates` view (scripts/sql/applied/rate-views.sql), which checks
  * can_view_pay_rates for the calling user and is the one path that keeps
  * working once the column is revoked from `authenticated`. Merge by timecard id.
  */

@@ -9,7 +9,7 @@
 // It now reads profiles.is_super_admin, which the app cannot set: a trigger
 // refuses any change whenever there's an authenticated user in context, so it
 // can only be granted by direct SQL (see
-// scripts/sql/superadmin-and-org-disable.sql).
+// scripts/sql/applied/superadmin-and-org-disable.sql).
 //
 // Plain module, no 'use client' — imported by Server Components and route
 // handlers (see CLAUDE.md on the client/server export rule).

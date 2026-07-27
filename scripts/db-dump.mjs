@@ -5,10 +5,12 @@
 //
 // WHY THIS EXISTS
 // ---------------
-// The 33 files in scripts/sql/ cannot rebuild this database: they're unordered,
-// several supersede earlier ones, and nothing records which were applied. Until
-// now the schema — 43 RLS policies, 17 functions, 12 triggers — existed in
-// exactly one place, the live database, with no way to reproduce or restore it.
+// The 24 scripts now in scripts/sql/applied/ cannot rebuild this database:
+// they're unordered, several supersede earlier ones, and nothing recorded which
+// were applied. Until this existed the schema — 43 RLS policies, 17 functions,
+// 12 triggers — lived in exactly one place, the live database, with no way to
+// reproduce or restore it. (Changes made from here on go through
+// scripts/sql/migrations/ and `npm run db:migrate`, which does record them.)
 // scripts/sql/schema.sql produced by `db:schema` is the fix: one authoritative
 // description of the database, and the thing a development project is built from.
 //
@@ -17,7 +19,7 @@
 // Two easy ways to get a silently useless backup, both caught here:
 //   * pg_dump cannot run against the TRANSACTION pooler (port 6543) that
 //     DATABASE_URL points at. It needs the SESSION pooler (port 5432), which is
-//     why this insists on DATABASE_URL_SESSION and checks the port.
+//     why this insists on DATABASE_URL_SESSION_PROD and checks the port.
 //   * libpq is keg-only on Homebrew, so pg_dump isn't on PATH by default.
 //
 // NOT COVERED: the `auth` schema (logins). That belongs to Supabase and isn't
@@ -72,22 +74,22 @@ function findPgDump() {
   return null
 }
 
-const url = process.env.DATABASE_URL_SESSION
+const url = process.env.DATABASE_URL_SESSION_PROD
 if (!url) {
   console.error(`
-DATABASE_URL_SESSION is not set in .env.local.
+DATABASE_URL_SESSION_PROD is not set in .env.local.
 
 pg_dump can't use DATABASE_URL — that's the transaction pooler (port 6543), which
 doesn't support the session features a dump needs. Get the SESSION pooler string
 from Supabase → Project Settings → Database → Connection string → Session pooler
-(same host, port 5432) and add it to .env.local as DATABASE_URL_SESSION.
+(same host, port 5432) and add it to .env.local as DATABASE_URL_SESSION_PROD.
 `)
   process.exit(1)
 }
 
 if (url.includes(':6543')) {
   console.error(`
-DATABASE_URL_SESSION points at port 6543, which is the TRANSACTION pooler.
+DATABASE_URL_SESSION_PROD points at port 6543, which is the TRANSACTION pooler.
 pg_dump needs the SESSION pooler — same host, port 5432.
 `)
   process.exit(1)
@@ -127,7 +129,7 @@ if (schemaOnly) {
 }
 args.push('--file', out)
 
-// DATABASE_URL_SESSION is deliberately pinned to PRODUCTION even when the app
+// DATABASE_URL_SESSION_PROD is deliberately pinned to PRODUCTION even when the app
 // and db:sql point at dev — a backup that silently captured fake data would be
 // worse than no backup. Print the ref so that stays visible rather than assumed.
 const ref = (url.match(/postgres\.([a-z0-9]+)/) || [])[1] ?? 'unknown'

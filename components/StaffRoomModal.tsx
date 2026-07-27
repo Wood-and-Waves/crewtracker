@@ -38,7 +38,7 @@ export default function StaffRoomModal({
   hideTrigger?: boolean
   /** profiles.can_edit_pay_rates. Without it the rate field is hidden: the
    *  database drops any rate such a caller submits (see
-   *  scripts/sql/enforce-pay-rate-writes.sql), so offering the field would be
+   *  scripts/sql/applied/enforce-pay-rate-writes.sql), so offering the field would be
    *  showing someone a control that silently does nothing. */
   canEditRates?: boolean
 }) {
@@ -54,7 +54,7 @@ export default function StaffRoomModal({
   const [rateCards, setRateCards] = useState<RateCard[]>([])
   // Rates already established on THIS show, keyed `crewMemberId|role`. A day
   // rate belongs to the show, so once one is set the database ignores whatever
-  // an insert supplies (see scripts/sql/show-wide-day-rate.sql). Loading them
+  // an insert supplies (see scripts/sql/applied/show-wide-day-rate.sql). Loading them
   // here keeps the form from advertising a directory rate that won't be used.
   const [showRates, setShowRates] = useState<Record<string, number>>({})
   const [roles, setRoles] = useState<string[]>([])

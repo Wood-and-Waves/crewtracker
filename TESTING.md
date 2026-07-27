@@ -33,7 +33,7 @@ cross-organization probe empty; unassigned show 404s with no data in the respons
 anonymous blocked everywhere; six write paths refused on a finalized show including the
 new `add_show_day` function; production left exactly as found.
 
-Re-run `npm run db:sql -- scripts/sql/integrity-sweep.sql` after any manual testing session.
+Re-run `npm run db:sql -- scripts/sql/checks/integrity-sweep.sql` after any manual testing session.
 
 ## Already verified — don't redo
 

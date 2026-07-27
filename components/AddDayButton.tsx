@@ -49,7 +49,7 @@ export default function AddDayButton({
     // extend end_date, insert the day, insert the rooms, insert the crew — so a
     // failure partway through left a half-built day, and retrying then collided
     // with the day already sitting there on that date. The function does the
-    // whole thing or none of it; see scripts/sql/add-show-day-function.sql.
+    // whole thing or none of it; see scripts/sql/applied/add-show-day-function.sql.
     //
     // Date arithmetic lives in SQL now too: `date + 1` on a date column carries
     // no timezone, which is the safest possible version of a calculation this

@@ -16,6 +16,7 @@ revoke all on table "public"."profiles" from anon, authenticated;
 revoke all on table "public"."punches" from anon, authenticated;
 revoke all on table "public"."rate_cards" from anon, authenticated;
 revoke all on table "public"."rooms" from anon, authenticated;
+revoke all on table "public"."schema_migrations" from anon, authenticated;
 revoke all on table "public"."show_assignments" from anon, authenticated;
 revoke all on table "public"."shows" from anon, authenticated;
 revoke all on table "public"."subscriptions" from anon, authenticated;
