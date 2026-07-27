@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# database snapshots — real data, and large. scripts/sql/schema.sql IS committed
+# (schema only, no rows) because it's the authoritative description of the database.
+/backups

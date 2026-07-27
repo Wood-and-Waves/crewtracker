@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:sql": "node --env-file=.env.local scripts/run-sql.mjs"
+    "db:sql": "node --env-file=.env.local scripts/run-sql.mjs",
+    "db:dump": "node --env-file=.env.local scripts/db-dump.mjs",
+    "db:schema": "node --env-file=.env.local scripts/db-dump.mjs --schema-only"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
