@@ -9,6 +9,7 @@ revoke all on table "public"."av_roles" from anon, authenticated;
 revoke all on table "public"."crew_members" from anon, authenticated;
 revoke all on table "public"."crew_rate_cards_visible" from anon, authenticated;
 revoke all on table "public"."invitations" from anon, authenticated;
+revoke all on table "public"."memberships" from anon, authenticated;
 revoke all on table "public"."organizations" from anon, authenticated;
 revoke all on table "public"."payroll_presets" from anon, authenticated;
 revoke all on table "public"."payroll_rulesets" from anon, authenticated;
@@ -32,6 +33,7 @@ grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."crew_rate_cards_visible" to authenticated;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."invitations" to anon;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."invitations" to authenticated;
+grant SELECT on table "public"."memberships" to authenticated;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."organizations" to anon;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."organizations" to authenticated;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."payroll_presets" to anon;
