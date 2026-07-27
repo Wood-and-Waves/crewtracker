@@ -42,6 +42,10 @@ Point DATABASE_URL at your dev project and try again.
 
 const adminEmailArg = process.argv.indexOf('--admin-email')
 const adminEmail = adminEmailArg > -1 ? process.argv[adminEmailArg + 1] : null
+// Attaching a login and generating data are separate jobs. Without this, coming
+// back to link an account would silently seed a whole second organization.
+const attachOnly = process.argv.includes('--attach-only')
+const force = process.argv.includes('--force')
 
 const FIRST = ['Alex','Jordan','Sam','Riley','Casey','Morgan','Avery','Quinn','Rowan','Skyler','Emerson','Harper']
 const LAST  = ['Reyes','Okafor','Lindqvist','Marchetti','Delgado','Novak','Ferreira','Whitfield','Aoki','Bergström','Castellanos','Idris']
@@ -58,6 +62,18 @@ const client = new pg.Client({ connectionString: url })
 await client.connect()
 
 async function seed() {
+  const { rows: [{ n }] } = await client.query('select count(*)::int as n from organizations')
+  if (n > 0 && !force) {
+    console.error(`
+This database already has ${n} organization(s). Seeding again would add another
+complete set rather than replacing what is there.
+
+  To link a login to the existing data:  npm run db:seed -- --attach-only --admin-email you@example.com
+  To add a second org anyway:            npm run db:seed -- --force
+`)
+    process.exit(1)
+  }
+
   console.log('Seeding development data…\n')
 
   const orgId = randomUUID()
@@ -148,33 +164,55 @@ async function seed() {
     console.log(`  show          ${name} (${days} days${withPunches ? ', punched' : ', not started'})`)
   }
 
-  // Attach an existing login to the org. Auth users are created by signing up in
-  // the app, not here — GoTrue owns that table and hand-inserting rows into it is
-  // a good way to get an account that half works.
-  if (adminEmail) {
-    const { rowCount } = await client.query(
-      `update profiles set organization_id = $1, base_role = 'admin',
-              can_manage_users = true, can_manage_crew_directory = true, can_import_crew = true,
-              can_view_crew_contacts = true, can_create_shows = true, can_edit_all_shows = true,
-              can_archive_shows = true, can_duplicate_shows = true, can_edit_timecards = true,
-              can_approve_timecards = true, can_view_pay_rates = true, can_edit_pay_rates = true,
-              can_manage_rulesets = true, can_view_reports = true, can_export_reports = true,
-              can_send_reports = true, view_only = false
-       where email = $2`, [orgId, adminEmail])
-    console.log(rowCount
-      ? `\n  admin         ${adminEmail} attached to the org with full permissions`
-      : `\n  admin         no profile found for ${adminEmail} — sign up in the app first, then re-run`)
-  } else {
-    console.log('\n  No --admin-email given. Sign up in the app, then re-run with')
-    console.log('    npm run db:seed -- --admin-email you@example.com')
-  }
+  return orgId
+}
+
+// Attach an existing login to an org as a full admin. Auth users are created by
+// signing up (or via the dashboard's Add User), never here — GoTrue owns that
+// table and hand-inserting rows is a good way to get an account that half works.
+// The profiles row itself is created by the on_auth_user_created trigger; if
+// that trigger is missing, this reports "no profile found" rather than failing
+// mysteriously later. See scripts/sql/out-of-schema.sql.
+async function attachAdmin(orgId, email) {
+  const { rowCount } = await client.query(
+    `update profiles set organization_id = $1, base_role = 'admin',
+            can_manage_users = true, can_manage_crew_directory = true, can_import_crew = true,
+            can_view_crew_contacts = true, can_create_shows = true, can_edit_all_shows = true,
+            can_archive_shows = true, can_duplicate_shows = true, can_edit_timecards = true,
+            can_approve_timecards = true, can_view_pay_rates = true, can_edit_pay_rates = true,
+            can_manage_rulesets = true, can_view_reports = true, can_export_reports = true,
+            can_send_reports = true, view_only = false
+     where email = $2`, [orgId, email])
+  console.log(rowCount
+    ? `  admin         ${email} attached with full permissions`
+    : `  admin         NO PROFILE for ${email} — create the login first (dev dashboard -> Authentication -> Add user)`)
 }
 
 try {
-  await seed()
+  if (attachOnly) {
+    if (!adminEmail) {
+      console.error('--attach-only needs --admin-email you@example.com')
+      process.exit(1)
+    }
+    const { rows } = await client.query('select id, name from organizations order by created_at limit 2')
+    if (!rows.length) {
+      console.error('No organization to attach to. Run `npm run db:seed` first.')
+      process.exit(1)
+    }
+    if (rows.length > 1) console.log(`  (multiple orgs present; using the oldest: ${rows[0].name})`)
+    console.log(`Attaching to "${rows[0].name}"…`)
+    await attachAdmin(rows[0].id, adminEmail)
+  } else {
+    const orgId = await seed()
+    if (adminEmail) await attachAdmin(orgId, adminEmail)
+    else {
+      console.log('\n  No --admin-email given. Create a login in the dashboard, then run')
+      console.log('    npm run db:seed -- --attach-only --admin-email you@example.com')
+    }
+  }
   console.log('\nDone.')
 } catch (e) {
-  console.error('\nSeeding failed:', e.message)
+  console.error('\nFailed:', e.message)
   process.exitCode = 1
 } finally {
   await client.end()
