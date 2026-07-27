@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import EditMemberClient from '@/components/EditMemberClient'
 import { PERMISSION_PRESETS, type Role, type PermissionKey, type PermissionValues } from '@/lib/permissions'
@@ -8,15 +9,9 @@ const ALL_KEYS = Object.keys(PERMISSION_PRESETS.admin) as PermissionKey[]
 export default async function EditMemberPage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
-
-  const { data: me } = await supabase
-    .from('profiles')
-    .select('organization_id, can_manage_users')
-    .eq('id', user.id)
-    .single()
-  if (!me?.can_manage_users || !me.organization_id) redirect('/dashboard')
+  if (!user.can('can_manage_users') || !user.organizationId) redirect('/dashboard')
 
   // RLS ("Users see profiles in their org") already restricts this to same-org
   // rows; a userId outside the org returns no row.

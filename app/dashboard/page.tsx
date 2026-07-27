@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import NewShowModal from '@/components/NewShowModal'
 import ArchiveShowButton from '@/components/ArchiveShowButton'
@@ -26,16 +27,10 @@ export default async function DashboardPage({
   const showingArchived = archived === '1'
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.organization_id) {
+  if (!user.organizationId) {
     return (
       <div className="flex min-h-[70vh] items-center justify-center p-8">
         <Card className="w-full max-w-md p-8 text-center">
@@ -51,7 +46,7 @@ export default async function DashboardPage({
   const { data: allShows } = await supabase
     .from('shows')
     .select('*')
-    .eq('organization_id', profile.organization_id)
+    .eq('organization_id', user.organizationId)
     .order('start_date', { ascending: false })
 
   const shows = (allShows || []).filter(s => !!s.archived === showingArchived)
@@ -61,7 +56,7 @@ export default async function DashboardPage({
     <div className="p-6 md:p-10">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-3xl font-extrabold tracking-tight">Shows</h1>
-        <NewShowModal organizationId={profile.organization_id} />
+        <NewShowModal organizationId={user.organizationId} />
       </div>
 
       <div className="mb-6 flex gap-2">
@@ -121,7 +116,7 @@ export default async function DashboardPage({
                   </div>
                 </Card>
               </Link>
-              {profile.can_archive_shows && (
+              {user.can('can_archive_shows') && (
                 <ArchiveShowButton showId={show.id} archived={!!show.archived} />
               )}
             </div>

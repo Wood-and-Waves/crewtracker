@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import AddRoomModal from '@/components/AddRoomModal'
@@ -27,38 +28,43 @@ export default async function ShowDetailPage({
   const { id } = await params
   const { day } = await searchParams
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  // profile/show/ruleset/workDays are independent of each other (none
+  // The caller and show/ruleset/workDays are independent of each other (none
   // depend on another's result) so fetch them in one round trip instead
   // of four sequential ones.
   const [
-    { data: profile },
+    user,
     { data: show },
     { data: ruleset },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id, use_24_hour_time, can_view_pay_rates, can_edit_pay_rates, can_manage_users').eq('id', user.id).single(),
+    getCurrentUser(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
   ])
+  if (!user) redirect('/login')
 
   if (!show) notFound()
+  // Belt and braces: RLS already hides every show from someone with no live
+  // organization, so this should be unreachable. It exists so organizationId is
+  // a plain string below rather than string | null.
+  if (!user.organizationId) notFound()
+  // Hoisted because TypeScript drops the narrowing above inside the .map()
+  // callbacks further down — a local const keeps it.
+  const organizationId = user.organizationId
 
   const timezone = show.timezone_identifier || 'America/Chicago'
 
-  const { data: organization } = profile?.organization_id
-    ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', profile.organization_id).single()
+  const { data: organization } = organizationId
+    ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', organizationId).single()
     : { data: null }
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
 
   // Pay-rate visibility/edit in Edit Crew is gated by permission only — the
   // day rate lives on the timecard regardless of whether the show displays $
   // in reports (that's what show_financials controls, separately).
-  const canViewRates = profile?.can_view_pay_rates ?? false
-  const canEditRates = profile?.can_edit_pay_rates ?? false
+  const canViewRates = user.can('can_view_pay_rates')
+  const canEditRates = user.can('can_edit_pay_rates')
 
   if (!workDays || workDays.length === 0) {
     return (
@@ -239,7 +245,7 @@ export default async function ShowDetailPage({
               })}
               . Punches and staffing are rejected by the database until the show is unlocked.
             </p>
-            {profile?.can_manage_users && (
+            {user.can('can_manage_users') && (
               <div className="mt-2"><UnlockShowButton showId={id} /></div>
             )}
           </div>
@@ -388,7 +394,7 @@ export default async function ShowDetailPage({
                     ruleset={ruleset}
                     allTimecards={allTimecardsWithPunches}
                     dayDate={activeDay.date}
-                    use24Hour={profile?.use_24_hour_time || false}
+                    use24Hour={user.use24Hour}
                     roundingMinutes={roundingMinutes}
                     visibleTypes={dayPunchTypes}
                   />
@@ -397,7 +403,7 @@ export default async function ShowDetailPage({
 
               <div className="p-4 pt-3">
                 <StaffRoomModal
-                  organizationId={profile?.organization_id}
+                  organizationId={organizationId}
                   roomId={room.id}
                   roomName={room.name}
                   currentWorkDayId={activeDay.id}
@@ -430,9 +436,9 @@ export default async function ShowDetailPage({
         ruleset={ruleset}
         allTimecards={allTimecardsWithPunches}
         dayDate={activeDay.date}
-        use24Hour={profile?.use_24_hour_time || false}
+        use24Hour={user.use24Hour}
         roundingMinutes={roundingMinutes}
-        organizationId={profile?.organization_id}
+        organizationId={organizationId}
         currentWorkDayId={activeDay.id}
         remainingWorkDayIds={remainingWorkDayIds}
         remainingRoomsByName={remainingRoomsByName}

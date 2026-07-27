@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildReportCsv } from '@/lib/reportCsv'
 import { buildReportPdf } from '@/lib/reportPdf'
@@ -53,16 +54,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Not signed in.' }, { status: 401 })
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('organization_id, full_name, can_send_reports')
-    .eq('id', user.id)
-    .single()
+  const me = await getCurrentUser()
 
-  if (!profile?.organization_id) {
+  if (!me?.organizationId) {
     return NextResponse.json({ error: 'No organization on this account.' }, { status: 403 })
   }
-  if (!profile.can_send_reports) {
+  // Deliberately NOT gated on can_view_pay_rates: the whole point of the Final
+  // Report is that a PM who may never see the figures can still send them.
+  if (!me.can('can_send_reports')) {
     return NextResponse.json({ error: 'You do not have permission to send reports.' }, { status: 403 })
   }
 
@@ -75,7 +74,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Show not found.' }, { status: 404 })
   }
   // Scope check is explicit precisely because the service role bypasses RLS.
-  if (show.organization_id !== profile.organization_id) {
+  if (show.organization_id !== me.organizationId) {
     return NextResponse.json({ error: 'Show not found.' }, { status: 404 })
   }
   if (show.finalized_at) {
@@ -88,7 +87,7 @@ export async function POST(request: Request) {
   const { data: org } = await admin
     .from('organizations')
     .select('final_report_emails')
-    .eq('id', profile.organization_id)
+    .eq('id', me.organizationId)
     .single()
 
   const recipients = parseRecipients(org?.final_report_emails)
@@ -126,7 +125,7 @@ export async function POST(request: Request) {
 
   const timezone = show.timezone_identifier || 'America/Chicago'
   const { data: orgRounding } = await admin
-    .from('organizations').select('timecard_rounding_minutes').eq('id', profile.organization_id).single()
+    .from('organizations').select('timecard_rounding_minutes').eq('id', me.organizationId).single()
   const roundingMinutes = orgRounding?.timecard_rounding_minutes ?? 1
 
   const reportData = {
@@ -152,7 +151,7 @@ export async function POST(request: Request) {
   const sentAt = new Date()
   const finalizedNote =
     `Final report · times locked ${sentAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone })}` +
-    (profile.full_name ? ` by ${profile.full_name}` : '')
+    (me.fullName ? ` by ${me.fullName}` : '')
 
   let csv: string
   let pdfBuffer: Buffer

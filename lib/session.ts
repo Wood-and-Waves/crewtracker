@@ -60,34 +60,56 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
+  // profiles holds person-level facts only. Which organization they are acting
+  // in is a pointer; it grants nothing on its own.
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      `id, email, full_name, organization_id, is_super_admin,
-       use_24_hour_time, shoulder_surfer_mode, deactivated_at,
-       ${ALL_PERMISSION_KEYS.join(', ')}`,
+      `id, email, full_name, is_super_admin,
+       use_24_hour_time, shoulder_surfer_mode, active_organization_id`,
     )
     .eq('id', user.id)
     .single()
 
   const row = (profile ?? {}) as Record<string, unknown>
-  const deactivated = !!row.deactivated_at
+  const activeOrgId = (row.active_organization_id as string) ?? null
 
-  // A deactivated member keeps their row but loses their organization, matching
-  // my_organization_id() in the database, which returns null for them. Without
-  // this the UI would render an organization's chrome around screens whose data
-  // RLS has already emptied.
-  const permissions = deactivated
-    ? NO_PERMISSIONS
-    : (Object.fromEntries(
-        ALL_PERMISSION_KEYS.map((k) => [k, row[k] === true]),
+  // Resolve the pointer to a real membership. This mirrors my_organization_id()
+  // in the database exactly, and for the same reason: the pointer is a stored
+  // choice, and a stored choice is a way to serve the wrong organization's data
+  // if it is ever trusted on its own. Both ends re-check that a live membership
+  // for that specific organization exists, every time.
+  //
+  // maybeSingle(), not single(): "no membership for the active org" is an
+  // ordinary state (never joined, just removed, stale pointer), not an error.
+  const { data: membership } = activeOrgId
+    ? await supabase
+        .from('memberships')
+        .select(`organization_id, deactivated_at, ${ALL_PERMISSION_KEYS.join(', ')}`)
+        .eq('profile_id', user.id)
+        .eq('organization_id', activeOrgId)
+        .maybeSingle()
+    : { data: null }
+
+  const m = (membership ?? {}) as Record<string, unknown>
+  // A deactivated member keeps their row so that "who finalized this payroll
+  // report" survives them leaving, but they hold nothing. Matching the database,
+  // which returns null from my_organization_id() for them, means the UI stops
+  // rendering an organization's chrome around screens RLS has already emptied.
+  const deactivated = !!membership && !!m.deactivated_at
+  const live = !!membership && !deactivated
+
+  const permissions = live
+    ? (Object.fromEntries(
+        ALL_PERMISSION_KEYS.map((k) => [k, m[k] === true]),
       ) as PermissionValues)
+    : NO_PERMISSIONS
 
   return {
     id: user.id,
     email: (row.email as string) ?? user.email ?? null,
     fullName: (row.full_name as string) ?? null,
-    organizationId: deactivated ? null : ((row.organization_id as string) ?? null),
+    organizationId: live ? ((m.organization_id as string) ?? null) : null,
     isSuperAdmin: row.is_super_admin === true,
     use24Hour: row.use_24_hour_time === true,
     shoulderSurfer: row.shoulder_surfer_mode === true,

@@ -1,19 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import TeamListClient from '@/components/TeamListClient'
 
 export default async function TeamPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('organization_id, can_manage_users')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.can_manage_users || !profile.organization_id) redirect('/dashboard')
+  if (!user.can('can_manage_users') || !user.organizationId) redirect('/dashboard')
 
   const { data: members } = await supabase
     .from('profiles')
@@ -21,13 +15,13 @@ export default async function TeamPage() {
     // them to restore. Their row is kept on purpose — see
     // scripts/sql/applied/deactivate-team-members.sql.
     .select('id, full_name, email, base_role, deactivated_at')
-    .eq('organization_id', profile.organization_id)
+    .eq('organization_id', user.organizationId)
     .order('deactivated_at', { ascending: true, nullsFirst: true })
     .order('full_name')
 
   return (
     <TeamListClient
-      organizationId={profile.organization_id}
+      organizationId={user.organizationId}
       invitedBy={user.id}
       members={members || []}
     />

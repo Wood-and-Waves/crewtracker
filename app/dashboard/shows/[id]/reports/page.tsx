@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser, canSeeFinancials as canSeeFinancialsFor } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -33,39 +34,41 @@ export default async function ShowReportPage({
   const activeView = view === 'crew' ? 'crew' : 'day'
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
 
-  // profile/show/ruleset/workDays are independent of each other (none
+  // The caller and show/ruleset/workDays are independent of each other (none
   // depend on another's result) so fetch them in one round trip instead
   // of four sequential ones.
   const [
-    { data: profile },
+    user,
     { data: show },
     { data: rulesetRow },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id, can_view_pay_rates, use_24_hour_time, shoulder_surfer_mode, can_send_reports').eq('id', user.id).single(),
+    getCurrentUser(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
   ])
+  if (!user) redirect('/login')
 
   if (!show) notFound()
 
   // Financials only show in exports if BOTH the show tracks dollar amounts
   // AND the current user has permission to view pay rates.
-  const canSeeFinancials = (show.show_financials || false) && (profile?.can_view_pay_rates ?? false)
+  const canSeeFinancials = canSeeFinancialsFor(user, show.show_financials)
 
   // Amounts on SCREEN are masked under Shoulder Surfer Mode (iOS hideFinancials).
   // Exports stay unmasked — you deliberately asked for that file.
-  const shoulderSurfer = profile?.shoulder_surfer_mode ?? false
+  const shoulderSurfer = user.shoulderSurfer
+  // Hoisted: TypeScript drops the null-narrowing on `user` inside the timesheet
+  // builder defined further down.
+  const use24Hour = user.use24Hour
   const money = (n: number) => (shoulderSurfer ? '•••' : `$${n.toFixed(2)}`)
 
   const timezone = show.timezone_identifier || 'America/Chicago'
 
-  const { data: organization } = profile?.organization_id
-    ? await supabase.from('organizations').select('timecard_rounding_minutes, final_report_emails').eq('id', profile.organization_id).single()
+  const { data: organization } = user.organizationId
+    ? await supabase.from('organizations').select('timecard_rounding_minutes, final_report_emails').eq('id', user.organizationId).single()
     : { data: null }
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
 
@@ -255,7 +258,7 @@ export default async function ShowReportPage({
       ruleset,
       roundingMinutes,
       timezone,
-      use24Hour: profile?.use_24_hour_time || false,
+      use24Hour: use24Hour,
     })
     return { text, sms: buildSmsMessage(crew.name, show.name, text) }
   }
@@ -285,7 +288,7 @@ export default async function ShowReportPage({
             punches={punches || []}
             ruleset={ruleset}
             timezone={timezone}
-            use24Hour={profile?.use_24_hour_time || false}
+            use24Hour={use24Hour}
             roundingMinutes={roundingMinutes}
           />
           <ExportPDFButton
@@ -302,10 +305,10 @@ export default async function ShowReportPage({
             punches={punches || []}
             ruleset={ruleset}
             timezone={timezone}
-            use24Hour={profile?.use_24_hour_time || false}
+            use24Hour={use24Hour}
             roundingMinutes={roundingMinutes}
           />
-          {profile?.can_send_reports && !show.finalized_at && (
+          {user.can('can_send_reports') && !show.finalized_at && (
             <SendFinalReportButton
               showId={id}
               showName={show.name}
@@ -465,7 +468,7 @@ export default async function ShowReportPage({
                       <h2 className="text-lg font-bold text-ink">{crew.name}</h2>
                       <p className="text-xs text-muted">{crew.role}</p>
                     </div>
-                    {profile?.can_send_reports && (() => {
+                    {user.can('can_send_reports') && (() => {
                       const ts = timesheetFor(crew)
                       return (
                         <SendHoursButton

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
@@ -7,23 +8,22 @@ import { fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 export default async function EditShowPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
 
-  // profile/show/ruleset/workDays are independent of each other (none
+  // The caller and show/ruleset/workDays are independent of each other (none
   // depend on another's result) so fetch them in one round trip instead
   // of four.
   const [
-    { data: profile },
+    user,
     { data: show },
     { data: ruleset },
     { data: workDays },
   ] = await Promise.all([
-    supabase.from('profiles').select('organization_id, shoulder_surfer_mode, can_manage_rulesets, can_manage_users, can_view_pay_rates, can_edit_pay_rates').eq('id', user.id).single(),
+    getCurrentUser(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
   ])
+  if (!user) redirect('/login')
 
   if (!show) notFound()
 
@@ -37,7 +37,7 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
 
   // Crew & Rates is the only consumer and it's hidden without can_view_pay_rates,
   // so don't pull the rate for someone who can't be shown it.
-  const canViewRates = profile?.can_view_pay_rates || false
+  const canViewRates = user.can('can_view_pay_rates')
 
   const { data: timecardRows } = roomIds.length > 0
     ? await supabase.from('timecards').select('id, crew_member_id, crew_member_name, role, room_id').in('room_id', roomIds)
@@ -60,13 +60,13 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
 
   // Show Access — only fetched for admins, since only they can change it and
   // the member list is otherwise none of a PM's business.
-  const canManageUsers = profile?.can_manage_users || false
+  const canManageUsers = user.can('can_manage_users')
   const [{ data: orgMembers }, { data: assignments }] = canManageUsers
     ? await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, base_role, can_edit_all_shows')
-          .eq('organization_id', profile!.organization_id)
+          .eq('organization_id', user.organizationId)
           .order('full_name'),
         supabase.from('show_assignments').select('profile_id').eq('show_id', id),
       ])
@@ -79,11 +79,11 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       workDays={workDays || []}
       rooms={rooms || []}
       crewRateEntries={crewRateEntries}
-      shoulderSurferMode={profile?.shoulder_surfer_mode || false}
-      organizationId={profile?.organization_id || undefined}
-      canManageRulesets={profile?.can_manage_rulesets || false}
+      shoulderSurferMode={user.shoulderSurfer}
+      organizationId={user.organizationId || undefined}
+      canManageRulesets={user.can('can_manage_rulesets')}
       canViewRates={canViewRates}
-      canEditRates={profile?.can_edit_pay_rates || false}
+      canEditRates={user.can('can_edit_pay_rates')}
     >
       {canManageUsers && (
         <div className="mb-4">
