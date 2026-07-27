@@ -22,6 +22,19 @@
 //
 // NOT COVERED: the `auth` schema (logins). That belongs to Supabase and isn't
 // ours to dump — Supabase's own backups cover it.
+//
+// ALSO NOT COVERED, and easy to miss: **event triggers**. They're cluster-level,
+// so `--schema=public` never sees them. Production runs `ensure_rls`, which
+// force-enables RLS on every newly created table — the safety net that makes a
+// forgotten policy fail closed. schema.sql alone will not reproduce it.
+//
+// RESTORING INTO A NEW PROJECT: turn OFF "Automatically expose new tables"
+// first. Supabase implements it as ALTER DEFAULT PRIVILEGES for the `postgres`
+// role, which is who a restore connects as — so every table arrives already
+// holding a table-wide SELECT grant for `authenticated`. This dump expresses the
+// day_rate lockdown as an *absence* (it grants each other column by name and
+// never mentions day_rate) rather than as a REVOKE, and column grants don't
+// remove a table-wide one. With the setting on, pay rates come back readable.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
