@@ -13,33 +13,40 @@ export default async function EditMemberPage({ params }: { params: Promise<{ use
   if (!user) redirect('/login')
   if (!user.can('can_manage_users') || !user.organizationId) redirect('/dashboard')
 
-  // RLS ("Users see profiles in their org") already restricts this to same-org
-  // rows; a userId outside the org returns no row.
-  const { data: member } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single()
-  if (!member) redirect('/dashboard/team')
+  // Permissions come from the MEMBERSHIP for the organization being administered,
+  // not from the profile. The same person can be an admin here and crew
+  // elsewhere; editing them must show and change only this organization's side of
+  // that. Scoping by organization_id also means an admin cannot reach a member of
+  // another company by guessing a URL — RLS refuses, and so does this filter.
+  const { data: membership } = await supabase
+    .from('memberships')
+    .select('*, profiles(id, full_name, email)')
+    .eq('profile_id', userId)
+    .eq('organization_id', user.organizationId)
+    .maybeSingle()
+  if (!membership) redirect('/dashboard/team')
 
-  // Build the current values object from the member row.
+  const member = membership as unknown as Record<string, unknown> & {
+    profiles: { id: string; full_name: string | null; email: string | null } | null
+  }
+
   const initialValues = {} as PermissionValues
-  for (const key of ALL_KEYS) initialValues[key] = member[key] ?? false
+  for (const key of ALL_KEYS) initialValues[key] = (member[key] as boolean) ?? false
 
   const initialRole: Role =
-    member.base_role === 'admin' || member.base_role === 'staff' ? member.base_role : 'pm'
+    member.base_role === 'admin' || member.base_role === 'staff' ? (member.base_role as Role) : 'pm'
 
   return (
     <EditMemberClient
       member={{
-        id: member.id,
-        full_name: member.full_name,
-        email: member.email,
-        deactivated_at: member.deactivated_at,
+        id: userId,
+        full_name: member.profiles?.full_name ?? null,
+        email: member.profiles?.email ?? null,
+        deactivated_at: (member.deactivated_at as string) ?? null,
       }}
       initialRole={initialRole}
       initialValues={initialValues}
-      isSelf={member.id === user.id}
+      isSelf={userId === user.id}
     />
   )
 }
