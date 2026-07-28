@@ -57,10 +57,39 @@ export default function LoginPage() {
     setLoading(true)
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // WITHOUT THIS, THE LOGIN PAGE IS A PUBLIC SIGNUP FORM.
+        //
+        // shouldCreateUser defaults to TRUE, so signInWithOtp creates an account
+        // for any address typed in and sends the "Confirm signup" email rather
+        // than a sign-in link. CrewTracker is invite-only — there is no public
+        // signup anywhere else — so this quietly contradicted the whole access
+        // model, and anyone who found the login page could mint an account.
+        //
+        // Caught 2026-07-28 when Dan asked for a magic link, received a signup
+        // confirmation instead, and it recreated an account he had deleted the
+        // day before.
+        //
+        // The invite page deliberately keeps the default: creating an account is
+        // the point there, and it is gated by a valid invitation token.
+        shouldCreateUser: false,
+      },
     })
-    if (error) setError(readableAuthError(error))
-    else setMagicSent(true)
+    // Supabase answers an unknown address with "Signups not allowed for otp",
+    // which reads as a system fault rather than "there is no such account".
+    //
+    // This tells the user the address isn't registered rather than hiding it
+    // behind a fake success. That does reveal whether an email has an account,
+    // but the trade is worth it here: CrewTracker has no public signup, so the
+    // knowledge buys an attacker nothing they can act on, while a PM who typed
+    // their address wrong would otherwise sit waiting for an email that is never
+    // coming.
+    if (error) {
+      setError(/signups not allowed/i.test(error.message ?? '')
+        ? 'No CrewTracker account uses that email. Accounts are created by invitation — ask your company’s admin to send you one.'
+        : readableAuthError(error))
+    } else setMagicSent(true)
     setLoading(false)
   }
 

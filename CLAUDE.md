@@ -212,7 +212,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - Crew app access (crew role) — schema ready, UI deferred
 - **A web texting service (Twilio et al.) is deliberately not being used.** Crew timesheet delivery is device-native — `SendHoursButton` offers `sms:` / Web Share / clipboard depending on what the browser supports. That feature is **built**; this note is about not replacing it with a paid SMS gateway.
 - ~~Superadmin pages still on the old zinc palette.~~ **DONE 2026-07-27** — all of `app/superadmin/*` and `SuperAdminClient.tsx` are token-driven; no hardcoded colours or raw radii remain.
-- No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The "Join the Beta" form is a lead-capture funnel, not an auto-provisioning flow, so this stays true.
+- No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The "Join the Beta" form is a lead-capture funnel, not an auto-provisioning flow, so this stays true. **One thing did quietly contradict it:** `signInWithOtp` defaults `shouldCreateUser` to TRUE, so the login page's "Send magic link instead" created an account for any address typed in and sent the *Confirm signup* email. Found 2026-07-28 when a magic-link request recreated an account deleted the day before. The login page now passes `shouldCreateUser: false`; the invite page keeps the default, because creating an account is the point there and it is gated by a valid token. Any future `signInWithOtp` call needs the same decision made explicitly.
 
 ### Already built — do not rebuild these
 
