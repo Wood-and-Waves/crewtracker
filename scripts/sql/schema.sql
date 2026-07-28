@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Lvnvmng4XY3vAUmU5d7WIUQiXcDPgkuF4hNl791PDLOBVdMADwO0Cps51GpySEc
+\restrict APgubXHqhJTHcv2YpgWvAWyuGIKNhJfdze6XCKTJLfDcwLPd5BKAsItcXglusuy
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -155,6 +155,86 @@ CREATE FUNCTION "public"."can_see_all_shows"() RETURNS boolean
 
 
 --
+-- Name: enforce_membership_rules(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."enforce_membership_rules"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  actor uuid := auth.uid();
+  actor_is_admin boolean;
+begin
+  -- Service role / migrations / the reverse mirror below: no acting user, so
+  -- there is no actor to check. Same exemption the profiles version had.
+  if actor is null then
+    return new;
+  end if;
+
+  select (m.can_manage_users and m.deactivated_at is null)
+    into actor_is_admin
+  from memberships m
+  where m.profile_id = actor and m.organization_id = new.organization_id;
+
+  -- Rule 1: no self-escalation. Editing your own membership may not change any
+  -- privileged column unless you are already an admin of that organization.
+  if TG_OP = 'UPDATE' and new.profile_id = actor and coalesce(actor_is_admin, false) = false then
+    if new.base_role is distinct from old.base_role
+       or new.can_manage_users          is distinct from old.can_manage_users
+       or new.can_manage_billing        is distinct from old.can_manage_billing
+       or new.can_manage_crew_directory is distinct from old.can_manage_crew_directory
+       or new.can_import_crew           is distinct from old.can_import_crew
+       or new.can_view_crew_contacts    is distinct from old.can_view_crew_contacts
+       or new.can_create_shows          is distinct from old.can_create_shows
+       or new.can_edit_all_shows        is distinct from old.can_edit_all_shows
+       or new.can_archive_shows         is distinct from old.can_archive_shows
+       or new.can_duplicate_shows       is distinct from old.can_duplicate_shows
+       or new.can_edit_timecards        is distinct from old.can_edit_timecards
+       or new.can_approve_timecards     is distinct from old.can_approve_timecards
+       or new.can_view_pay_rates        is distinct from old.can_view_pay_rates
+       or new.can_edit_pay_rates        is distinct from old.can_edit_pay_rates
+       or new.can_manage_rulesets       is distinct from old.can_manage_rulesets
+       or new.can_view_reports          is distinct from old.can_view_reports
+       or new.can_export_reports        is distinct from old.can_export_reports
+       or new.can_send_reports          is distinct from old.can_send_reports
+       or new.view_only                 is distinct from old.view_only then
+      raise exception 'You cannot change your own role or permissions.';
+    end if;
+  end if;
+
+  -- Rule 2: an admin cannot remove their own admin rights (lockout protection).
+  if TG_OP = 'UPDATE' and new.profile_id = actor
+     and coalesce(old.can_manage_users, false) and not coalesce(new.can_manage_users, false) then
+    raise exception 'You cannot remove your own user-management permission.';
+  end if;
+
+  -- Rule 3: you cannot deactivate or restore yourself.
+  if TG_OP = 'UPDATE' and new.profile_id = actor
+     and new.deactivated_at is distinct from old.deactivated_at then
+    raise exception 'You cannot deactivate or reactivate your own account.';
+  end if;
+
+  -- Rule 4: the organization must keep at least one active admin. Covers both
+  -- routes to losing one — dropping the permission, and deactivating the person.
+  if TG_OP = 'UPDATE' and coalesce(old.can_manage_users, false) and old.deactivated_at is null then
+    if (not coalesce(new.can_manage_users, false)) or new.deactivated_at is not null then
+      if (select count(*) from memberships
+          where organization_id = old.organization_id
+            and can_manage_users
+            and deactivated_at is null
+            and profile_id <> old.profile_id) = 0 then
+        raise exception 'This is the organization''s last active admin; grant another admin first.';
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+--
 -- Name: enforce_pay_rate_write_permission(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -193,79 +273,6 @@ $$;
 
 
 --
--- Name: enforce_profile_permission_rules(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION "public"."enforce_profile_permission_rules"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
-declare
-  actor_id uuid := auth.uid();
-  actor_is_admin boolean;
-begin
-  -- Service-role / no-auth context (e.g. invite acceptance runs as the
-  -- service role, where auth.uid() is null): skip all actor-based checks.
-  if actor_id is null then
-    return new;
-  end if;
-
-  select can_manage_users into actor_is_admin from profiles where id = actor_id;
-
-  -- Rule 1: self-escalation lock. A non-admin editing their OWN row may not
-  -- change any privileged column (all can_*, base_role, organization_id).
-  if new.id = actor_id and coalesce(actor_is_admin, false) = false then
-    if new.can_manage_users        is distinct from old.can_manage_users
-       or new.can_manage_billing        is distinct from old.can_manage_billing
-       or new.can_manage_crew_directory is distinct from old.can_manage_crew_directory
-       or new.can_import_crew           is distinct from old.can_import_crew
-       or new.can_view_crew_contacts    is distinct from old.can_view_crew_contacts
-       or new.can_create_shows          is distinct from old.can_create_shows
-       or new.can_edit_all_shows        is distinct from old.can_edit_all_shows
-       or new.can_archive_shows         is distinct from old.can_archive_shows
-       or new.can_duplicate_shows       is distinct from old.can_duplicate_shows
-       or new.can_edit_timecards        is distinct from old.can_edit_timecards
-       or new.can_approve_timecards     is distinct from old.can_approve_timecards
-       or new.can_view_pay_rates        is distinct from old.can_view_pay_rates
-       or new.can_edit_pay_rates        is distinct from old.can_edit_pay_rates
-       or new.can_manage_rulesets       is distinct from old.can_manage_rulesets
-       or new.can_view_reports          is distinct from old.can_view_reports
-       or new.can_export_reports        is distinct from old.can_export_reports
-       or new.can_send_reports          is distinct from old.can_send_reports
-       or new.view_only                 is distinct from old.view_only
-       or new.base_role                 is distinct from old.base_role
-       or new.organization_id           is distinct from old.organization_id then
-      raise exception 'You cannot change your own role or permissions.';
-    end if;
-  end if;
-
-  -- Rule 2: self-demotion guard. Even an admin cannot remove their own
-  -- can_manage_users (primary lockout protection).
-  if new.id = actor_id
-     and coalesce(old.can_manage_users, false) = true
-     and coalesce(new.can_manage_users, false) = false then
-    raise exception 'You cannot remove your own user-management permission.';
-  end if;
-
-  -- Rule 3: last-admin guard (defensive belt-and-suspenders). If any row's
-  -- can_manage_users goes true->false and no OTHER row in the same org still
-  -- has it, block.
-  if coalesce(old.can_manage_users, false) = true
-     and coalesce(new.can_manage_users, false) = false then
-    if (select count(*) from profiles
-        where organization_id = old.organization_id
-          and can_manage_users = true
-          and id <> old.id) = 0 then
-      raise exception 'This is the organization''s last admin; grant another admin first.';
-    end if;
-  end if;
-
-  return new;
-end;
-$$;
-
-
---
 -- Name: guard_organization_disabled_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -280,53 +287,6 @@ begin
   if new.disabled_at is distinct from old.disabled_at then
     raise exception 'Organization status can only be changed by CrewTracker support.';
   end if;
-  return new;
-end;
-$$;
-
-
---
--- Name: guard_profile_deactivation(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION "public"."guard_profile_deactivation"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
-declare
-  actor uuid := auth.uid();
-  actor_ok boolean;
-begin
-  if new.deactivated_at is not distinct from old.deactivated_at then
-    return new;                        -- not a deactivation change
-  end if;
-  if actor is null then
-    return new;                        -- service role / direct SQL
-  end if;
-
-  if new.id = actor then
-    raise exception 'You cannot deactivate or reactivate your own account.';
-  end if;
-
-  select (p.can_manage_users and p.deactivated_at is null)
-    into actor_ok
-  from profiles p where p.id = actor;
-
-  if not coalesce(actor_ok, false) then
-    raise exception 'You do not have permission to remove team members.';
-  end if;
-
-  -- Don't let an organization lose its last working admin.
-  if new.deactivated_at is not null and coalesce(old.can_manage_users, false) then
-    if (select count(*) from profiles
-        where organization_id = old.organization_id
-          and can_manage_users = true
-          and deactivated_at is null
-          and id <> old.id) = 0 then
-      raise exception 'This is the organization''s last active admin; grant another admin first.';
-    end if;
-  end if;
-
   return new;
 end;
 $$;
@@ -437,12 +397,22 @@ CREATE FUNCTION "public"."my_organization_id"() RETURNS "uuid"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-  select m.organization_id
-  from memberships m
-  join profiles p on p.id = m.profile_id
-  where m.profile_id = auth.uid()
-    and m.organization_id = p.active_organization_id
-    and m.deactivated_at is null;
+  select coalesce(
+    -- The chosen organization, if it still resolves to a live membership.
+    (select m.organization_id
+       from memberships m
+       join profiles p on p.id = m.profile_id
+      where m.profile_id = auth.uid()
+        and m.organization_id = p.active_organization_id
+        and m.deactivated_at is null),
+    -- Otherwise the oldest company they are actually a live member of.
+    (select m.organization_id
+       from memberships m
+      where m.profile_id = auth.uid()
+        and m.deactivated_at is null
+      order by m.created_at, m.organization_id
+      limit 1)
+  );
 $$;
 
 
@@ -460,20 +430,16 @@ declare
 begin
   select mm.* into m
   from memberships mm
-  join profiles pr on pr.id = mm.profile_id
   where mm.profile_id = auth.uid()
-    and mm.organization_id = pr.active_organization_id
+    and mm.organization_id = my_organization_id()
     and mm.deactivated_at is null;
 
   if not found then
-    return false;                       -- no live membership: grant nothing
+    return false;
   end if;
 
   v := to_jsonb(m) -> p;
   if v is null then
-    -- A misspelled permission would otherwise silently deny everything, which
-    -- looks like a broken feature rather than a broken policy. Fail loudly; dev
-    -- is where this gets caught. (CLAUDE.md: surface errors, don't fail silently.)
     raise exception 'my_perm: no such permission column %', p
       using errcode = 'undefined_column';
   end if;
@@ -606,76 +572,6 @@ CREATE FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") RETURNS "uuid"
 $$;
 
 
---
--- Name: sync_membership_from_profile(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION "public"."sync_membership_from_profile"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
-begin
-  if new.organization_id is null then
-    -- Left the org (or never joined). Remove the mirrored row so no stale
-    -- membership can keep granting access after profiles says they're out.
-    delete from memberships where profile_id = new.id;
-    return new;
-  end if;
-
-  insert into memberships (
-    profile_id, organization_id, base_role, deactivated_at,
-    can_manage_users, can_manage_billing, can_manage_crew_directory, can_import_crew,
-    can_view_crew_contacts, can_create_shows, can_edit_all_shows, can_archive_shows,
-    can_duplicate_shows, can_edit_timecards, can_approve_timecards, can_view_pay_rates,
-    can_edit_pay_rates, can_manage_rulesets, can_view_reports, can_export_reports,
-    can_send_reports, view_only
-  ) values (
-    new.id, new.organization_id, new.base_role, new.deactivated_at,
-    new.can_manage_users, new.can_manage_billing, new.can_manage_crew_directory, new.can_import_crew,
-    new.can_view_crew_contacts, new.can_create_shows, new.can_edit_all_shows, new.can_archive_shows,
-    new.can_duplicate_shows, new.can_edit_timecards, new.can_approve_timecards, new.can_view_pay_rates,
-    new.can_edit_pay_rates, new.can_manage_rulesets, new.can_view_reports, new.can_export_reports,
-    new.can_send_reports, new.view_only
-  )
-  on conflict (profile_id, organization_id) do update set
-    base_role                 = excluded.base_role,
-    deactivated_at            = excluded.deactivated_at,
-    can_manage_users          = excluded.can_manage_users,
-    can_manage_billing        = excluded.can_manage_billing,
-    can_manage_crew_directory = excluded.can_manage_crew_directory,
-    can_import_crew           = excluded.can_import_crew,
-    can_view_crew_contacts    = excluded.can_view_crew_contacts,
-    can_create_shows          = excluded.can_create_shows,
-    can_edit_all_shows        = excluded.can_edit_all_shows,
-    can_archive_shows         = excluded.can_archive_shows,
-    can_duplicate_shows       = excluded.can_duplicate_shows,
-    can_edit_timecards        = excluded.can_edit_timecards,
-    can_approve_timecards     = excluded.can_approve_timecards,
-    can_view_pay_rates        = excluded.can_view_pay_rates,
-    can_edit_pay_rates        = excluded.can_edit_pay_rates,
-    can_manage_rulesets       = excluded.can_manage_rulesets,
-    can_view_reports          = excluded.can_view_reports,
-    can_export_reports        = excluded.can_export_reports,
-    can_send_reports          = excluded.can_send_reports,
-    view_only                 = excluded.view_only,
-    updated_at                = now();
-
-  -- While profiles remains the source of truth it holds exactly one org, so a
-  -- profile must mirror to exactly one membership. If someone is moved from org
-  -- A to org B, drop the stale A row — otherwise it would keep granting access
-  -- to an organization they are no longer in.
-  --
-  -- This is also precisely what caps the system at one org per person for now,
-  -- and it is meant to: this pass builds the SHAPE. Genuine multi-org arrives
-  -- when the app writes memberships directly and this mirror is deleted.
-  delete from memberships
-   where profile_id = new.id and organization_id <> new.organization_id;
-
-  return new;
-end;
-$$;
-
-
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -710,45 +606,6 @@ CREATE TABLE "public"."crew_members" (
 
 
 --
--- Name: profiles; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE "public"."profiles" (
-    "id" "uuid" NOT NULL,
-    "organization_id" "uuid",
-    "full_name" "text",
-    "email" "text",
-    "base_role" "text" DEFAULT 'crew'::"text" NOT NULL,
-    "can_manage_users" boolean DEFAULT false,
-    "can_manage_billing" boolean DEFAULT false,
-    "can_manage_crew_directory" boolean DEFAULT false,
-    "can_import_crew" boolean DEFAULT false,
-    "can_view_crew_contacts" boolean DEFAULT false,
-    "can_create_shows" boolean DEFAULT false,
-    "can_edit_all_shows" boolean DEFAULT false,
-    "can_archive_shows" boolean DEFAULT false,
-    "can_duplicate_shows" boolean DEFAULT false,
-    "can_edit_timecards" boolean DEFAULT false,
-    "can_approve_timecards" boolean DEFAULT false,
-    "can_view_pay_rates" boolean DEFAULT false,
-    "can_edit_pay_rates" boolean DEFAULT false,
-    "can_manage_rulesets" boolean DEFAULT false,
-    "can_view_reports" boolean DEFAULT false,
-    "can_export_reports" boolean DEFAULT false,
-    "can_send_reports" boolean DEFAULT false,
-    "view_only" boolean DEFAULT false,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "use_24_hour_time" boolean DEFAULT false NOT NULL,
-    "shoulder_surfer_mode" boolean DEFAULT false NOT NULL,
-    "is_super_admin" boolean DEFAULT false NOT NULL,
-    "deactivated_at" timestamp with time zone,
-    "active_organization_id" "uuid",
-    CONSTRAINT "profiles_base_role_check" CHECK (("base_role" = ANY (ARRAY['admin'::"text", 'staff'::"text", 'pm'::"text", 'crew'::"text"])))
-);
-
-
---
 -- Name: rate_cards; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -772,9 +629,7 @@ CREATE VIEW "public"."crew_rate_cards_visible" WITH ("security_invoker"='false')
     "rc"."day_rate"
    FROM ("public"."rate_cards" "rc"
      JOIN "public"."crew_members" "cm" ON (("cm"."id" = "rc"."crew_member_id")))
-  WHERE (("cm"."organization_id" = "public"."my_organization_id"()) AND COALESCE(( SELECT "p"."can_view_pay_rates"
-           FROM "public"."profiles" "p"
-          WHERE ("p"."id" = "auth"."uid"())), false));
+  WHERE (("cm"."organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_view_pay_rates'::"text"));
 
 
 --
@@ -857,7 +712,6 @@ CREATE TABLE "public"."organizations" (
     "name" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "timecard_rounding_minutes" integer DEFAULT 1 NOT NULL,
-    "default_cc_email" "text",
     "final_report_emails" "text",
     "disabled_at" timestamp with time zone
 );
@@ -919,6 +773,23 @@ CREATE TABLE "public"."payroll_rulesets" (
     "created_at" timestamp with time zone DEFAULT "now"(),
     "continuous_time_enabled" boolean DEFAULT false NOT NULL,
     CONSTRAINT "payroll_rulesets_travel_rate_check" CHECK (("travel_rate" = ANY (ARRAY['halfDay'::"text", 'fullDay'::"text"])))
+);
+
+
+--
+-- Name: profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."profiles" (
+    "id" "uuid" NOT NULL,
+    "full_name" "text",
+    "email" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "use_24_hour_time" boolean DEFAULT false NOT NULL,
+    "shoulder_surfer_mode" boolean DEFAULT false NOT NULL,
+    "is_super_admin" boolean DEFAULT false NOT NULL,
+    "active_organization_id" "uuid"
 );
 
 
@@ -1072,9 +943,7 @@ CREATE VIEW "public"."timecard_day_rates" WITH ("security_invoker"='false') AS
      JOIN "public"."rooms" "r" ON (("r"."id" = "t"."room_id")))
      JOIN "public"."work_days" "w" ON (("w"."id" = "r"."work_day_id")))
      JOIN "public"."shows" "s" ON (("s"."id" = "w"."show_id")))
-  WHERE (("s"."organization_id" = "public"."my_organization_id"()) AND COALESCE(( SELECT "p"."can_view_pay_rates"
-           FROM "public"."profiles" "p"
-          WHERE ("p"."id" = "auth"."uid"())), false) AND ("public"."can_see_all_shows"() OR ("s"."created_by" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+  WHERE (("s"."organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_view_pay_rates'::"text") AND ("public"."can_see_all_shows"() OR ("s"."created_by" = "auth"."uid"()) OR (EXISTS ( SELECT 1
            FROM "public"."show_assignments" "sa"
           WHERE (("sa"."show_id" = "s"."id") AND ("sa"."profile_id" = "auth"."uid"()))))));
 
@@ -1299,10 +1168,10 @@ CREATE UNIQUE INDEX "timecards_room_crew_uniq" ON "public"."timecards" USING "bt
 
 
 --
--- Name: profiles enforce_profile_permission_rules; Type: TRIGGER; Schema: public; Owner: -
+-- Name: memberships memberships_enforce_rules; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER "enforce_profile_permission_rules" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_profile_permission_rules"();
+CREATE TRIGGER "memberships_enforce_rules" BEFORE UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_membership_rules"();
 
 
 --
@@ -1320,31 +1189,10 @@ CREATE TRIGGER "organizations_guard_disabled_at" BEFORE UPDATE ON "public"."orga
 
 
 --
--- Name: profiles profiles_guard_deactivation; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER "profiles_guard_deactivation" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."guard_profile_deactivation"();
-
-
---
 -- Name: profiles profiles_guard_super_admin; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER "profiles_guard_super_admin" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."guard_profile_super_admin"();
-
-
---
--- Name: profiles profiles_mirror_membership; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER "profiles_mirror_membership" AFTER INSERT OR UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."sync_membership_from_profile"();
-
-
---
--- Name: profiles profiles_set_active_organization; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER "profiles_set_active_organization" BEFORE INSERT OR UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."set_active_organization"();
 
 
 --
@@ -1477,14 +1325,6 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 --
--- Name: profiles profiles_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY "public"."profiles"
-    ADD CONSTRAINT "profiles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
-
-
---
 -- Name: punches punches_timecard_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1589,6 +1429,13 @@ ALTER TABLE ONLY "public"."work_days"
 
 
 --
+-- Name: memberships Admins add members; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins add members" ON "public"."memberships" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
+
+
+--
 -- Name: show_assignments Admins assign members to shows; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1608,7 +1455,18 @@ CREATE POLICY "Admins can manage invitations" ON "public"."invitations" USING ((
 -- Name: profiles Admins can manage org member permissions; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can manage org member permissions" ON "public"."profiles" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."can_manage_users_me"())) WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."can_manage_users_me"()));
+CREATE POLICY "Admins can manage org member permissions" ON "public"."profiles" FOR UPDATE USING (("public"."my_perm"('can_manage_users'::"text") AND (EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = "public"."my_organization_id"())))))) WITH CHECK (("public"."my_perm"('can_manage_users'::"text") AND (EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = "public"."my_organization_id"()))))));
+
+
+--
+-- Name: memberships Admins change members; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins change members" ON "public"."memberships" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text"))) WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
 
 
 --
@@ -1616,6 +1474,13 @@ CREATE POLICY "Admins can manage org member permissions" ON "public"."profiles" 
 --
 
 CREATE POLICY "Admins revoke member show access" ON "public"."show_assignments" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
+
+
+--
+-- Name: memberships Members see their org, admins see everyone; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Members see their org, admins see everyone" ON "public"."memberships" FOR SELECT USING ((("profile_id" = "auth"."uid"()) OR (("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text"))));
 
 
 --
@@ -1769,10 +1634,21 @@ CREATE POLICY "Users see crew in their org" ON "public"."crew_members" FOR SELEC
 
 
 --
+-- Name: organizations Users see organizations they belong to; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users see organizations they belong to" ON "public"."organizations" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."profile_id" = "auth"."uid"()) AND ("m"."organization_id" = "organizations"."id") AND ("m"."deactivated_at" IS NULL)))));
+
+
+--
 -- Name: profiles Users see profiles in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELECT USING ((("id" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+   FROM "public"."memberships" "m"
+  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = "public"."my_organization_id"()))))));
 
 
 --
@@ -1828,20 +1704,6 @@ CREATE POLICY "Users see their org shows" ON "public"."shows" FOR SELECT USING (
 --
 
 CREATE POLICY "Users see their own assignments" ON "public"."show_assignments" FOR SELECT USING ((("organization_id" = "public"."my_organization_id"()) AND (("profile_id" = "auth"."uid"()) OR "public"."can_see_all_shows"())));
-
-
---
--- Name: memberships Users see their own memberships; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Users see their own memberships" ON "public"."memberships" FOR SELECT USING (("profile_id" = "auth"."uid"()));
-
-
---
--- Name: organizations Users see their own organization; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Users see their own organization" ON "public"."organizations" FOR SELECT USING (("id" = "public"."my_organization_id"()));
 
 
 --
@@ -2108,6 +1970,15 @@ GRANT ALL ON FUNCTION "public"."can_see_all_shows"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "enforce_membership_rules"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."enforce_membership_rules"() TO "anon";
+GRANT ALL ON FUNCTION "public"."enforce_membership_rules"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enforce_membership_rules"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "enforce_pay_rate_write_permission"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2117,30 +1988,12 @@ GRANT ALL ON FUNCTION "public"."enforce_pay_rate_write_permission"() TO "service
 
 
 --
--- Name: FUNCTION "enforce_profile_permission_rules"(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION "public"."enforce_profile_permission_rules"() TO "anon";
-GRANT ALL ON FUNCTION "public"."enforce_profile_permission_rules"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."enforce_profile_permission_rules"() TO "service_role";
-
-
---
 -- Name: FUNCTION "guard_organization_disabled_at"(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION "public"."guard_organization_disabled_at"() TO "anon";
 GRANT ALL ON FUNCTION "public"."guard_organization_disabled_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."guard_organization_disabled_at"() TO "service_role";
-
-
---
--- Name: FUNCTION "guard_profile_deactivation"(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION "public"."guard_profile_deactivation"() TO "anon";
-GRANT ALL ON FUNCTION "public"."guard_profile_deactivation"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."guard_profile_deactivation"() TO "service_role";
 
 
 --
@@ -2243,15 +2096,6 @@ GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "servic
 
 
 --
--- Name: FUNCTION "sync_membership_from_profile"(); Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON FUNCTION "public"."sync_membership_from_profile"() TO "anon";
-GRANT ALL ON FUNCTION "public"."sync_membership_from_profile"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."sync_membership_from_profile"() TO "service_role";
-
-
---
 -- Name: TABLE "av_roles"; Type: ACL; Schema: public; Owner: -
 --
 
@@ -2267,15 +2111,6 @@ GRANT ALL ON TABLE "public"."av_roles" TO "service_role";
 GRANT ALL ON TABLE "public"."crew_members" TO "anon";
 GRANT ALL ON TABLE "public"."crew_members" TO "authenticated";
 GRANT ALL ON TABLE "public"."crew_members" TO "service_role";
-
-
---
--- Name: TABLE "profiles"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE "public"."profiles" TO "anon";
-GRANT ALL ON TABLE "public"."profiles" TO "authenticated";
-GRANT ALL ON TABLE "public"."profiles" TO "service_role";
 
 
 --
@@ -2336,7 +2171,7 @@ GRANT ALL ON TABLE "public"."invitations" TO "service_role";
 --
 
 GRANT ALL ON TABLE "public"."memberships" TO "service_role";
-GRANT SELECT ON TABLE "public"."memberships" TO "authenticated";
+GRANT SELECT,INSERT,UPDATE ON TABLE "public"."memberships" TO "authenticated";
 
 
 --
@@ -2344,7 +2179,7 @@ GRANT SELECT ON TABLE "public"."memberships" TO "authenticated";
 --
 
 GRANT ALL ON TABLE "public"."organizations" TO "anon";
-GRANT ALL ON TABLE "public"."organizations" TO "authenticated";
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."organizations" TO "authenticated";
 GRANT ALL ON TABLE "public"."organizations" TO "service_role";
 
 
@@ -2362,8 +2197,17 @@ GRANT ALL ON TABLE "public"."payroll_presets" TO "service_role";
 --
 
 GRANT ALL ON TABLE "public"."payroll_rulesets" TO "anon";
-GRANT ALL ON TABLE "public"."payroll_rulesets" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."payroll_rulesets" TO "authenticated";
 GRANT ALL ON TABLE "public"."payroll_rulesets" TO "service_role";
+
+
+--
+-- Name: TABLE "profiles"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."profiles" TO "service_role";
 
 
 --
@@ -2396,7 +2240,7 @@ GRANT ALL ON TABLE "public"."schema_migrations" TO "service_role";
 --
 
 GRANT ALL ON TABLE "public"."show_assignments" TO "anon";
-GRANT ALL ON TABLE "public"."show_assignments" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."show_assignments" TO "authenticated";
 GRANT ALL ON TABLE "public"."show_assignments" TO "service_role";
 
 
@@ -2405,7 +2249,7 @@ GRANT ALL ON TABLE "public"."show_assignments" TO "service_role";
 --
 
 GRANT ALL ON TABLE "public"."shows" TO "anon";
-GRANT ALL ON TABLE "public"."shows" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."shows" TO "authenticated";
 GRANT ALL ON TABLE "public"."shows" TO "service_role";
 
 
@@ -2414,7 +2258,7 @@ GRANT ALL ON TABLE "public"."shows" TO "service_role";
 --
 
 GRANT ALL ON TABLE "public"."subscriptions" TO "anon";
-GRANT ALL ON TABLE "public"."subscriptions" TO "authenticated";
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."subscriptions" TO "authenticated";
 GRANT ALL ON TABLE "public"."subscriptions" TO "service_role";
 
 
@@ -2508,7 +2352,7 @@ GRANT SELECT("updated_at") ON TABLE "public"."timecards" TO "authenticated";
 --
 
 GRANT ALL ON TABLE "public"."work_days" TO "anon";
-GRANT ALL ON TABLE "public"."work_days" TO "authenticated";
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."work_days" TO "authenticated";
 GRANT ALL ON TABLE "public"."work_days" TO "service_role";
 
 
@@ -2584,5 +2428,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Lvnvmng4XY3vAUmU5d7WIUQiXcDPgkuF4hNl791PDLOBVdMADwO0Cps51GpySEc
+\unrestrict APgubXHqhJTHcv2YpgWvAWyuGIKNhJfdze6XCKTJLfDcwLPd5BKAsItcXglusuy
 
