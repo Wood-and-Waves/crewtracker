@@ -41,6 +41,14 @@ export async function proxy(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/invite") &&
     !request.nextUrl.pathname.startsWith("/api/beta-signup") &&
     !request.nextUrl.pathname.startsWith("/api/keepalive") &&
+    // Booking requests. Crew have no login and never will under the current
+    // plan, so both the page and the route it posts to must be reachable
+    // signed-out — the token is the authorization. Omitting either is the
+    // 307-to-/login trap that already caught the keepalive cron and the web
+    // manifest; here it would ask a crew member to sign in to an app they have
+    // no account for.
+    !request.nextUrl.pathname.startsWith("/book") &&
+    !request.nextUrl.pathname.startsWith("/api/bookings/respond") &&
     // The dev sign-in route has to be reachable without a session — that is its
     // entire job — and forgetting this allowlist is the 307-to-/login trap that
     // has already caught the keepalive cron and the web manifest. Compiled out
