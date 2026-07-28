@@ -45,11 +45,28 @@ export default async function TeamPage() {
       (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''),
     )
 
+  // Pending invitations, so an admin can copy the link again, change the role or
+  // cancel. Nothing is emailed on invite, so losing the link previously stranded
+  // the invitation entirely — see components/PendingInvitesList.tsx.
+  const { data: invites } = await supabase
+    .from('invitations')
+    .select('id, token, email, base_role, expires_at, created_at')
+    .eq('organization_id', user.organizationId)
+    .is('accepted_at', null)
+    // Stable order. Several invitations created in one batch share a created_at
+    // to the millisecond, and ordering on it alone let rows swap places between
+    // renders — which matters here because each row carries a role dropdown and a
+    // Cancel button, so a reshuffle mid-interaction means acting on the wrong
+    // person. Same defect as the unsorted crew rosters in CLAUDE.md.
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: true })
+
   return (
     <TeamListClient
       organizationId={user.organizationId}
       invitedBy={user.id}
       members={members}
+      invites={invites || []}
     />
   )
 }

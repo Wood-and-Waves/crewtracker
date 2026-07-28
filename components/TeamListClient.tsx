@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
 import InviteTeammateModal from '@/components/InviteTeammateModal'
+import PendingInvitesList, { type PendingInvite } from '@/components/PendingInvitesList'
 import Chip from '@/components/ui/Chip'
 import { cn } from '@/lib/cn'
 
@@ -17,10 +18,12 @@ export default function TeamListClient({
   organizationId,
   invitedBy,
   members,
+  invites = [],
 }: {
   organizationId: string
   invitedBy: string
   members: Member[]
+  invites?: PendingInvite[]
 }) {
   const router = useRouter()
   const [inviting, setInviting] = useState(false)
@@ -81,6 +84,10 @@ export default function TeamListClient({
           </div>
         </>
       )}
+
+      {/* Below the members, since these are people who aren't in the team yet.
+          Renders nothing when there are none. */}
+      <PendingInvitesList invites={invites} />
 
       {inviting && (
         <InviteTeammateModal
