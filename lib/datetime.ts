@@ -96,6 +96,29 @@ export function utcToZonedParts(
 }
 
 /**
+ * `n` days after (or before, if negative) a bare calendar date.
+ *
+ * Bare date string in, bare date string out — a Date never escapes, which is
+ * the whole point. The schedule's columns are calendar dates, and the moment
+ * one becomes a Date it acquires a timezone it has no business having.
+ *
+ * The arithmetic runs in UTC deliberately. UTC has no DST, so "add one day" is
+ * always exactly 86,400,000ms and can never land on a skipped or repeated hour.
+ * Doing the same sum in local time silently produces a 23- or 25-hour day twice
+ * a year, which is how a calendar ends up with a duplicated or missing column.
+ */
+export function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const t = new Date(Date.UTC(y, m - 1, d) + n * 86_400_000)
+  return `${pad4(t.getUTCFullYear())}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`
+}
+
+/** `count` consecutive calendar dates starting at `start`, as 'YYYY-MM-DD'. */
+export function dateRange(start: string, count: number): string[] {
+  return Array.from({ length: Math.max(0, count) }, (_, i) => addDays(start, i))
+}
+
+/**
  * 'YYYY-MM-DD' read from a Date's LOCAL parts.
  *
  * For calendar-date arithmetic (generating work days), where the Date was

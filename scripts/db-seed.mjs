@@ -179,6 +179,12 @@ async function seedInto(orgId) {
     ['Northwind User Conference','Moscone West',                 'San Francisco, CA','America/Los_Angeles',   6, 5, ['Keynote Hall','Breakout A','Breakout B'],3, 13, 'none'],
     ['Solstice Partner Forum',   'Music City Center',            'Nashville, TN',    'America/Chicago',       9, 3, ['Grand Ballroom'],                       11, 18, 'none'],
     ['Aster Annual Meeting',     'Riverfront Convention Center', 'Chicago, IL',      'America/Chicago',      28, 4, ['Main Stage','Breakout A'],               0, 10, 'none'],
+    // Booked but not yet staffed — crewFrom === crewTo, so rooms exist and not
+    // one person is on them. A real and common state (the show is sold, the
+    // crewing call hasn't happened) and the one the schedule most needs to make
+    // visible: without it, "show running, nobody on it" and "show not running"
+    // look identical, and the gap you are meant to spot is the one that hides.
+    ['Kestrel Regional Roadshow','Pier 27',                      'San Francisco, CA','America/Los_Angeles',   4, 3, ['Main Stage'],                            0,  0, 'none'],
   ]
 
   for (const [name, venue, city, tz, startOffset, days, rooms, crewFrom, crewTo, punches] of SHOWS) {

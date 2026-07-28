@@ -9,6 +9,7 @@ import Logo from '@/components/Logo'
 
 const baseNavItems = [
   { href: '/dashboard', label: 'Shows', icon: 'briefcase', match: (p: string) => p === '/dashboard' || p.startsWith('/dashboard/shows') },
+  { href: '/dashboard/schedule', label: 'Schedule', icon: 'calendar', match: (p: string) => p.startsWith('/dashboard/schedule') },
   { href: '/dashboard/directory', label: 'Directory', icon: 'users', match: (p: string) => p.startsWith('/dashboard/directory') },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings', match: (p: string) => p.startsWith('/dashboard/settings') },
 ]
@@ -18,6 +19,12 @@ const teamNavItem = { href: '/dashboard/team', label: 'Team', icon: 'shield', ma
 // Platform operator only. Lives in the nav so there's a way back to the admin
 // area without typing the URL — previously /superadmin was reachable only from
 // memory.
+//
+// DESKTOP ONLY, and that is a size decision, not a permission one. Adding
+// Schedule took the bottom tab-bar to six items for a super admin, which does
+// not fit at 375px. The top nav is a wide horizontal bar with room to spare, so
+// it keeps every item; the tab-bar drops this one, because platform
+// administration is the only entry here nobody does from a phone in a venue.
 const superAdminNavItem = { href: '/superadmin', label: 'Platform', icon: 'shield', match: (p: string) => p.startsWith('/superadmin') }
 
 function Icon({ name }: { name: string }) {
@@ -35,6 +42,14 @@ function Icon({ name }: { name: string }) {
         <circle cx="9" cy="8.5" r="3" />
         <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
         <path d="M16 6a3 3 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-2.5-4.4" />
+      </svg>
+    )
+  }
+  if (name === 'calendar') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M3 10h18M8 3v4M16 3v4" />
       </svg>
     )
   }
@@ -74,6 +89,9 @@ export default function AppShell({
     ...(canManageUsers ? [teamNavItem] : []),
     ...(isSuperAdmin ? [superAdminNavItem] : []),
   ]
+  // The tab-bar is width-constrained in a way the top nav is not; see the
+  // comment on superAdminNavItem. Five items is the ceiling at 375px.
+  const tabItems = navItems.filter(item => item.href !== superAdminNavItem.href)
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
@@ -108,14 +126,14 @@ export default function AppShell({
 
       {/* Portrait iPad / phone: fixed bottom tab-bar, app-style */}
       <nav className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-0.5 rounded-[26px] border border-line bg-surface-2 p-1.5 shadow-xl lg:hidden">
-        {navItems.map(item => {
+        {tabItems.map(item => {
           const active = item.match(pathname)
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-[20px] px-6 py-2 text-[11px] font-semibold transition-colors',
+                'flex flex-col items-center gap-0.5 rounded-[20px] px-3 py-2 text-[11px] font-semibold transition-colors sm:px-5',
                 active ? 'text-accent' : 'text-muted',
               )}
             >
