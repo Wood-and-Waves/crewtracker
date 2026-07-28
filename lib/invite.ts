@@ -61,10 +61,24 @@ export async function acceptInvite(token: string, userId: string, userEmail: str
     }
   }
 
-  const { error: profileError } = await admin
-    .from('profiles')
-    .update({
+  // Create a MEMBERSHIP rather than overwriting profiles.organization_id.
+  //
+  // This is what allows one person to work for several production companies —
+  // the situation the old code could not represent, because organization_id is a
+  // single column and accepting a second invite silently replaced the first.
+  // Someone who already has a CrewTracker login now keeps it and simply gains
+  // another organization.
+  //
+  // onConflict: re-accepting an invite for an organization they are already in
+  // updates the permissions rather than failing on the unique constraint. That
+  // is the sensible reading of "here are your new permissions", and it also
+  // restores someone who was previously removed.
+  const { error: membershipError } = await admin
+    .from('memberships')
+    .upsert({
+      profile_id: userId,
       organization_id: organizationId,
+      deactivated_at: null,
       base_role: invite.base_role,
       can_manage_users: invite.can_manage_users,
       can_manage_billing: invite.can_manage_billing,
@@ -84,10 +98,17 @@ export async function acceptInvite(token: string, userId: string, userEmail: str
       can_export_reports: invite.can_export_reports,
       can_send_reports: invite.can_send_reports,
       view_only: invite.view_only,
-    })
-    .eq('id', userId)
+    }, { onConflict: 'profile_id,organization_id' })
 
-  if (profileError) return { error: 'Failed to update profile' }
+  if (membershipError) return { error: 'Failed to join the organization' }
+
+  // Make the organization they just joined the one they land in. For a first
+  // invite this is the only possibility; for a second it is the reasonable
+  // default — you accepted this invite, so this is where you meant to go.
+  await admin
+    .from('profiles')
+    .update({ active_organization_id: organizationId })
+    .eq('id', userId)
 
   await admin
     .from('invitations')

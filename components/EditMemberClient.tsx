@@ -43,12 +43,22 @@ export default function EditMemberClient({
 
     setRemoving(true)
     setError('')
-    const { error: e } = await supabase
-      .from('profiles')
+    const { data, error: e } = await supabase
+      .from('memberships')
       .update({ deactivated_at: next ? new Date().toISOString() : null })
-      .eq('id', member.id)
+      .eq('profile_id', member.id)
+      .select('id')
     setRemoving(false)
     if (e) { setError(e.message); return }
+    // A blocked update is NOT an error. Postgres evaluates the access policy as
+    // part of matching rows, so an update the caller isn't allowed to make
+    // affects zero rows and returns success — verified against the real API,
+    // which answered HTTP 200 with an empty array. Without this check the screen
+    // would report "saved" and navigate away having changed nothing.
+    if (!data || data.length === 0) {
+      setError('That change was not permitted. Your permissions may have changed — reload and try again.')
+      return
+    }
     router.push('/dashboard/team')
     router.refresh()
   }
@@ -58,13 +68,22 @@ export default function EditMemberClient({
   async function handleSave() {
     setSaving(true)
     setError('')
-    const { error: updateError } = await supabase
-      .from('profiles')
+    // Permissions are per-organization, so they live on the membership, not the
+    // person. The same login can be an admin at one company and crew at another.
+    const { data, error: updateError } = await supabase
+      .from('memberships')
       .update({ base_role: role, ...values })
-      .eq('id', member.id)
+      .eq('profile_id', member.id)
+      .select('id')
 
     if (updateError) {
       setError(updateError.message)
+      setSaving(false)
+      return
+    }
+    // See setRemoved(): a refused update returns success with zero rows.
+    if (!data || data.length === 0) {
+      setError('That change was not permitted. Your permissions may have changed — reload and try again.')
       setSaving(false)
       return
     }

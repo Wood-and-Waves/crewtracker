@@ -1,18 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import EditCrewMemberClient from '@/components/EditCrewMemberClient'
 
 export default async function EditCrewMemberPage({ params }: { params: Promise<{ crewId: string }> }) {
   const { crewId } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('organization_id, shoulder_surfer_mode, can_view_pay_rates, can_edit_pay_rates')
-    .eq('id', user.id)
-    .single()
 
   // Rate cards without day_rate; the rates come from the permission-checked
   // view, so a user without can_view_pay_rates simply gets zeros.
@@ -39,7 +34,7 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
   const { data: roles } = await supabase
     .from('av_roles')
     .select('*')
-    .eq('organization_id', profile?.organization_id)
+    .eq('organization_id', user?.organizationId)
     // Alphabetical everywhere; sort_order is no longer user-managed.
     .order('name')
 
@@ -47,9 +42,9 @@ export default async function EditCrewMemberPage({ params }: { params: Promise<{
     <EditCrewMemberClient
       crew={crew}
       availableRoles={roles || []}
-      shoulderSurferMode={profile?.shoulder_surfer_mode || false}
-      canViewRates={profile?.can_view_pay_rates || false}
-      canEditRates={profile?.can_edit_pay_rates || false}
+      shoulderSurferMode={user?.shoulderSurfer ?? false}
+      canViewRates={user?.can('can_view_pay_rates') ?? false}
+      canEditRates={user?.can('can_edit_pay_rates') ?? false}
     />
   )
 }

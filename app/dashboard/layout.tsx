@@ -3,36 +3,31 @@ import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
 import SignOutButton from '@/components/SignOutButton'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser, getMyOrganizations } from '@/lib/session'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
+  const organizations = await getMyOrganizations()
 
-  let canManageUsers = false
-  let isSuperAdmin = false
-  let userName: string | undefined
+  const canManageUsers = user?.can('can_manage_users') ?? false
+  const isSuperAdmin = user?.isSuperAdmin ?? false
+  const userName = user?.fullName ?? undefined
+  // getCurrentUser() reports no organization for a DEACTIVATED member, matching
+  // my_organization_id() in the database. That is a small, deliberate
+  // improvement: previously a removed teammate got the full app shell wrapped
+  // around screens that RLS had already emptied, with no explanation. They now
+  // land on the "Almost there" screen below, which at least has a way out.
+  const hasOrg = !!user?.organizationId
+
   let orgSuspended = false
-  let hasOrg = false
-
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('can_manage_users, full_name, is_super_admin, organization_id')
-      .eq('id', user.id)
+  if (user?.organizationId) {
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('disabled_at')
+      .eq('id', user.organizationId)
       .single()
-    canManageUsers = profile?.can_manage_users ?? false
-    isSuperAdmin = profile?.is_super_admin ?? false
-    userName = profile?.full_name ?? undefined
-    hasOrg = !!profile?.organization_id
-
-    if (profile?.organization_id) {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('disabled_at')
-        .eq('id', profile.organization_id)
-        .single()
-      orgSuspended = !!org?.disabled_at
-    }
+    orgSuspended = !!org?.disabled_at
   }
 
   // A suspended organization is a commercial state, not a security boundary —
@@ -97,6 +92,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       isSuperAdmin={isSuperAdmin}
       userName={userName}
       userEmail={user?.email ?? undefined}
+      organizations={organizations}
     >
       {children}
     </AppShell>
