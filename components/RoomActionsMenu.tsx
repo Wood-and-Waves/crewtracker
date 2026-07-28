@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
+import CrewCallModal from '@/components/CrewCallModal'
 
 type RoomCrew = { id: string; crewMemberId: string | null; name: string; role: string; dayRate: number }
 
@@ -35,6 +36,7 @@ export default function RoomActionsMenu({
   const [crewList, setCrewList] = useState<RoomCrew[]>(crew)
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({})
   const [roles, setRoles] = useState<string[]>([])
+  const [callOpen, setCallOpen] = useState(false)
 
   // Load the org's AV roles for the role dropdown when Edit Crew opens.
   useEffect(() => {
@@ -122,6 +124,13 @@ export default function RoomActionsMenu({
 
   return (
     <div className="relative">
+      <CrewCallModal
+        roomId={roomId}
+        roomName={roomName}
+        open={callOpen}
+        onClose={() => setCallOpen(false)}
+        locked={locked}
+      />
       <button
         onClick={() => setMenuOpen(v => !v)}
         className="rounded-field px-2 py-1 text-muted hover:bg-surface-2 hover:text-ink"
@@ -134,6 +143,11 @@ export default function RoomActionsMenu({
         <div className="absolute right-0 z-20 mt-1 w-64 rounded-card bg-surface border border-line p-3 shadow-xl">
           {mode === 'menu' && (
             <div className="flex flex-col gap-1">
+              <button
+                onClick={() => { setMenuOpen(false); setCallOpen(true) }}
+                className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2">
+                Crew call
+              </button>
               <button
                 onClick={startEditCrew}
                 disabled={locked}
