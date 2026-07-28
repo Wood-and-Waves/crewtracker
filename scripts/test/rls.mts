@@ -83,6 +83,9 @@ await q(`insert into memberships (profile_id, organization_id, base_role, can_ma
            can_view_pay_rates, can_edit_pay_rates, can_create_shows, can_edit_timecards,
            can_edit_all_shows, can_manage_crew_directory, can_manage_rulesets)
          values ($1,$2,'admin',true,true,true,true,true,true,true,true)`, [alice, orgA])
+// Set explicitly, exactly as acceptInvite does. Nothing sets it implicitly since
+// the profiles mirror was removed in 0009.
+await q(`update profiles set active_organization_id=$2 where id=$1`, [alice, orgA])
 await q(`insert into memberships (profile_id, organization_id, base_role, can_create_shows,
            can_edit_timecards, can_edit_all_shows)
          values ($1,$2,'pm',true,true,true)`, [bob, orgB])
@@ -159,12 +162,18 @@ try {
   await q(`update memberships set deactivated_at=null where profile_id=$1 and organization_id=$2`, [alice, orgA])
 
   // The pointer must never be the thing that grants access.
+  //
+  // Since 0010 a pointer that doesn't resolve falls back to the caller's own
+  // oldest live membership, so the assertion is NOT "returns null" — that was an
+  // implementation detail. What matters is that pointing at someone else's
+  // company never yields THAT company's data.
   await q(`update profiles set active_organization_id=$2 where id=$1`, [alice, orgB])
   await asUser(alice, async () => {
     const [r] = await q(`select my_organization_id()::text o`)
-    check('pointing active_organization_id at a company you are not in grants nothing', r.o === null, `${r.o}`)
-    const s = await q(`select count(*)::int n from shows`)
-    check('and still shows nothing', s[0].n === 0, `${s[0].n}`)
+    check('pointing at a company you are not in never resolves to it', r.o !== orgB, `resolved to orgB!`)
+    check('it falls back to a company you do belong to', r.o === orgA, `${r.o}`)
+    const shows = await q(`select name from shows where name in ('A Show','B Show')`)
+    check('and B\'s shows stay invisible', !shows.some(x => x.name === 'B Show'), JSON.stringify(shows))
   })
   await q(`update profiles set active_organization_id=$2 where id=$1`, [alice, orgA])
 
