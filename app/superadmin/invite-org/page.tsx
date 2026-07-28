@@ -35,34 +35,34 @@ export default function InviteOrgPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white p-8">
+    <div className="min-h-screen bg-bg text-ink p-8">
       <div className="max-w-lg mx-auto">
-        <a href="/superadmin" className="text-zinc-500 text-sm hover:text-zinc-300 mb-8 block">← Back to Super Admin</a>
+        <a href="/superadmin" className="text-muted text-sm hover:text-ink mb-8 block">← Back to Super Admin</a>
         <h1 className="text-2xl font-bold mb-2">Invite New Organization</h1>
-        <p className="text-zinc-400 mb-8">Generate an invite link for a new company to join CrewTracker.</p>
+        <p className="text-muted mb-8">Generate an invite link for a new company to join CrewTracker.</p>
 
         <div className="flex flex-col gap-4">
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Organization Name</label>
+            <label className="block text-sm text-muted mb-1">Organization Name</label>
             <input
               type="text"
               placeholder="Acme Productions LLC"
               value={orgName}
               onChange={e => setOrgName(e.target.value)}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-field bg-surface-2 px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Email (optional)</label>
+            <label className="block text-sm text-muted mb-1">Email (optional)</label>
             <input
               type="email"
               placeholder="admin@acmeproductions.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-500 outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-field bg-surface-2 px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent"
             />
-            <p className="text-xs text-zinc-500 mt-1">If provided, only this email can use the invite link.</p>
+            <p className="text-xs text-muted mt-1">If provided, only this email can use the invite link.</p>
           </div>
 
           {error && <p className="text-xs text-red-400">{error}</p>}
@@ -70,29 +70,29 @@ export default function InviteOrgPage() {
           <button
             onClick={createInvite}
             disabled={loading || !orgName}
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+            className="w-full rounded-field bg-accent px-4 py-3 text-sm font-medium text-accent-ink transition hover:opacity-90 disabled:opacity-50"
           >
             {loading ? 'Generating...' : 'Generate Invite Link'}
           </button>
         </div>
 
         {inviteLink && (
-          <div className="mt-8 rounded-xl border border-zinc-700 bg-zinc-900 p-6">
-            <p className="text-sm text-zinc-400 mb-3">Invite link generated — share this with the new org admin:</p>
+          <div className="mt-8 rounded-card border border-line bg-surface p-6">
+            <p className="text-sm text-muted mb-3">Invite link generated — share this with the new org admin:</p>
             <div className="flex items-center gap-3">
               <input
                 readOnly
                 value={inviteLink}
-                className="flex-1 rounded-lg bg-zinc-800 px-4 py-3 text-sm text-white outline-none"
+                className="flex-1 rounded-field bg-surface-2 px-4 py-3 text-sm text-ink outline-none"
               />
               <button
                 onClick={() => navigator.clipboard.writeText(inviteLink)}
-                className="rounded-lg bg-zinc-700 px-4 py-3 text-sm font-medium hover:bg-zinc-600 transition"
+                className="rounded-field bg-accent px-4 py-3 text-sm font-medium text-accent-ink hover:opacity-90 transition"
               >
                 Copy
               </button>
             </div>
-            <p className="text-xs text-zinc-500 mt-3">This link expires in 7 days.</p>
+            <p className="text-xs text-muted mt-3">This link expires in 7 days.</p>
           </div>
         )}
       </div>
