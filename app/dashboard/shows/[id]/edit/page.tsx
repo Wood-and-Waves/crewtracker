@@ -63,11 +63,15 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   const canManageUsers = user.can('can_manage_users')
   const [{ data: orgMembers }, { data: assignments }] = canManageUsers
     ? await Promise.all([
+        // From memberships, for the same reason as the team list: a person who
+        // works for two production companies has one profile whose legacy
+        // organization_id names only one of them, so listing by that column
+        // would omit them from the other company's Show Access panel.
         supabase
-          .from('profiles')
-          .select('id, full_name, email, base_role, can_edit_all_shows')
+          .from('memberships')
+          .select('profile_id, base_role, can_edit_all_shows, profiles(id, full_name, email)')
           .eq('organization_id', user.organizationId)
-          .order('full_name'),
+          .is('deactivated_at', null),
         supabase.from('show_assignments').select('profile_id').eq('show_id', id),
       ])
     : [{ data: null }, { data: null }]
@@ -89,7 +93,21 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
         <div className="mb-4">
           <ShowAccessEditor
             showId={show.id}
-            members={orgMembers || []}
+            members={((orgMembers ?? []) as unknown as {
+              profile_id: string
+              base_role: string | null
+              can_edit_all_shows: boolean | null
+              profiles: { id: string; full_name: string | null; email: string | null } | null
+            }[])
+              .filter(m => m.profiles)
+              .map(m => ({
+                id: m.profile_id,
+                full_name: m.profiles!.full_name,
+                email: m.profiles!.email,
+                base_role: m.base_role,
+                can_edit_all_shows: m.can_edit_all_shows ?? false,
+              }))
+              .sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''))}
             initialAssignedIds={(assignments || []).map(a => a.profile_id)}
             createdBy={show.created_by}
           />

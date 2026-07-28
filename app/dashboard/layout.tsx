@@ -3,11 +3,12 @@ import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
 import SignOutButton from '@/components/SignOutButton'
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, getMyOrganizations } from '@/lib/session'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const user = await getCurrentUser()
+  const organizations = await getMyOrganizations()
 
   const canManageUsers = user?.can('can_manage_users') ?? false
   const isSuperAdmin = user?.isSuperAdmin ?? false
@@ -91,6 +92,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       isSuperAdmin={isSuperAdmin}
       userName={userName}
       userEmail={user?.email ?? undefined}
+      organizations={organizations}
     >
       {children}
     </AppShell>

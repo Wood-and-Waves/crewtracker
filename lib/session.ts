@@ -119,6 +119,51 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   }
 }
 
+export type MyOrganization = {
+  id: string
+  name: string
+  isActive: boolean
+}
+
+/**
+ * Every organization the signed-in user can currently act in, for the switcher.
+ *
+ * Deactivated memberships are excluded: being removed from a company should take
+ * it out of your list, not leave a door that opens onto an empty app.
+ *
+ * Returns an empty array for someone in no organization, and a single entry for
+ * the ordinary case — callers should hide the switcher entirely below two, since
+ * a "switch company" control offering one company is just clutter.
+ */
+export async function getMyOrganizations(): Promise<MyOrganization[]> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data } = await supabase
+    .from('memberships')
+    .select('organization_id, deactivated_at, organizations(id, name)')
+    .eq('profile_id', user.id)
+    .is('deactivated_at', null)
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('active_organization_id')
+    .eq('id', user.id)
+    .single()
+
+  type Row = { organization_id: string; organizations: { id: string; name: string } | null }
+
+  return ((data ?? []) as unknown as Row[])
+    .filter((r) => r.organizations)
+    .map((r) => ({
+      id: r.organization_id,
+      name: r.organizations!.name,
+      isActive: r.organization_id === profile?.active_organization_id,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /**
  * Whether the signed-in user may see money on a given show.
  *

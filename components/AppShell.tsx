@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/cn'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import AccountMenu from '@/components/ui/AccountMenu'
+import AccountMenu, { type SwitcherOrg } from '@/components/ui/AccountMenu'
 import Logo from '@/components/Logo'
 
 const baseNavItems = [
@@ -59,11 +59,13 @@ export default function AppShell({
   isSuperAdmin = false,
   userName,
   userEmail,
+  organizations = [],
 }: {
   children: React.ReactNode
   canManageUsers?: boolean
   isSuperAdmin?: boolean
   userName?: string
+  organizations?: SwitcherOrg[]
   userEmail?: string
 }) {
   const pathname = usePathname()
@@ -98,7 +100,7 @@ export default function AppShell({
         })}
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
-          <AccountMenu userName={userName} userEmail={userEmail} />
+          <AccountMenu userName={userName} userEmail={userEmail} organizations={organizations} />
         </div>
       </header>
 
