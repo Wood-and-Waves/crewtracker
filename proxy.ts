@@ -41,6 +41,12 @@ export async function proxy(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/invite") &&
     !request.nextUrl.pathname.startsWith("/api/beta-signup") &&
     !request.nextUrl.pathname.startsWith("/api/keepalive") &&
+    // The dev sign-in route has to be reachable without a session — that is its
+    // entire job — and forgetting this allowlist is the 307-to-/login trap that
+    // has already caught the keepalive cron and the web manifest. Compiled out
+    // of every deployed build: NODE_ENV is inlined at build time and Vercel
+    // builds everything, preview included, as production.
+    !(process.env.NODE_ENV === "development" && request.nextUrl.pathname.startsWith("/api/dev/")) &&
     !request.nextUrl.pathname.startsWith("/join-beta")
   ) {
     const url = request.nextUrl.clone()
