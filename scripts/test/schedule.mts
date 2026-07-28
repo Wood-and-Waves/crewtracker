@@ -24,6 +24,11 @@ import { describeDates, buildBookingRequestText } from '../../lib/bookingEmail.t
 import {
   summarizeCall, describeCallSize, scopeIncludesDay, daysCoveredBy,
 } from '../../lib/crewCall.ts'
+import {
+  addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
+  roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions,
+  type CallModel,
+} from '../../lib/crewCallGrid.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -344,6 +349,72 @@ check('a two-day show has no middle', daysCoveredBy('middle', 2), 0)
 check('a two-day first-last covers both', daysCoveredBy('first-last', 2), 2)
 check('a three-day show has exactly one middle day', daysCoveredBy('middle', 3), 1)
 check('every day covers the whole run', daysCoveredBy('all', 5), 5)
+
+// ---------------------------------------------------------------------------
+// The crew call grid. Rooms down, days across — the shape a call actually has,
+// replacing the modal's list-plus-dropdown, which could not express a one-off
+// change to a single day at all.
+// ---------------------------------------------------------------------------
+console.log('\ncrew call grid')
+const R = 'room-main'
+const roles = (c: CallModel, d: number) =>
+  cellLines(c, R, d).map(l => `${l.quantity}x${l.role}`).join(',')
+
+let g: CallModel = {}
+g = addRole(g, R, 0, 'A1')
+g = addRole(g, R, 0, 'Stagehand', 2)
+check('a cell holds what was added', roles(g, 0), '1xA1,2xStagehand')
+check('cellCount counts people, not lines', cellCount(cellLines(g, R, 0)), 3)
+
+g = addRole(g, R, 0, 'Stagehand', 1)
+check('adding a role already there bumps it', roles(g, 0), '1xA1,3xStagehand')
+
+// Copying is how the bulk work gets done: build the first day, then spread it.
+g = copyDayTo(g, R, 0, [1, 2, 3])
+check('copy fills the target days', roles(g, 3), '1xA1,3xStagehand')
+check('copy leaves the source alone', roles(g, 0), '1xA1,3xStagehand')
+g = addRole(g, R, 2, 'V1')
+check('copies are independent, not shared references', roles(g, 1), '1xA1,3xStagehand')
+
+// Riggers on load-in and load-out: the case that started this.
+let rig: CallModel = {}
+rig = addRole(rig, R, 0, 'A1')
+rig = copyDayTo(rig, R, 0, [1, 2, 3])
+rig = addRole(rig, R, 0, 'Riggers', 3)
+rig = copyDayTo(rig, R, 0, [3])
+check('riggers land on the last day', roles(rig, 3), '1xA1,3xRiggers')
+check('the middle days stay clear of riggers', roles(rig, 1), '1xA1')
+check('peak is the busiest day', peakPerDay(rig, 4), 4)
+
+check('removing a role leaves the rest', roles(removeRole(rig, R, 0, 'Riggers'), 0), '1xA1')
+check('clearing a day empties it', cellLines(clearDay(rig, R, 0), R, 0).length, 0)
+// "Make these days look like this one" must be trustworthy in both directions.
+check('copying an empty cell clears the targets',
+  cellLines(copyDayTo(clearDay(rig, R, 0), R, 0, [1]), R, 1).length, 0)
+
+console.log('\nrooms exist only on called days')
+check('a called room exists only where it is called', roomDayIndices(rig, R, 4), [0, 1, 2, 3])
+let mid: CallModel = {}
+mid = addRole(mid, 'breakout', 1, 'A2')
+mid = addRole(mid, 'breakout', 2, 'A2')
+check('a middle-days-only room skips the ends',
+  roomDayIndices(mid, 'breakout', 4), [1, 2])
+// The exception: a room somebody named but never called still has to appear,
+// or it silently vanishes from the show they just built.
+check('a room with no call anywhere lands on every day',
+  roomDayIndices({}, 'empty-room', 3), [0, 1, 2])
+check('roomHasAnyCall is false for an untouched room', roomHasAnyCall({}, 'x'), false)
+check('a cleared room counts as having no call',
+  roomHasAnyCall(clearDay(addRole({}, 'x', 0, 'A1'), 'x', 0), 'x'), false)
+
+console.log('\nplanned positions')
+const planned = plannedPositions(mid, 4)
+check('one row per position, never role-plus-quantity', planned.length, 2)
+check('rows carry their day', planned.map(p => p.dayIndex), [1, 2])
+const two = plannedPositions(addRole({}, R, 0, 'Stagehand', 3), 1)
+check('a quantity of three writes three rows', two.length, 3)
+check('sort order restarts per cell', two.map(p => p.sortOrder), [0, 1, 2])
+check('days outside the run are not written', plannedPositions(mid, 1).length, 0)
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

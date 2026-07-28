@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
 import { redirect } from 'next/navigation'
-import NewShowModal from '@/components/NewShowModal'
 import ShowsListClient, { type ShowRow } from '@/components/ShowsListClient'
 import Card from '@/components/ui/Card'
+import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 import { showStatus, SHOW_STATUS_META } from '@/lib/showStatus'
 import { summarizeCall } from '@/lib/crewCall'
@@ -123,7 +123,11 @@ export default async function DashboardPage({
     <div className="p-6 md:p-10">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-3xl font-extrabold tracking-tight">Shows</h1>
-        <NewShowModal organizationId={user.organizationId} />
+        {user.can('can_create_shows') && (
+          <Link href="/dashboard/shows/new">
+            <Button>+ New Show</Button>
+          </Link>
+        )}
       </div>
 
       <div className="mb-6 flex gap-2">
