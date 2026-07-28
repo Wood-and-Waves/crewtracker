@@ -12,9 +12,9 @@ export default function LoginPage() {
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // Only the magic-link path reaches this now; signup was removed.
   const [magicSent, setMagicSent] = useState(false)
   const [resetSent, setResetSent] = useState(false)
 
@@ -36,19 +36,19 @@ export default function LoginPage() {
   async function handleEmailAuth() {
     setError('')
     setLoading(true)
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      })
-      if (error) setError(readableAuthError(error))
-      else setMagicSent(true)
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) setError(readableAuthError(error))
-      else window.location.href = '/dashboard'
-    }
+    // Sign in only — there is deliberately no signup path here.
+    //
+    // CrewTracker is invite-only: new organizations come from a superadmin
+    // invite link, new teammates from an org invite, and both land on
+    // /invite/[token], which is where account creation belongs. This page used
+    // to offer "Don't have an account? Sign up", which called auth.signUp and
+    // produced accounts belonging to no organization — contradicting the access
+    // model and the security overview given to customers, which states there is
+    // no public sign-up. Removed 2026-07-28, alongside the same defect in the
+    // magic-link path.
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) setError(readableAuthError(error))
+    else window.location.href = '/dashboard'
     setLoading(false)
   }
 
@@ -109,7 +109,12 @@ export default function LoginPage() {
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl text-center">
           <h1 className="text-2xl font-bold text-ink mb-2">Check your email</h1>
-          <p className="text-muted text-sm">We sent a confirmation link to <span className="text-ink">{email}</span>. Click it to continue.</p>
+          {/* Only the magic link reaches this screen now that signup is gone,
+              so it can name what was actually sent. "Confirmation link" was
+              left over from the signup path and described the wrong thing. */}
+          <p className="text-muted text-sm">
+            We sent a sign-in link to <span className="text-ink">{email}</span>. Click it to sign in.
+          </p>
         </div>
       </div>
     )
@@ -133,7 +138,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-center gap-2 text-accent mb-2"><Logo className="w-12 h-12" /></div>
           <h1 className="text-2xl font-bold text-ink">CrewTracker</h1>
           <p className="mt-2 text-sm text-muted">
-            {isSignUp ? 'Create your account' : 'Sign in to your account'}
+            Sign in to your account
           </p>
         </div>
 
@@ -175,15 +180,13 @@ export default function LoginPage() {
             className={inputCls}
           />
 
-          {!isSignUp && (
-            <button
-              onClick={handleForgotPassword}
-              disabled={loading || !email}
-              className="self-end text-xs text-accent hover:opacity-80 disabled:opacity-50"
-            >
-              Forgot password?
-            </button>
-          )}
+          <button
+            onClick={handleForgotPassword}
+            disabled={loading || !email}
+            className="self-end text-xs text-accent hover:opacity-80 disabled:opacity-50"
+          >
+            Forgot password?
+          </button>
 
           {error && <p className="text-xs text-danger">{error}</p>}
 
@@ -192,7 +195,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-field bg-accent px-4 py-3 text-sm font-medium text-accent-ink transition hover:opacity-90 disabled:opacity-50"
           >
-            {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+            {loading ? 'Please wait...' : 'Sign In'}
           </button>
 
           <button
@@ -204,14 +207,11 @@ export default function LoginPage() {
           </button>
         </div>
 
+        {/* Replaces a "Sign up" toggle that created accounts belonging to no
+            organization. Points at the beta form, which is the real way in. */}
         <p className="mt-6 text-center text-xs text-muted">
-          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button
-            onClick={() => { setIsSignUp(!isSignUp); setError('') }}
-            className="text-accent hover:opacity-80"
-          >
-            {isSignUp ? 'Sign in' : 'Sign up'}
-          </button>
+          CrewTracker accounts are created by invitation.{' '}
+          <a href="/join-beta" className="text-accent hover:opacity-80">Request access</a>
         </p>
       </div>
     </div>
