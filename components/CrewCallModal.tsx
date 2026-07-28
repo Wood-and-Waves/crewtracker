@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button'
 import Chip from '@/components/ui/Chip'
 import Toggle from '@/components/ui/Toggle'
 import FillPositionPicker from '@/components/FillPositionPicker'
+import CallLinesEditor, { type CallLine } from '@/components/CallLinesEditor'
 
 // The crew call for one room on one day: the positions the show NEEDS.
 //
@@ -54,8 +55,7 @@ export default function CrewCallModal({
   const supabase = createClient()
   const [positions, setPositions] = useState<Position[]>([])
   const [roles, setRoles] = useState<string[]>([])
-  const [role, setRole] = useState('')
-  const [quantity, setQuantity] = useState(1)
+  const [newLines, setNewLines] = useState<CallLine[]>([])
   const [applyAll, setApplyAll] = useState(true)
   const [laterDays, setLaterDays] = useState<string[]>([])
   const [dayDate, setDayDate] = useState('')
@@ -133,27 +133,30 @@ export default function CrewCallModal({
   }, [open, roomId])
 
   async function addPositions() {
-    if (!role || busy) return
+    if (newLines.length === 0 || busy) return
     setBusy(true)
     setError('')
 
     // One row per position, never role-plus-quantity: two stagehands is two
-    // rows so each is individually open or filled.
+    // rows so each is individually open or filled. Every line the person
+    // stacked up commits in a single insert — the call is one decision.
     const targets = applyAll ? [roomId, ...laterDays] : [roomId]
-    const base = positions.length
+    let order = positions.length
     const rows = targets.flatMap(rid =>
-      Array.from({ length: quantity }, (_, i) => ({
-        room_id: rid,
-        role,
-        sort_order: base + i,
-      })),
+      newLines.flatMap(line =>
+        Array.from({ length: line.quantity }, () => ({
+          room_id: rid,
+          role: line.role,
+          sort_order: order++,
+        })),
+      ),
     )
 
     const { error: e } = await supabase.from('crew_call_positions').insert(rows)
     setBusy(false)
     if (e) { setError(e.message); return }
 
-    setQuantity(1)
+    setNewLines([])
     await reload()
     router.refresh()
   }
@@ -415,30 +418,7 @@ export default function CrewCallModal({
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                   Add positions
                 </p>
-                <div className="flex gap-2">
-                  {/* key tied to the options list: iPad Safari has a hydration
-                      bug that duplicates <option> in a controlled <select>. */}
-                  <select
-                    key={roles.join(',')}
-                    value={role}
-                    onChange={e => setRole(e.target.value)}
-                    className="min-w-0 flex-1 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-                  >
-                    <option value="" className="bg-surface-2 text-ink">Choose a role…</option>
-                    {roles.map(r => (
-                      <option key={r} value={r} className="bg-surface-2 text-ink">{r}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={quantity}
-                    onChange={e => setQuantity(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-                    aria-label="How many"
-                    className="w-16 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-                  />
-                </div>
+                <CallLinesEditor roles={roles} lines={newLines} onChange={setNewLines} />
 
                 {laterDays.length > 0 && (
                   <label className="mt-3 flex items-center justify-between gap-3">
@@ -453,9 +433,12 @@ export default function CrewCallModal({
                   className="mt-3 w-full"
                   size="sm"
                   onClick={addPositions}
-                  disabled={!role || busy}
+                  disabled={newLines.length === 0 || busy}
                 >
-                  {busy ? 'Adding…' : `Add ${quantity} position${quantity === 1 ? '' : 's'}`}
+                  {busy ? 'Adding…' : (() => {
+                    const n = newLines.reduce((t, l) => t + l.quantity, 0)
+                    return n === 0 ? 'Add positions' : `Add ${n} position${n === 1 ? '' : 's'}`
+                  })()}
                 </Button>
               </div>
             )}

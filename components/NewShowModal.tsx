@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import CallLinesEditor, { type CallLine } from '@/components/CallLinesEditor'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { localDateStr } from '@/lib/datetime'
@@ -13,19 +14,23 @@ type Preset = { id: string; name: string; is_default: boolean } & RulesetValues
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
-// Rooms typed as a comma-separated list, iOS-style, falling back to a single
-// "Main Stage" so a new show is never created with no rooms at all — which left
-// the tracker with nothing to punch against until you added one by hand.
-function parseRooms(input: string): string[] {
-  const names = input.split(',').map(s => s.trim()).filter(Boolean)
+// Named rooms, de-duplicated case-insensitively, falling back to a single
+// "Main Stage" so a show is never created with no rooms at all — which left the
+// tracker with nothing to punch against until one was added by hand.
+//
+// The de-duplication is not cosmetic: rooms have no uniqueness constraint in
+// the database, and the same room twice on one day is a bug this project has
+// already had to fix once in AddRoomModal. Keeping the FIRST of a pair keeps
+// whichever call the person built first.
+function dedupeRooms<T extends { name: string }>(rows: T[]): T[] {
   const seen = new Set<string>()
-  const unique = names.filter(n => {
-    const k = n.toLowerCase()
-    if (seen.has(k)) return false
+  const unique = rows.filter(r => {
+    const k = r.name.trim().toLowerCase()
+    if (!k || seen.has(k)) return false
     seen.add(k)
     return true
   })
-  return unique.length > 0 ? unique : ['Main Stage']
+  return unique
 }
 
 function datesBetween(start: string, end: string) {
@@ -51,7 +56,14 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [cityState, setCityState] = useState('')
-  const [roomsText, setRoomsText] = useState('')
+  // Rooms carry their call with them. Dan: "Create Show, Rooms, and # of
+  // positions all in one clean sweep" — the person building the show knows what
+  // each room needs, and making them come back afterwards through each room's
+  // menu is a separate errand for the same decision.
+  const [rooms, setRooms] = useState<{ name: string; lines: CallLine[] }[]>([
+    { name: 'Main Stage', lines: [] },
+  ])
+  const [roles, setRoles] = useState<string[]>([])
   const [timezone, setTimezone] = useState(DEFAULT_SHOW_TIMEZONE)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -86,6 +98,15 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
     if (p.short_turn_penalty_enabled) bits.push(`turnaround ${p.short_turn_rest_hours}h`)
     return bits.join(' · ')
   }
+
+  useEffect(() => {
+    if (!open) return
+    let active = true
+    supabase.from('av_roles').select('name').order('sort_order').then(({ data }) => {
+      if (active) setRoles((data ?? []).map((r: any) => r.name))
+    })
+    return () => { active = false }
+  }, [open])
 
   async function createShow() {
     setError('')
@@ -143,22 +164,57 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
 
     // Every day gets the same rooms, in the order they were typed — created_at
     // is nudged per room so the tracker (which orders by it) matches that order.
-    const roomNames = parseRooms(roomsText)
+    const wanted = dedupeRooms(rooms.map(r => ({ name: r.name.trim(), lines: r.lines })))
+    const finalRooms = wanted.length > 0 ? wanted : [{ name: 'Main Stage', lines: [] as CallLine[] }]
     const days = (daysResult.data || []).slice().sort((a, b) => a.day_number - b.day_number)
     const roomRows = days.flatMap(d =>
-      roomNames.map((name, i) => ({
+      finalRooms.map((r, i) => ({
         work_day_id: d.id,
-        name,
+        name: r.name,
         created_at: new Date(Date.now() + i).toISOString(),
       }))
     )
 
     if (roomRows.length > 0) {
-      const { error: roomsError } = await supabase.from('rooms').insert(roomRows)
+      // Ids come back so each room's call can be attached; without them the
+      // positions would have to be looked up by name afterwards.
+      const { data: createdRooms, error: roomsError } = await supabase
+        .from('rooms').insert(roomRows).select('id, name, work_day_id')
       if (roomsError) {
         setError(roomsError.message)
         setLoading(false)
         return
+      }
+
+      // The same call on every day of the show. That is the right default —
+      // load-in and load-out often differ, but they are edited per day
+      // afterwards, and starting from the full call is less work than building
+      // each day from nothing.
+      const linesByRoom = new Map(finalRooms.map(r => [r.name, r.lines]))
+      const positionRows = (createdRooms ?? []).flatMap(room => {
+        const lines = linesByRoom.get(room.name) ?? []
+        let order = 0
+        // One row per position, never role-plus-quantity: each is individually
+        // open or filled, and the person filling it attaches to that row.
+        return lines.flatMap(line =>
+          Array.from({ length: line.quantity }, () => ({
+            room_id: room.id,
+            role: line.role,
+            sort_order: order++,
+          })),
+        )
+      })
+
+      if (positionRows.length > 0) {
+        const { error: posError } = await supabase.from('crew_call_positions').insert(positionRows)
+        // The show and its rooms exist by now, so this is reported rather than
+        // treated as a failure of the whole creation — sending them back to an
+        // empty form would lose everything they typed.
+        if (posError) {
+          setError(`Show created, but the crew call didn't save: ${posError.message}`)
+          setLoading(false)
+          return
+        }
       }
     }
 
@@ -210,14 +266,49 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
           </select>
 
           <div>
-            <input
-              placeholder="Rooms (e.g. Main Stage, Breakout A)"
-              value={roomsText}
-              onChange={e => setRoomsText(e.target.value)}
-              className={inputCls}
-            />
+            <label className="text-xs uppercase tracking-wide text-muted block mb-1">
+              Rooms &amp; crew call
+            </label>
+            <div className="flex flex-col gap-2">
+              {rooms.map((room, i) => (
+                <div key={i} className="rounded-field border border-line p-2.5">
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Room name"
+                      value={room.name}
+                      onChange={e => setRooms(rs => rs.map((r, j) => j === i ? { ...r, name: e.target.value } : r))}
+                      className="min-w-0 flex-1 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
+                    />
+                    {rooms.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setRooms(rs => rs.filter((_, j) => j !== i))}
+                        aria-label={`Remove ${room.name || 'room'}`}
+                        className="rounded-field px-2 text-sm text-muted hover:text-danger"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-2">
+                    <CallLinesEditor
+                      roles={roles}
+                      lines={room.lines}
+                      onChange={lines => setRooms(rs => rs.map((r, j) => j === i ? { ...r, lines } : r))}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setRooms(rs => [...rs, { name: '', lines: [] }])}
+              className="mt-2 text-xs font-semibold text-accent hover:underline"
+            >
+              + Add another room
+            </button>
             <p className="text-xs text-muted mt-1">
-              Comma-separated, added to every day. Leave blank for a single &ldquo;Main Stage&rdquo;.
+              Rooms and their call are added to every day. You can change any day afterwards.
             </p>
           </div>
 
