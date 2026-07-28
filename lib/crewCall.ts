@@ -61,3 +61,58 @@ export function describeCallSize(summary: CallSummary): string {
   if (dayCount <= 1) return qualified
   return `${qualified} across ${dayCount} days`
 }
+
+// ---------------------------------------------------------------------------
+// Which days of a run a call line applies to
+// ---------------------------------------------------------------------------
+//
+// Not every position runs every day, and the shapes are consistent across this
+// business: riggers come in for load-in and load-out and are gone in between, a
+// teleprompter operator is only there for show days. Making somebody build the
+// whole show and then edit two days by hand is the errand the in-line call
+// builder exists to remove.
+
+export type DayScope = 'all' | 'first' | 'last' | 'first-last' | 'middle'
+
+export const DAY_SCOPE_LABELS: Record<DayScope, string> = {
+  'all': 'Every day',
+  'first': 'First day only',
+  'last': 'Last day only',
+  'first-last': 'First & last day',
+  'middle': 'Middle days only',
+}
+
+/** Short form for a chip, where "Every day" is the assumed default. */
+export function shortScope(scope: DayScope): string | null {
+  switch (scope) {
+    case 'all': return null
+    case 'first': return 'first day'
+    case 'last': return 'last day'
+    case 'first-last': return 'first & last'
+    case 'middle': return 'middle days'
+  }
+}
+
+/**
+ * Whether a line applies to day `index` (0-based) of a `total`-day run.
+ *
+ * A one-day show is the case worth being careful about: it is both the first
+ * and the last day, so 'first-last' must include it ONCE rather than twice, and
+ * 'middle' correctly matches nothing.
+ */
+export function scopeIncludesDay(scope: DayScope, index: number, total: number): boolean {
+  switch (scope) {
+    case 'all': return true
+    case 'first': return index === 0
+    case 'last': return index === total - 1
+    case 'first-last': return index === 0 || index === total - 1
+    case 'middle': return index > 0 && index < total - 1
+  }
+}
+
+/** How many days of a run a scope actually covers — 0 means the line does nothing. */
+export function daysCoveredBy(scope: DayScope, total: number): number {
+  let n = 0
+  for (let i = 0; i < total; i++) if (scopeIncludesDay(scope, i, total)) n++
+  return n
+}

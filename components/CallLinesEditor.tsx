@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import Button from '@/components/ui/Button'
+import {
+  DAY_SCOPE_LABELS, shortScope, daysCoveredBy, type DayScope,
+} from '@/lib/crewCall'
 
 // Building a crew call as a list: 1 × A1, 1 × V1, 2 × Stagehand.
 //
@@ -14,35 +17,56 @@ import Button from '@/components/ui/Button'
 // for a room that does not exist yet, while the crew call panel commits them
 // straight to an existing room. Same component, because they are the same idea.
 
-export type CallLine = { role: string; quantity: number }
+export type CallLine = {
+  role: string
+  quantity: number
+  /**
+   * Which days of the run this line covers. Riggers are first-and-last, a
+   * teleprompter operator is often middle-days-only. Defaults to every day.
+   */
+  scope: DayScope
+}
 
 export default function CallLinesEditor({
   roles,
   lines,
   onChange,
+  dayCount,
 }: {
   roles: string[]
   lines: CallLine[]
   onChange: (next: CallLine[]) => void
+  /**
+   * Length of the run. Supplied only where the editor spans the whole show
+   * (New Show); the per-day crew call panel already targets one day and its
+   * own "apply to remaining days" toggle, so offering a scope there as well
+   * would be two controls answering the same question.
+   */
+  dayCount?: number
 }) {
   const [role, setRole] = useState('')
   const [quantity, setQuantity] = useState(1)
+  const [scope, setScope] = useState<DayScope>('all')
+  const showScope = typeof dayCount === 'number' && dayCount > 1
 
   function add() {
     if (!role) return
     // Adding a role already on the list bumps its count rather than creating a
     // second identical line — two "Stagehand ×1" rows say the same thing as
-    // one "×2" and only make the list harder to read.
-    const existing = lines.findIndex(l => l.role === role)
+    // one "×2" and only make the list harder to read. Matching on role AND
+    // scope, because "2 riggers on the first day" and "2 riggers throughout"
+    // are genuinely different lines.
+    const existing = lines.findIndex(l => l.role === role && l.scope === scope)
     if (existing >= 0) {
       const next = [...lines]
       next[existing] = { ...next[existing], quantity: next[existing].quantity + quantity }
       onChange(next)
     } else {
-      onChange([...lines, { role, quantity }])
+      onChange([...lines, { role, quantity, scope }])
     }
     setRole('')
     setQuantity(1)
+    setScope('all')
   }
 
   const total = lines.reduce((n, l) => n + l.quantity, 0)
@@ -51,22 +75,26 @@ export default function CallLinesEditor({
     <div>
       {lines.length > 0 && (
         <ul className="mb-2 flex flex-wrap gap-1.5">
-          {lines.map(l => (
-            <li
-              key={l.role}
-              className="flex items-center gap-1.5 rounded-pill border border-line bg-surface-2 py-1 pl-2.5 pr-1 text-xs text-ink"
-            >
-              <span className="font-semibold">{l.quantity}×</span> {l.role}
-              <button
-                type="button"
-                onClick={() => onChange(lines.filter(x => x.role !== l.role))}
-                aria-label={`Remove ${l.role}`}
-                className="rounded-full px-1.5 text-muted hover:text-danger"
+          {lines.map(l => {
+            const scopeLabel = shortScope(l.scope)
+            return (
+              <li
+                key={`${l.role}|${l.scope}`}
+                className="flex items-center gap-1.5 rounded-pill border border-line bg-surface-2 py-1 pl-2.5 pr-1 text-xs text-ink"
               >
-                ×
-              </button>
-            </li>
-          ))}
+                <span className="font-semibold">{l.quantity}×</span> {l.role}
+                {scopeLabel && <span className="text-muted">· {scopeLabel}</span>}
+                <button
+                  type="button"
+                  onClick={() => onChange(lines.filter(x => !(x.role === l.role && x.scope === l.scope)))}
+                  aria-label={`Remove ${l.role}`}
+                  className="rounded-full px-1.5 text-muted hover:text-danger"
+                >
+                  ×
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -98,9 +126,35 @@ export default function CallLinesEditor({
         </Button>
       </div>
 
+      {showScope && (
+        <select
+          value={scope}
+          onChange={e => setScope(e.target.value as DayScope)}
+          aria-label="Which days this role is needed"
+          className="mt-1.5 w-full rounded-field border border-line bg-surface-2 px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
+        >
+          {(Object.keys(DAY_SCOPE_LABELS) as DayScope[]).map(k => {
+            const covered = daysCoveredBy(k, dayCount!)
+            return (
+              <option key={k} value={k} disabled={covered === 0} className="bg-surface-2 text-ink">
+                {DAY_SCOPE_LABELS[k]}
+                {/* A 2-day show has no middle, so the option is offered but
+                    disabled rather than silently adding nothing. */}
+                {covered === 0 ? ' — none on this run' : ''}
+              </option>
+            )
+          })}
+        </select>
+      )}
+
       {total > 0 && (
         <p className="mt-1.5 text-[11px] text-muted">
-          {total} position{total === 1 ? '' : 's'} on this call
+          {/* Per day, not the row total: a 12-person call over 5 days is 60
+              rows, and that is not a number anybody crews against. */}
+          {showScope
+            ? `${lines.filter(l => l.scope === 'all').reduce((n, l) => n + l.quantity, 0)} crew every day` +
+              (lines.some(l => l.scope !== 'all') ? ', plus part-run roles' : '')
+            : `${total} position${total === 1 ? '' : 's'} on this call`}
         </p>
       )}
     </div>

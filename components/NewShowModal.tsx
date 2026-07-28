@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import CallLinesEditor, { type CallLine } from '@/components/CallLinesEditor'
+import { scopeIncludesDay } from '@/lib/crewCall'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { localDateStr } from '@/lib/datetime'
@@ -108,6 +109,16 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
     return () => { active = false }
   }, [open])
 
+  // Days in the run, from the dates already typed. Zero until both are set,
+  // which is why the scope picker only appears once there is a run to scope to.
+  const runLength = (() => {
+    if (!startDate || !endDate) return 0
+    const a = new Date(startDate + 'T00:00:00')
+    const b = new Date(endDate + 'T00:00:00')
+    const n = Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1
+    return n > 0 ? n : 0
+  })()
+
   async function createShow() {
     setError('')
     setLoading(true)
@@ -191,18 +202,29 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
       // afterwards, and starting from the full call is less work than building
       // each day from nothing.
       const linesByRoom = new Map(finalRooms.map(r => [r.name, r.lines]))
+      // Which day each created room belongs to, so a line scoped to the first
+      // or last day lands only there. Riggers on load-in and load-out is the
+      // motivating case; without this the admin builds the show and then edits
+      // two days by hand, which is the errand this whole panel removes.
+      const dayIndexById = new Map(days.map((d, i) => [d.id, i]))
+      const totalDays = days.length
+
       const positionRows = (createdRooms ?? []).flatMap(room => {
         const lines = linesByRoom.get(room.name) ?? []
+        const dayIndex = dayIndexById.get(room.work_day_id)
+        if (dayIndex === undefined) return []
         let order = 0
         // One row per position, never role-plus-quantity: each is individually
         // open or filled, and the person filling it attaches to that row.
-        return lines.flatMap(line =>
-          Array.from({ length: line.quantity }, () => ({
-            room_id: room.id,
-            role: line.role,
-            sort_order: order++,
-          })),
-        )
+        return lines
+          .filter(line => scopeIncludesDay(line.scope, dayIndex, totalDays))
+          .flatMap(line =>
+            Array.from({ length: line.quantity }, () => ({
+              room_id: room.id,
+              role: line.role,
+              sort_order: order++,
+            })),
+          )
       })
 
       if (positionRows.length > 0) {
@@ -229,7 +251,11 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md rounded-card bg-surface border border-line p-6 shadow-xl">
+      {/* Scrolls, and must: the rooms-and-call section made this modal taller
+          than a 720px laptop viewport, which put Create Show off-screen with no
+          way to reach it. The dialog is centred and fixed, so without a
+          max-height the overflow is simply unreachable rather than scrolled. */}
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-card bg-surface border border-line p-6 shadow-xl">
         <h2 className="text-xl font-bold text-ink mb-4">New Show</h2>
 
         <div className="flex flex-col gap-3">
@@ -294,6 +320,7 @@ export default function NewShowModal({ organizationId }: { organizationId: strin
                     <CallLinesEditor
                       roles={roles}
                       lines={room.lines}
+                      dayCount={runLength}
                       onChange={lines => setRooms(rs => rs.map((r, j) => j === i ? { ...r, lines } : r))}
                     />
                   </div>
