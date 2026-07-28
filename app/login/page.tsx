@@ -1,6 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import { readableAuthError } from '@/lib/authError'
 import { useEffect, useState } from 'react'
 import Logo from '@/components/Logo'
 
@@ -41,11 +42,11 @@ export default function LoginPage() {
         password,
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       })
-      if (error) setError(error.message)
+      if (error) setError(readableAuthError(error))
       else setMagicSent(true)
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) setError(error.message)
+      if (error) setError(readableAuthError(error))
       else window.location.href = '/dashboard'
     }
     setLoading(false)
@@ -58,7 +59,7 @@ export default function LoginPage() {
       email,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     })
-    if (error) setError(error.message)
+    if (error) setError(readableAuthError(error))
     else setMagicSent(true)
     setLoading(false)
   }
@@ -69,7 +70,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
     })
-    if (error) setError(error.message)
+    if (error) setError(readableAuthError(error))
     else setResetSent(true)
     setLoading(false)
   }

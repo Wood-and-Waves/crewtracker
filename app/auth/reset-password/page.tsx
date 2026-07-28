@@ -1,6 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import { readableAuthError } from '@/lib/authError'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -30,7 +31,7 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password })
     setLoading(false)
     if (error) {
-      setError(error.message)
+      setError(readableAuthError(error))
     } else {
       setDone(true)
       setTimeout(() => router.push('/dashboard'), 1500)

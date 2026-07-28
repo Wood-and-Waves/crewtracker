@@ -1,6 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
+import { readableAuthError } from '@/lib/authError'
 import { useState } from 'react'
 import Logo from '@/components/Logo'
 
@@ -70,11 +71,11 @@ export default function InviteAuthForm({
           data: { full_name: name.trim() || null },
         },
       })
-      if (error) setError(error.message)
+      if (error) setError(readableAuthError(error))
       else setMagicSent(true)
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) setError(error.message)
+      if (error) setError(readableAuthError(error))
       else await finishAndRedirect()
     }
     setLoading(false)
@@ -87,7 +88,7 @@ export default function InviteAuthForm({
       email,
       options: { emailRedirectTo: callbackUrl },
     })
-    if (error) setError(error.message)
+    if (error) setError(readableAuthError(error))
     else setMagicSent(true)
     setLoading(false)
   }
