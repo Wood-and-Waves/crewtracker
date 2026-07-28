@@ -29,6 +29,7 @@ export default function BatchPunchBar({
   dayDate,
   timezone,
   label = 'Batch Actions',
+  locked = false,
 }: {
   timecards: BatchTimecard[]
   dayDate: string
@@ -40,6 +41,8 @@ export default function BatchPunchBar({
    * people. Scope is whatever `timecards` is; this just names it.
    */
   label?: string
+  /** Show is finalized: batch punching is refused by the database. */
+  locked?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -132,12 +135,19 @@ export default function BatchPunchBar({
             <button
               key={type}
               onClick={() => onTap(type)}
-              disabled={busy}
+              disabled={busy || locked}
+              title={locked ? 'Times are locked — the final report has been sent.' : undefined}
               className={cn(
                 'rounded-[5px] border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
-                active
+                // `active` marks the punch this bar would apply next, in accent.
+                // On a locked show that highlight has to go: opacity-50 alone
+                // leaves an accent button still reading as the thing to press,
+                // which is precisely the "looks live, then fails" behaviour this
+                // work exists to remove.
+                active && !locked
                   ? 'bg-accent/30 border-transparent text-accent font-semibold'
-                  : 'bg-surface-3 border-line text-muted hover:border-accent hover:text-accent',
+                  : 'bg-surface-3 border-line text-muted',
+                !locked && 'hover:border-accent hover:text-accent',
               )}
             >
               {PUNCH_LABELS[type]} All

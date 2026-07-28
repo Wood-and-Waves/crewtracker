@@ -211,7 +211,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - Microsoft/Azure SSO, Capacitor iOS/Android wrapping — still deferred
 - Crew app access (crew role) — schema ready, UI deferred
 - **A web texting service (Twilio et al.) is deliberately not being used.** Crew timesheet delivery is device-native — `SendHoursButton` offers `sms:` / Web Share / clipboard depending on what the browser supports. That feature is **built**; this note is about not replacing it with a paid SMS gateway.
-- Superadmin pages (`app/superadmin/*`) were **not** included in the Signal redesign pass — still on the old zinc palette. Low priority (Dan-only, rarely used), but convert them to tokens if you're ever in that file.
+- ~~Superadmin pages still on the old zinc palette.~~ **DONE 2026-07-27** — all of `app/superadmin/*` and `SuperAdminClient.tsx` are token-driven; no hardcoded colours or raw radii remain.
 - No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The "Join the Beta" form is a lead-capture funnel, not an auto-provisioning flow, so this stays true.
 
 ### Already built — do not rebuild these

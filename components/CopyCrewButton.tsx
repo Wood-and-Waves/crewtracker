@@ -16,11 +16,14 @@ export default function CopyCrewButton({
   sourceRoomId,
   sourceDayNumber,
   count,
+  locked = false,
 }: {
   targetRoomId: string
   sourceRoomId: string
   sourceDayNumber: number
   count: number
+  /** Show is finalized: copying crew inserts timecards, which are refused. */
+  locked?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -74,7 +77,8 @@ export default function CopyCrewButton({
     <div className="p-4">
       <button
         onClick={copy}
-        disabled={busy}
+        disabled={busy || locked}
+        title={locked ? 'Times are locked — the final report has been sent.' : undefined}
         className="w-full rounded-field bg-accent-wash px-3 py-2 text-sm font-medium text-accent transition hover:opacity-80 disabled:opacity-50"
       >
         {busy ? 'Copying…' : `Copy ${count} crew from Day ${sourceDayNumber}`}

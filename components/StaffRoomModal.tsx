@@ -26,6 +26,7 @@ export default function StaffRoomModal({
   onOpenChange,
   hideTrigger = false,
   canEditRates = false,
+  locked = false,
 }: {
   organizationId: string
   roomId: string
@@ -41,6 +42,8 @@ export default function StaffRoomModal({
    *  scripts/sql/applied/enforce-pay-rate-writes.sql), so offering the field would be
    *  showing someone a control that silently does nothing. */
   canEditRates?: boolean
+  /** Show is finalized: staffing inserts timecards, which the database refuses. */
+  locked?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -362,6 +365,8 @@ export default function StaffRoomModal({
     return (
       <button
         onClick={() => setOpen(true)}
+        disabled={locked}
+        title={locked ? 'Times are locked — the final report has been sent.' : undefined}
         className="w-full rounded-field bg-accent-wash px-3 py-2 text-sm font-medium text-accent transition hover:opacity-80"
       >
         + Add Crew Member
