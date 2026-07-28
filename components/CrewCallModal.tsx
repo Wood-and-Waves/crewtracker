@@ -31,6 +31,7 @@ type Position = {
   /** pencilled | invited | confirmed — null when the position is open. */
   status: string | null
   timecardId: string | null
+  crewMemberId: string | null
   /** 'work' | 'travel' | 'travel+work' — what this day is for this person. */
   travel: 'work' | 'travel' | 'travel+work'
 }
@@ -58,6 +59,9 @@ export default function CrewCallModal({
   const [applyAll, setApplyAll] = useState(true)
   const [laterDays, setLaterDays] = useState<string[]>([])
   const [dayDate, setDayDate] = useState('')
+  const [showId, setShowId] = useState('')
+  const [ask, setAsk] = useState<{ smsText: string; link: string; warning?: string; emailed: boolean; name: string } | null>(null)
+  const [copied, setCopied] = useState(false)
   const [filling, setFilling] = useState<{ id: string; role: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -76,7 +80,7 @@ export default function CrewCallModal({
       const [{ data: pos, error: posErr }, { data: roleRows }, { data: room }] = await Promise.all([
         supabase
           .from('crew_call_positions')
-          .select('id, role, note, timecards(id, crew_member_name, booking_status, is_travel_day, travel_in_day, travel_out_day)')
+          .select('id, role, note, timecards(id, crew_member_id, crew_member_name, booking_status, is_travel_day, travel_in_day, travel_out_day)')
           .eq('room_id', roomId)
           .order('sort_order'),
         supabase.from('av_roles').select('name').order('sort_order'),
@@ -97,6 +101,7 @@ export default function CrewCallModal({
         filledBy: live?.crew_member_name ?? null,
         status: live?.booking_status ?? null,
         timecardId: live?.id ?? null,
+        crewMemberId: live?.crew_member_id ?? null,
         travel: live?.is_travel_day ? 'travel'
           : (live?.travel_in_day || live?.travel_out_day) ? 'travel+work'
           : 'work',
@@ -112,6 +117,7 @@ export default function CrewCallModal({
         : (room as any)?.work_days
       if (wd) {
         setDayDate(wd.date)
+        setShowId(wd.show_id)
         const { data: siblings } = await supabase
           .from('rooms')
           .select('id, work_days!inner(date, show_id)')
@@ -190,10 +196,41 @@ export default function CrewCallModal({
     router.refresh()
   }
 
+  // Ask them to confirm. Returns the text-message version too: a scheduler
+  // often knows somebody answers texts and not email, and both go out from the
+  // same action rather than being alternatives.
+  async function askCrew(crewMemberId: string, name: string) {
+    setBusy(true); setError(''); setCopied(false)
+    const res = await fetch('/api/bookings/send', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showId, crewMemberId }),
+    })
+    const body = await res.json().catch(() => ({}))
+    setBusy(false)
+    if (!res.ok) { setError(body.error || 'Could not send the request.'); return }
+    setAsk({ smsText: body.smsText, link: body.link, warning: body.warning, emailed: !!body.emailed, name })
+    await reload()
+    router.refresh()
+  }
+
+  // Most replies come back by phone, not through the link.
+  async function recordAnswer(crewMemberId: string, response: 'confirmed' | 'declined') {
+    setBusy(true); setError('')
+    const res = await fetch('/api/bookings/record', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showId, crewMemberId, response }),
+    })
+    const body = await res.json().catch(() => ({}))
+    setBusy(false)
+    if (!res.ok) { setError(body.error || 'Could not record that.'); return }
+    await reload()
+    router.refresh()
+  }
+
   async function reload() {
     const { data } = await supabase
       .from('crew_call_positions')
-      .select('id, role, note, timecards(id, crew_member_name, booking_status, is_travel_day, travel_in_day, travel_out_day)')
+      .select('id, role, note, timecards(id, crew_member_id, crew_member_name, booking_status, is_travel_day, travel_in_day, travel_out_day)')
       .eq('room_id', roomId)
       .order('sort_order')
     setPositions((data ?? []).map((p: any) => {
@@ -203,6 +240,7 @@ export default function CrewCallModal({
         filledBy: live?.crew_member_name ?? null,
         status: live?.booking_status ?? null,
         timecardId: live?.id ?? null,
+        crewMemberId: live?.crew_member_id ?? null,
         travel: live?.is_travel_day ? 'travel'
           : (live?.travel_in_day || live?.travel_out_day) ? 'travel+work'
           : 'work',
@@ -264,6 +302,37 @@ export default function CrewCallModal({
                           Fill
                         </button>
                       )}
+                      {p.filledBy && p.crewMemberId && !locked && p.status === 'pencilled' && (
+                        <button
+                          onClick={() => askCrew(p.crewMemberId!, p.filledBy!)}
+                          disabled={busy}
+                          className="rounded-field px-2 py-1 text-xs font-semibold text-accent hover:bg-accent-wash disabled:opacity-40"
+                        >
+                          Ask
+                        </button>
+                      )}
+                      {/* Answers usually arrive by phone; recording one has to
+                          be as quick as reading it out. */}
+                      {p.filledBy && p.crewMemberId && !locked && p.status === 'invited' && (
+                        <>
+                          <button
+                            onClick={() => recordAnswer(p.crewMemberId!, 'confirmed')}
+                            disabled={busy}
+                            title="They said yes"
+                            className="rounded-field px-2 py-1 text-xs font-semibold text-good hover:bg-surface-2 disabled:opacity-40"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => recordAnswer(p.crewMemberId!, 'declined')}
+                            disabled={busy}
+                            title="They said no"
+                            className="rounded-field px-2 py-1 text-xs font-semibold text-danger hover:bg-surface-2 disabled:opacity-40"
+                          >
+                            No
+                          </button>
+                        </>
+                      )}
                       {p.filledBy && p.timecardId && !locked && (
                         <select
                           value={p.travel}
@@ -291,6 +360,37 @@ export default function CrewCallModal({
                   </li>
                 ))}
               </ul>
+            )}
+
+            {ask && (
+              <div className="mb-4 rounded-field border border-line bg-surface-2 p-3">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    {ask.emailed ? `Emailed ${ask.name}` : `Ready to send to ${ask.name}`}
+                  </p>
+                  <button onClick={() => setAsk(null)} className="text-xs text-muted hover:text-ink">Close</button>
+                </div>
+                {ask.warning && <p className="mb-2 text-xs text-ot">{ask.warning}</p>}
+                {/* For texting. No link in it on purpose — an action-link by SMS
+                    is indistinguishable from a phishing message. */}
+                <p className="mb-2 whitespace-pre-wrap rounded-field border border-line bg-surface p-2 text-xs text-ink">
+                  {ask.smsText}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm" variant="ghost" className="flex-1"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(ask.smsText)
+                      setCopied(true)
+                    }}
+                  >
+                    {copied ? 'Copied' : 'Copy message'}
+                  </Button>
+                  <a href={`sms:&body=${encodeURIComponent(ask.smsText)}`} className="flex-1">
+                    <Button size="sm" className="w-full">Text</Button>
+                  </a>
+                </div>
+              </div>
             )}
 
             {filling && dayDate && (
