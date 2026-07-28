@@ -7,7 +7,6 @@ import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount, peakPerDay,
   type CallModel,
 } from '@/lib/crewCallGrid'
-import { scopeIncludesDay, DAY_SCOPE_LABELS, type DayScope } from '@/lib/crewCall'
 
 // The crew call, as rooms down and days across.
 //
@@ -20,16 +19,20 @@ import { scopeIncludesDay, DAY_SCOPE_LABELS, type DayScope } from '@/lib/crewCal
 // day, then "copy to every day". That reads as what you are actually doing and
 // it can express shapes a dropdown cannot, like one day being different.
 //
-// Below 1024px the grid is abandoned entirely rather than squeezed. A rooms ×
-// days grid needs ~72px a column to stay legible, so at 375px it shows three
-// days — useless for a screen about a whole run. Mobile gets a per-room list
-// with a "which days" control writing into the SAME model, which is why
-// scopeIncludesDay survives.
+// THE GRID IS THE SCREEN AT EVERY WIDTH. The first version dropped to a
+// per-room list with a "which days" dropdown below 1024px, on the theory that a
+// grid needs too much width. Dan, on a phone: "I don't see the new create show
+// screen on mobile. It still has the drop downs." He is right — the grid IS the
+// feature, and a fallback that reinstates the dropdowns is the old screen
+// wearing a new name. Narrow columns and a horizontal scroll inside the grid's
+// own container beat a different interaction model.
 
 export type GridRoom = { key: string; name: string }
 
-const NAME_COL = 176
-const MIN_DAY_COL = 74
+// Tight enough that four days plus the room name fit a 375px phone with only a
+// nudge of horizontal scroll, wide enough for a two-digit count and a weekday.
+const NAME_COL = 132
+const MIN_DAY_COL = 58
 
 function dayLabel(date: string) {
   // Bare 'YYYY-MM-DD' + T00:00:00 = local midnight; a date-only string parses as
@@ -62,7 +65,6 @@ export default function CrewCallGrid({
   const [selected, setSelected] = useState<{ roomKey: string; day: number } | null>(null)
   const [role, setRole] = useState('')
   const [quantity, setQuantity] = useState(1)
-  const [scope, setScope] = useState<DayScope>('all')
 
   const totalDays = dates.length
   const gridTemplateColumns = `${NAME_COL}px repeat(${totalDays}, minmax(${MIN_DAY_COL}px, 1fr))`
@@ -84,18 +86,6 @@ export default function CrewCallGrid({
   function addToSelected() {
     if (!selected || !role) return
     onChange(addRole(call, selected.roomKey, selected.day, role, quantity))
-    setRole('')
-    setQuantity(1)
-  }
-
-  // Mobile: one add applies across whichever days the scope names.
-  function addByScope(roomKey: string) {
-    if (!role) return
-    let next = call
-    for (let i = 0; i < totalDays; i++) {
-      if (scopeIncludesDay(scope, i, totalDays)) next = addRole(next, roomKey, i, role, quantity)
-    }
-    onChange(next)
     setRole('')
     setQuantity(1)
   }
@@ -141,7 +131,7 @@ export default function CrewCallGrid({
       </div>
 
       {/* Desktop grid */}
-      <div className="hidden overflow-x-auto rounded-card border border-line bg-surface lg:block">
+      <div className="overflow-x-auto rounded-card border border-line bg-surface">
         <div style={{ minWidth }}>
           <div className="grid border-b border-line bg-surface-2" style={{ gridTemplateColumns }}>
             <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
@@ -217,7 +207,7 @@ export default function CrewCallGrid({
                     ) : (
                       <>
                         <span className="text-[13px] font-bold text-ink">{cellCount(lines)}</span>
-                        <span className="w-full truncate px-0.5 text-[9px] leading-tight text-muted">
+                        <span className="hidden w-full truncate px-0.5 text-[9px] leading-tight text-muted sm:block">
                           {lines.map(x => (x.quantity > 1 ? `${x.quantity} ` : '') + x.role).join(', ')}
                         </span>
                       </>
@@ -234,7 +224,7 @@ export default function CrewCallGrid({
         <button
           type="button"
           onClick={addRoom}
-          className="mt-2 hidden text-xs font-semibold text-accent hover:underline lg:block"
+          className="mt-2 text-xs font-semibold text-accent hover:underline"
         >
           + Add another room
         </button>
@@ -242,7 +232,7 @@ export default function CrewCallGrid({
 
       {/* Cell editor, BELOW the grid — never over it. */}
       {selected && !readOnly && (
-        <div className="mt-3 hidden rounded-card border border-accent bg-surface p-3 lg:block">
+        <div className="mt-3 rounded-card border border-accent bg-surface p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-[13px] font-semibold text-ink">
               {selRoom?.name || 'Room'} · {dayLabel(dates[selected.day]).weekday} {dayLabel(dates[selected.day]).day}
@@ -310,93 +300,6 @@ export default function CrewCallGrid({
         </div>
       )}
 
-      {/* Below 1024px: per-room list, same model, different shape. */}
-      <div className="space-y-2 lg:hidden">
-        {rooms.map(room => {
-          const summary = dates
-            .map((_, i) => cellCount(cellLines(call, room.key, i)))
-            .reduce((a, b) => Math.max(a, b), 0)
-          return (
-            <div key={room.key} className="rounded-card border border-line bg-surface p-3">
-              <div className="mb-2 flex gap-2">
-                <input
-                  value={room.name}
-                  onChange={e =>
-                    onRoomsChange(rooms.map(r => (r.key === room.key ? { ...r, name: e.target.value } : r)))
-                  }
-                  placeholder="Room name"
-                  disabled={readOnly}
-                  className="min-w-0 flex-1 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
-                />
-                {rooms.length > 1 && !readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => removeRoom(room.key)}
-                    aria-label={`Remove ${room.name || 'room'}`}
-                    className="px-2 text-sm text-muted hover:text-danger"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-
-              <div className="mb-2 space-y-1">
-                {dates.map((date, i) => {
-                  const lines = cellLines(call, room.key, i)
-                  if (lines.length === 0) return null
-                  const l = dayLabel(date)
-                  return (
-                    <div key={date} className="flex items-baseline justify-between gap-2 text-xs">
-                      <span className="text-muted">{l.weekday} {l.day}</span>
-                      <span className="min-w-0 flex-1 truncate text-right text-ink">
-                        {lines.map(x => `${x.quantity}× ${x.role}`).join(', ')}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onChange(clearDay(call, room.key, i))}
-                        aria-label={`Clear ${l.weekday} ${l.day}`}
-                        className="text-muted hover:text-danger"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )
-                })}
-                {summary === 0 && <p className="text-xs text-muted">No positions yet.</p>}
-              </div>
-
-              {!readOnly && (
-                <>
-                  {roleSelect(() => addByScope(room.key))}
-                  {totalDays > 1 && (
-                    <select
-                      value={scope}
-                      onChange={e => setScope(e.target.value as DayScope)}
-                      aria-label="Which days this role is needed"
-                      className="mt-1.5 w-full rounded-field border border-line bg-surface-2 px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
-                    >
-                      {(Object.keys(DAY_SCOPE_LABELS) as DayScope[]).map(k => (
-                        <option key={k} value={k} className="bg-surface-2 text-ink">
-                          {DAY_SCOPE_LABELS[k]}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </>
-              )}
-            </div>
-          )
-        })}
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={addRoom}
-            className="text-xs font-semibold text-accent hover:underline"
-          >
-            + Add another room
-          </button>
-        )}
-      </div>
     </div>
   )
 }

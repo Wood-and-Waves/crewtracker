@@ -211,7 +211,7 @@ export default function NewShowClient({
   }
 
   return (
-    <div className="p-6 pb-32 md:p-10">
+    <div className="p-6 pb-44 md:p-10 lg:pb-32">
       <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
       <h1 className="mb-6 mt-2 text-2xl font-extrabold tracking-tight md:text-3xl">New show</h1>
 
@@ -278,10 +278,14 @@ export default function NewShowClient({
         />
       )}
 
-      {/* Offset above the mobile tab-bar, as every floating action in this app
-          must be — two fixed-bottom elements otherwise collide. */}
-      <div className="fixed bottom-24 left-1/2 z-40 -translate-x-1/2 lg:bottom-6">
-        <Button onClick={createShow} disabled={!canCreate}>
+      {/* A bar on mobile, a floating pill on desktop.
+          A centred pill works on a wide screen where it lands below the content,
+          but on a tall phone form it floats over whatever happens to be at that
+          height — it was sitting on top of the crew call grid. A full-width bar
+          with its own background reads as chrome instead of debris, and it sits
+          above the tab-bar, since two fixed-bottom elements otherwise collide. */}
+      <div className="fixed inset-x-0 bottom-20 z-40 border-t border-line bg-bg px-4 py-3 lg:inset-x-auto lg:bottom-6 lg:left-1/2 lg:w-auto lg:-translate-x-1/2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+        <Button onClick={createShow} disabled={!canCreate} className="w-full lg:w-auto">
           {loading ? 'Creating…' : 'Create show'}
         </Button>
       </div>
