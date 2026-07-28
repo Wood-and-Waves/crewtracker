@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { cn } from '@/lib/cn'
 import { todayInZone } from '@/lib/showStatus'
-import { byShowAndDate, type ScheduleBooking, type ScheduleShow } from '@/lib/schedule'
+import { byShowAndDate, coverageFor, type ScheduleBooking, type ScheduleShow } from '@/lib/schedule'
 
 // The desktop schedule: one row per show, one column per calendar date.
 //
@@ -173,22 +173,29 @@ export default function ScheduleGrid({
                   )
                 }
 
+                const cover = coverageFor(show, date, crew)
+                // Rooms, not names: this is an overview. The tooltip says which
+                // rooms are short, which is the actionable part; who is on them
+                // is a click away on the day itself.
+                const rooms = show.roomsByDate[date] ?? []
+                const detail = rooms.length
+                  ? rooms.map(r => `${r.name}: ${
+                      crew.filter(c => c.roomId === r.id).length || 'nobody'
+                    }`).join(' · ')
+                  : 'No rooms set up yet'
+
                 return (
                   <Link
                     key={date}
                     href={`/dashboard/shows/${show.id}?day=${dayNumber}`}
-                    title={
-                      crew.length === 0
-                        ? `${show.name} — day ${dayNumber}, nobody booked`
-                        : `${show.name} — day ${dayNumber}: ${crew.map(c => c.crewName).join(', ')}`
-                    }
+                    title={`${show.name} — day ${dayNumber}\n${detail}`}
                     className={cn(
-                      'flex items-center justify-center border-r border-line py-2.5 transition-colors last:border-r-0 hover:bg-accent-wash',
+                      'flex items-center justify-center gap-1 border-r border-line py-2.5 transition-colors last:border-r-0 hover:bg-accent-wash',
                       p.isWeekend && 'bg-bg',
                       isToday && 'bg-accent-wash/40',
                     )}
                   >
-                    {crew.length === 0 ? (
+                    {cover.crewCount === 0 ? (
                       // A running day with nobody on it. Deliberately legible
                       // rather than empty — this is the gap worth spotting. An
                       // open ring reads as "space to fill" against the solid
@@ -196,7 +203,15 @@ export default function ScheduleGrid({
                       // needs-attention rather than the brand accent.
                       <span className="h-2.5 w-2.5 rounded-full border-[1.5px] border-ot" />
                     ) : (
-                      <span className="text-[13px] font-bold text-ink">{crew.length}</span>
+                      <>
+                        <span className="text-[13px] font-bold text-ink">{cover.crewCount}</span>
+                        {/* Partly covered: some crew are booked, but a room on
+                            this day still has nobody in it. Without this the
+                            cell reads as "handled" when it is not. */}
+                        {cover.roomsUnstaffed > 0 && (
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ot" />
+                        )}
+                      </>
                     )}
                   </Link>
                 )
@@ -213,7 +228,10 @@ export default function ScheduleGrid({
           <span className="font-bold text-ink">6</span> crew booked
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full border-[1.5px] border-ot" /> show day, nobody booked
+          <span className="h-1.5 w-1.5 rounded-full bg-ot" /> a room still unstaffed
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full border-[1.5px] border-ot" /> nobody booked at all
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-4 rounded-sm bg-accent-wash" /> today

@@ -185,6 +185,12 @@ async function seedInto(orgId) {
     // visible: without it, "show running, nobody on it" and "show not running"
     // look identical, and the gap you are meant to spot is the one that hides.
     ['Kestrel Regional Roadshow','Pier 27',                      'San Francisco, CA','America/Los_Angeles',   4, 3, ['Main Stage'],                            0,  0, 'none'],
+    // PARTLY staffed: three rooms, only enough crew to fill the first. The
+    // main stage is covered and the breakouts are not — the most common real
+    // state of a show mid-crewing, and the one a schedule has to distinguish
+    // from "done". Without it the only states in the data are all-or-nothing,
+    // and a cell that says "8" looks equally finished either way.
+    ['Beacon Field Summit',      'Moscone West',                 'San Francisco, CA','America/Los_Angeles',   5, 3, ['Main Stage','Breakout A','Breakout B'],  0,  3, 'none'],
   ]
 
   for (const [name, venue, city, tz, startOffset, days, rooms, crewFrom, crewTo, punches] of SHOWS) {

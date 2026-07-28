@@ -17,7 +17,8 @@
 // the EARLIEST of them so nothing that is today somewhere falls off the edge.
 
 import { addDays, dateRange } from '../../lib/datetime.ts'
-import { byShowAndDate, crewKey, resolveWindow, type ScheduleBooking } from '../../lib/schedule.ts'
+import { byShowAndDate, coverageFor, crewKey, resolveWindow,
+         type ScheduleBooking, type ScheduleShow } from '../../lib/schedule.ts'
 import { todayInZone } from '../../lib/showStatus.ts'
 
 let pass = 0, fail = 0
@@ -86,6 +87,46 @@ check('an empty cell is absent, not empty', grouped.get('s2|2026-07-29'), undefi
 // Sorted so the grid does not reshuffle between loads on the database's whim.
 check('sorts crew by name inside a cell',
   grouped.get('s1|2026-07-28')?.map(x => x.crewName), ['Alex Reyes', 'Rowan Aoki'])
+
+console.log('\ncoverageFor')
+const show = (rooms: { id: string; name: string }[]): ScheduleShow => ({
+  id: 's1', name: 'Beacon Field Summit', venue: 'Moscone West', cityState: null,
+  timezone: 'America/Los_Angeles', startDate: '2026-08-02', endDate: '2026-08-04',
+  finalizedAt: null, dayNumbers: { '2026-08-02': 1 }, roomsByDate: { '2026-08-02': rooms },
+})
+const threeRooms = show([{ id: 'r1', name: 'Main Stage' }, { id: 'r2', name: 'Breakout A' }, { id: 'r3', name: 'Breakout B' }])
+const inRoom = (roomId: string, crewName: string): ScheduleBooking => ({
+  timecardId: `${roomId}-${crewName}`, crewMemberId: null, crewName, role: 'A1',
+  isTravelDay: false, roomId, roomName: roomId, date: '2026-08-02', showId: 's1',
+})
+
+const partly = coverageFor(threeRooms, '2026-08-02', [inRoom('r1', 'Alex'), inRoom('r1', 'Bo')])
+check('counts the crew booked', partly.crewCount, 2)
+check('counts every room on the day', partly.roomsTotal, 3)
+// Two people in ONE room is one room covered, not two. Counting timecards here
+// would report the day as better covered than it is.
+check('counts rooms with anyone in them, not headcount', partly.roomsStaffed, 1)
+check('reports the rooms still to fill', partly.roomsUnstaffed, 2)
+
+const full = coverageFor(threeRooms, '2026-08-02', [inRoom('r1', 'Alex'), inRoom('r2', 'Bo'), inRoom('r3', 'Cass')])
+check('a fully covered day has nothing to fill', full.roomsUnstaffed, 0)
+
+const none = coverageFor(threeRooms, '2026-08-02', [])
+check('nobody booked still knows how many rooms need filling', none.roomsUnstaffed, 3)
+check('nobody booked has no crew', none.crewCount, 0)
+
+// A day whose rooms have not been created yet: the show runs, but there is
+// nothing to be short of. Reporting "0 to fill" is right — reporting a negative
+// number, or treating it as fully covered, is not.
+const noRooms = coverageFor(show([]), '2026-08-02', [])
+check('a day with no rooms yet has none to fill', noRooms.roomsUnstaffed, 0)
+check('a day with no rooms yet has no total', noRooms.roomsTotal, 0)
+
+// Defensive: a booking naming a room the shows query did not return must never
+// produce a negative shortfall.
+const stray = coverageFor(show([{ id: 'r1', name: 'Main Stage' }]), '2026-08-02',
+  [inRoom('r1', 'Alex'), inRoom('r9', 'Ghost')])
+check('a stray room never makes the shortfall negative', stray.roomsUnstaffed, 0)
 
 console.log('\nresolveWindow')
 check('defaults to 14 days', resolveWindow({}, ['America/Chicago']).days, 14)

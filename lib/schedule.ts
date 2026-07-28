@@ -50,6 +50,15 @@ export type ScheduleShow = {
   finalizedAt: string | null
   /** date -> day_number, so a cell can link straight to that day of the tracker. */
   dayNumbers: Record<string, number>
+  /**
+   * date -> the rooms running that day.
+   *
+   * This is what makes "spots needed" expressible without new schema. A room is
+   * created when the show is built; crew attach to rooms. So a room with nobody
+   * in it is an unfilled position that already exists in the data — the only
+   * sense in which the app can currently say a day is under-staffed.
+   */
+  roomsByDate: Record<string, { id: string; name: string }[]>
 }
 
 // NEVER select('*') on timecards. `authenticated` holds no SELECT grant on
@@ -147,7 +156,7 @@ export async function fetchScheduleShows(
     .select(`
       id, name, venue, city_state, timezone_identifier, start_date, end_date,
       archived, finalized_at,
-      work_days!inner ( date, day_number )
+      work_days!inner ( date, day_number, rooms ( id, name ) )
     `)
     .gte('work_days.date', start)
     .lte('work_days.date', end)
@@ -158,8 +167,15 @@ export async function fetchScheduleShows(
 
   return ((data ?? []) as any[]).map((s) => {
     const dayNumbers: Record<string, number> = {}
+    const roomsByDate: Record<string, { id: string; name: string }[]> = {}
     for (const w of (Array.isArray(s.work_days) ? s.work_days : [s.work_days]).filter(Boolean)) {
       dayNumbers[w.date] = w.day_number
+      // `rooms` is embedded WITHOUT !inner on purpose: a day whose rooms have
+      // not been created yet must still appear as a day the show is running.
+      // !inner would silently drop it, which is the opposite of the point.
+      roomsByDate[w.date] = (Array.isArray(w.rooms) ? w.rooms : [w.rooms])
+        .filter(Boolean)
+        .map((r: any) => ({ id: r.id, name: r.name }))
     }
     return {
       id: s.id,
@@ -171,8 +187,40 @@ export async function fetchScheduleShows(
       endDate: s.end_date,
       finalizedAt: s.finalized_at ?? null,
       dayNumbers,
+      roomsByDate,
     }
   })
+}
+
+/**
+ * How well covered one show-day is: crew booked, and how many of its rooms
+ * still have nobody in them.
+ *
+ * This is the schedule's unit of meaning. The screen is an overview, so a cell
+ * answers "is this day covered", not "who is on it" — a couple of sampled names
+ * implies a precision the cell cannot deliver, and the full list is a click
+ * away on the day itself.
+ *
+ * `roomsUnstaffed` is the closest thing the app can currently say to "spots
+ * needed". It is a real signal, not a proxy: somebody created that room because
+ * the show needs it covered. It is NOT a headcount target — nothing in the
+ * schema yet says a room needs four people rather than one.
+ */
+export function coverageFor(
+  show: ScheduleShow,
+  date: string,
+  crew: ScheduleBooking[],
+): { crewCount: number; roomsTotal: number; roomsStaffed: number; roomsUnstaffed: number } {
+  const roomsTotal = (show.roomsByDate[date] ?? []).length
+  const roomsStaffed = new Set(crew.map(c => c.roomId)).size
+  return {
+    crewCount: crew.length,
+    roomsTotal,
+    roomsStaffed,
+    // Never negative: a booking could in principle reference a room the shows
+    // query didn't return, and a negative "unstaffed" count would be nonsense.
+    roomsUnstaffed: Math.max(0, roomsTotal - roomsStaffed),
+  }
 }
 
 /** Bookings keyed `${showId}|${date}` — how the grid looks a cell up. */

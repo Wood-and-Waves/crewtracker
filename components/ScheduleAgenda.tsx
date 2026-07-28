@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/cn'
 import Chip from '@/components/ui/Chip'
 import { todayInZone } from '@/lib/showStatus'
-import { byShowAndDate, type ScheduleBooking, type ScheduleShow } from '@/lib/schedule'
+import { byShowAndDate, coverageFor, type ScheduleBooking, type ScheduleShow } from '@/lib/schedule'
 
 // The schedule below 1024px: a vertical agenda, one section per date.
 //
@@ -73,6 +73,7 @@ export default function ScheduleAgenda({
             <div className="space-y-2">
               {running.map(show => {
                 const crew = cells.get(`${show.id}|${date}`) ?? []
+                const cover = coverageFor(show, date, crew)
                 return (
                   <Link
                     key={show.id}
@@ -88,14 +89,25 @@ export default function ScheduleAgenda({
                           </div>
                         )}
                       </div>
-                      {crew.length === 0
-                        ? <Chip tone="neutral">Not staffed</Chip>
-                        : <Chip tone="neutral">{crew.length} crew</Chip>}
+                      {cover.crewCount === 0
+                        ? <Chip tone="ot">Nobody booked</Chip>
+                        : cover.roomsUnstaffed > 0
+                          ? <Chip tone="ot">{cover.crewCount} crew</Chip>
+                          : <Chip tone="neutral">{cover.crewCount} crew</Chip>}
                     </div>
 
-                    {crew.length > 0 && (
-                      <div className="mt-2 truncate text-xs text-muted">
-                        {crew.map(c => c.crewName).join(', ')}
+                    {/* Coverage, not a cast list. A truncated sample of names
+                        implies a precision it cannot deliver, and the real
+                        question here is whether the day is covered. */}
+                    {cover.roomsTotal > 0 && (
+                      <div className="mt-2 text-xs text-muted">
+                        {cover.roomsStaffed} of {cover.roomsTotal} room
+                        {cover.roomsTotal === 1 ? '' : 's'} staffed
+                        {cover.roomsUnstaffed > 0 && (
+                          <span className="text-ot">
+                            {' '}· {cover.roomsUnstaffed} still to fill
+                          </span>
+                        )}
                       </div>
                     )}
                   </Link>
