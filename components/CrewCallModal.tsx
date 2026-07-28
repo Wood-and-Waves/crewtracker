@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
 import Chip from '@/components/ui/Chip'
 import Toggle from '@/components/ui/Toggle'
+import FillPositionPicker from '@/components/FillPositionPicker'
 
 // The crew call for one room on one day: the positions the show NEEDS.
 //
@@ -27,6 +28,8 @@ type Position = {
   role: string
   note: string | null
   filledBy: string | null
+  /** pencilled | invited | confirmed — null when the position is open. */
+  status: string | null
 }
 
 export default function CrewCallModal({
@@ -51,6 +54,8 @@ export default function CrewCallModal({
   const [quantity, setQuantity] = useState(1)
   const [applyAll, setApplyAll] = useState(true)
   const [laterDays, setLaterDays] = useState<string[]>([])
+  const [dayDate, setDayDate] = useState('')
+  const [filling, setFilling] = useState<{ id: string; role: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -84,7 +89,11 @@ export default function CrewCallModal({
 
       setPositions((pos ?? []).map((p: any) => {
         const live = (p.timecards ?? []).find((t: any) => t.booking_status !== 'declined')
-        return { id: p.id, role: p.role, note: p.note, filledBy: live?.crew_member_name ?? null }
+        return {
+        id: p.id, role: p.role, note: p.note,
+        filledBy: live?.crew_member_name ?? null,
+        status: live?.booking_status ?? null,
+      }
       }))
       setRoles((roleRows ?? []).map((r: any) => r.name))
 
@@ -95,6 +104,7 @@ export default function CrewCallModal({
         ? (room as any).work_days[0]
         : (room as any)?.work_days
       if (wd) {
+        setDayDate(wd.date)
         const { data: siblings } = await supabase
           .from('rooms')
           .select('id, work_days!inner(date, show_id)')
@@ -159,7 +169,11 @@ export default function CrewCallModal({
       .order('sort_order')
     setPositions((data ?? []).map((p: any) => {
       const live = (p.timecards ?? []).find((t: any) => t.booking_status !== 'declined')
-      return { id: p.id, role: p.role, note: p.note, filledBy: live?.crew_member_name ?? null }
+      return {
+        id: p.id, role: p.role, note: p.note,
+        filledBy: live?.crew_member_name ?? null,
+        status: live?.booking_status ?? null,
+      }
     }))
   }
 
@@ -200,8 +214,23 @@ export default function CrewCallModal({
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {p.filledBy
-                        ? <Chip tone="good">Filled</Chip>
+                        // 'pencilled' is penned in, nobody asked yet — showing
+                        // it as plain "Filled" is what makes people get asked
+                        // twice or not at all.
+                        ? <Chip tone={p.status === 'confirmed' ? 'good' : 'neutral'}>
+                            {p.status === 'confirmed' ? 'Confirmed'
+                              : p.status === 'invited' ? 'Asked'
+                              : 'Pencilled'}
+                          </Chip>
                         : <Chip tone="ot">Open</Chip>}
+                      {!p.filledBy && !locked && (
+                        <button
+                          onClick={() => setFilling({ id: p.id, role: p.role })}
+                          className="rounded-field px-2 py-1 text-xs font-semibold text-accent hover:bg-accent-wash"
+                        >
+                          Fill
+                        </button>
+                      )}
                       {!locked && (
                         <button
                           onClick={() => removePosition(p.id, p.filledBy)}
@@ -218,7 +247,24 @@ export default function CrewCallModal({
               </ul>
             )}
 
-            {!locked && (
+            {filling && dayDate && (
+              <div className="mb-4">
+                <FillPositionPicker
+                  positionId={filling.id}
+                  positionRole={filling.role}
+                  roomId={roomId}
+                  date={dayDate}
+                  onCancel={() => setFilling(null)}
+                  onFilled={async () => {
+                    setFilling(null)
+                    await reload()
+                    router.refresh()
+                  }}
+                />
+              </div>
+            )}
+
+            {!locked && !filling && (
               <div className="rounded-field border border-line p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                   Add positions
