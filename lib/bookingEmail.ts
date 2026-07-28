@@ -30,20 +30,91 @@ function fmtDate(d: string) {
   })
 }
 
-/** "Aug 2–4" when contiguous, otherwise every date listed. */
-export function describeDates(dates: string[]): string {
-  if (dates.length === 0) return 'dates to be confirmed'
-  if (dates.length === 1) return fmtDate(dates[0])
-  const sorted = [...dates].sort()
+/**
+ * One day of an engagement, as the crew member needs to understand it.
+ *
+ * `is_travel_day` is a day of travel and NO work. `travel_in_day` /
+ * `travel_out_day` are additive — travel AND a full day's work, which is a
+ * different commitment and the distinction people care about most when
+ * deciding whether they can take a job.
+ */
+export type EngagementDay = {
+  date: string
+  isTravelDay: boolean
+  travelIn: boolean
+  travelOut: boolean
+}
+
+type Kind = 'work' | 'travel' | 'travel+work'
+
+function kindOf(d: EngagementDay): Kind {
+  if (d.isTravelDay) return 'travel'
+  if (d.travelIn || d.travelOut) return 'travel+work'
+  return 'work'
+}
+
+const KIND_TEXT: Record<Exclude<Kind, 'work'>, string> = {
+  'travel': 'travel',
+  'travel+work': 'travel and work',
+}
+
+/**
+ * The dates, plus what the travel days actually are.
+ *
+ * "Jul 28 – Aug 4 · first day travel, last day travel and work" rather than a
+ * bare range. Dan asked for this specifically, and it is the difference between
+ * a crew member being able to answer the question and having to ring someone:
+ * an eight-day range where the first day is travel and the last is travel plus
+ * a full day's work is a very different job from eight days on site.
+ */
+export function describeDateParts(days: EngagementDay[]): { range: string; qualifiers: string | null } {
+  const full = describeDates(days)
+  const i = full.indexOf(' · ')
+  return i === -1
+    ? { range: full, qualifiers: null }
+    : { range: full.slice(0, i), qualifiers: full.slice(i + 3) }
+}
+
+export function describeDates(days: EngagementDay[]): string {
+  if (days.length === 0) return 'dates to be confirmed'
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date))
+
   const contiguous = sorted.every((d, i) => {
     if (i === 0) return true
-    const prev = new Date(sorted[i - 1] + 'T00:00:00')
+    const prev = new Date(sorted[i - 1].date + 'T00:00:00')
     prev.setDate(prev.getDate() + 1)
-    return prev.toISOString().slice(0, 10) === d
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(prev.getDate()).padStart(2, '0')}` === d.date
   })
-  return contiguous
-    ? `${fmtDate(sorted[0])} – ${fmtDate(sorted[sorted.length - 1])} (${sorted.length} days)`
-    : sorted.map(fmtDate).join(', ')
+
+  const range = sorted.length === 1
+    ? fmtDate(sorted[0].date)
+    : contiguous
+      ? `${fmtDate(sorted[0].date)} – ${fmtDate(sorted[sorted.length - 1].date)} (${sorted.length} days)`
+      : sorted.map(d => fmtDate(d.date)).join(', ')
+
+  if (sorted.length === 1) {
+    const k = kindOf(sorted[0])
+    return k === 'work' ? range : `${range} · ${KIND_TEXT[k]} only`
+  }
+
+  const first = kindOf(sorted[0])
+  const last = kindOf(sorted[sorted.length - 1])
+  const middle = sorted.slice(1, -1)
+    .map((d, i) => ({ d, k: kindOf(d), i }))
+    .filter(x => x.k !== 'work')
+
+  const parts: string[] = []
+  // Collapse the common symmetric case rather than saying the same thing twice.
+  if (first !== 'work' && first === last) {
+    parts.push(`first and last days ${KIND_TEXT[first]}`)
+  } else {
+    if (first !== 'work') parts.push(`first day ${KIND_TEXT[first]}`)
+    if (last !== 'work') parts.push(`last day ${KIND_TEXT[last]}`)
+  }
+  // A travel day in the middle is unusual enough to name explicitly.
+  for (const m of middle) parts.push(`${fmtDate(m.d.date)} ${KIND_TEXT[m.k as Exclude<Kind, 'work'>]}`)
+
+  return parts.length ? `${range} · ${parts.join(', ')}` : range
 }
 
 export type BookingRequestInput = {
@@ -54,12 +125,12 @@ export type BookingRequestInput = {
   cityState: string | null
   organizationName: string
   role: string | null
-  dates: string[]
+  days: EngagementDay[]
   link: string
 }
 
 export function buildBookingRequestEmail(input: BookingRequestInput) {
-  const when = describeDates(input.dates)
+  const when = describeDates(input.days)
   const where = input.venue || input.cityState || null
   const subject = `${input.organizationName}: are you available for ${input.showName}?`
 
@@ -111,14 +182,20 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
  * record the answer on the crew member's behalf.
  */
 export function buildBookingRequestText(input: Omit<BookingRequestInput, 'to' | 'link'>): string {
-  const when = describeDates(input.dates)
+  const { range, qualifiers } = describeDateParts(input.days)
   const where = input.venue || input.cityState
+  // Company names very often already end in a period ("Northwind Staging Co."),
+  // and "Co.." is the kind of detail that makes a message look automated.
+  const org = input.organizationName.replace(/\.$/, '')
   return [
-    `Hi ${input.crewName.split(' ')[0]}, it's ${input.organizationName}.`,
-    `Are you available for ${input.showName}${input.role ? ` as ${input.role}` : ''}?`,
-    `${when}${where ? ` at ${where}` : ''}.`,
-    'Let me know either way and I\'ll get you on the books.',
-  ].join(' ')
+    `Hi ${input.crewName.split(' ')[0]}, it's ${org}.`,
+    `Are you available for ${input.showName}${input.role ? ` as ${input.role}` : ''}${where ? ` at ${where}` : ''}?`,
+    // The travel note is its own sentence rather than trailing after a
+    // separator: it is the part people actually stop and read.
+    `${range}.`,
+    qualifiers ? `${qualifiers.charAt(0).toUpperCase()}${qualifiers.slice(1)}.` : null,
+    "Let me know either way and I'll get you on the books.",
+  ].filter(Boolean).join(' ')
 }
 
 export async function sendBookingRequestEmail(

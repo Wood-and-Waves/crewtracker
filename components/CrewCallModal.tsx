@@ -30,6 +30,9 @@ type Position = {
   filledBy: string | null
   /** pencilled | invited | confirmed — null when the position is open. */
   status: string | null
+  timecardId: string | null
+  /** 'work' | 'travel' | 'travel+work' — what this day is for this person. */
+  travel: 'work' | 'travel' | 'travel+work'
 }
 
 export default function CrewCallModal({
@@ -73,7 +76,7 @@ export default function CrewCallModal({
       const [{ data: pos, error: posErr }, { data: roleRows }, { data: room }] = await Promise.all([
         supabase
           .from('crew_call_positions')
-          .select('id, role, note, timecards(crew_member_name, booking_status)')
+          .select('id, role, note, timecards(id, crew_member_name, booking_status, is_travel_day, travel_in_day, travel_out_day)')
           .eq('room_id', roomId)
           .order('sort_order'),
         supabase.from('av_roles').select('name').order('sort_order'),
@@ -93,6 +96,10 @@ export default function CrewCallModal({
         id: p.id, role: p.role, note: p.note,
         filledBy: live?.crew_member_name ?? null,
         status: live?.booking_status ?? null,
+        timecardId: live?.id ?? null,
+        travel: live?.is_travel_day ? 'travel'
+          : (live?.travel_in_day || live?.travel_out_day) ? 'travel+work'
+          : 'work',
       }
       }))
       setRoles((roleRows ?? []).map((r: any) => r.name))
@@ -161,10 +168,32 @@ export default function CrewCallModal({
     router.refresh()
   }
 
+  // Travel is set when the booking is MADE, not discovered on site: it changes
+  // what is being asked of the person, and the request email says so.
+  //
+  // travel_in vs travel_out: the last day of the room's run is an out-leg,
+  // anything else an in-leg. Both are additive to that day's hours and payroll
+  // treats them symmetrically, so the distinction is descriptive rather than
+  // load-bearing — but guessing the wrong one would still read oddly.
+  async function setTravel(timecardId: string, next: 'work' | 'travel' | 'travel+work') {
+    setBusy(true)
+    setError('')
+    const isLastDay = laterDays.length === 0
+    const { error: e } = await supabase.from('timecards').update({
+      is_travel_day: next === 'travel',
+      travel_in_day: next === 'travel+work' && !isLastDay,
+      travel_out_day: next === 'travel+work' && isLastDay,
+    }).eq('id', timecardId)
+    setBusy(false)
+    if (e) { setError(e.message); return }
+    await reload()
+    router.refresh()
+  }
+
   async function reload() {
     const { data } = await supabase
       .from('crew_call_positions')
-      .select('id, role, note, timecards(crew_member_name, booking_status)')
+      .select('id, role, note, timecards(id, crew_member_name, booking_status, is_travel_day, travel_in_day, travel_out_day)')
       .eq('room_id', roomId)
       .order('sort_order')
     setPositions((data ?? []).map((p: any) => {
@@ -173,6 +202,10 @@ export default function CrewCallModal({
         id: p.id, role: p.role, note: p.note,
         filledBy: live?.crew_member_name ?? null,
         status: live?.booking_status ?? null,
+        timecardId: live?.id ?? null,
+        travel: live?.is_travel_day ? 'travel'
+          : (live?.travel_in_day || live?.travel_out_day) ? 'travel+work'
+          : 'work',
       }
     }))
   }
@@ -230,6 +263,19 @@ export default function CrewCallModal({
                         >
                           Fill
                         </button>
+                      )}
+                      {p.filledBy && p.timecardId && !locked && (
+                        <select
+                          value={p.travel}
+                          onChange={e => setTravel(p.timecardId!, e.target.value as any)}
+                          disabled={busy}
+                          aria-label={`What kind of day this is for ${p.filledBy}`}
+                          className="rounded-field border border-line bg-surface-2 px-1.5 py-1 text-[11px] text-ink outline-none focus:border-accent"
+                        >
+                          <option value="work" className="bg-surface-2 text-ink">Work</option>
+                          <option value="travel" className="bg-surface-2 text-ink">Travel</option>
+                          <option value="travel+work" className="bg-surface-2 text-ink">Travel + work</option>
+                        </select>
                       )}
                       {!locked && (
                         <button

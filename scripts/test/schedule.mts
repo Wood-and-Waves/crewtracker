@@ -20,6 +20,7 @@ import { addDays, dateRange } from '../../lib/datetime.ts'
 import { byShowAndDate, coverageFor, crewKey, resolveWindow,
          type ScheduleBooking, type ScheduleShow } from '../../lib/schedule.ts'
 import { todayInZone } from '../../lib/showStatus.ts'
+import { describeDates, buildBookingRequestText } from '../../lib/bookingEmail.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -155,6 +156,74 @@ check('starts at the earliest today across zones',
 check('a single zone uses its own today',
   resolveWindow({}, ['Pacific/Kiritimati']).start, todayInZone('Pacific/Kiritimati'))
 check('no zones at all still resolves', /^\d{4}-\d{2}-\d{2}$/.test(resolveWindow({}, []).start), true)
+
+
+// ---------------------------------------------------------------------------
+// Booking request wording. Dan: the ask has to say "7/28 through 8/4, first day
+// travel, last day travel and work" — a bare range cannot distinguish a travel
+// day from a full day on site, and that is what a crew member needs in order to
+// answer without ringing somebody.
+// ---------------------------------------------------------------------------
+const day = (date: string, kind: 'work' | 'travel' | 'in' | 'out' = 'work') => ({
+  date,
+  isTravelDay: kind === 'travel',
+  travelIn: kind === 'in',
+  travelOut: kind === 'out',
+})
+const run = (kinds: ('work' | 'travel' | 'in' | 'out')[], start = 28) =>
+  kinds.map((k, i) => day(addDays(`2026-07-${start}`, i), k))
+
+console.log('\ndescribeDates — travel')
+check('a plain run says only the range',
+  describeDates(run(['work', 'work', 'work'])), 'Tue, Jul 28 – Thu, Jul 30 (3 days)')
+check("Dan's case: travel in, travel-and-work out",
+  describeDates(run(['travel', 'work', 'work', 'work', 'work', 'work', 'work', 'out'])),
+  'Tue, Jul 28 – Tue, Aug 4 (8 days) · first day travel, last day travel and work')
+check('travel both ends collapses to one phrase',
+  describeDates(run(['travel', 'work', 'travel'])),
+  'Tue, Jul 28 – Thu, Jul 30 (3 days) · first and last days travel')
+check('travel in only',
+  describeDates(run(['travel', 'work', 'work'])),
+  'Tue, Jul 28 – Thu, Jul 30 (3 days) · first day travel')
+check('travel out only',
+  describeDates(run(['work', 'work', 'travel'])),
+  'Tue, Jul 28 – Thu, Jul 30 (3 days) · last day travel')
+check('travel-and-work both ends does not collapse into "travel"',
+  describeDates(run(['in', 'work', 'out'])),
+  'Tue, Jul 28 – Thu, Jul 30 (3 days) · first and last days travel and work')
+check('a mid-run travel day is named explicitly',
+  describeDates(run(['work', 'travel', 'work'])),
+  'Tue, Jul 28 – Thu, Jul 30 (3 days) · Wed, Jul 29 travel')
+check('a single travel day says travel only',
+  describeDates([day('2026-07-28', 'travel')]), 'Tue, Jul 28 · travel only')
+check('a single work day is just the date',
+  describeDates([day('2026-07-28')]), 'Tue, Jul 28')
+check('no days at all does not render an empty range',
+  describeDates([]), 'dates to be confirmed')
+// Non-contiguous: the partial-show case Dan flagged as coming later. It must
+// already read correctly rather than implying days nobody is booked for.
+check('non-contiguous days are listed, never collapsed into a range',
+  describeDates([day('2026-07-28'), day('2026-07-31', 'travel')]),
+  'Tue, Jul 28, Fri, Jul 31 · last day travel')
+// Order is not guaranteed by the query; the description must not depend on it.
+check('unsorted input still reads in order',
+  describeDates([day('2026-07-30'), day('2026-07-28', 'travel'), day('2026-07-29')]),
+  'Tue, Jul 28 – Thu, Jul 30 (3 days) · first day travel')
+
+console.log('\nbuildBookingRequestText')
+const sms = buildBookingRequestText({
+  crewName: 'Alex Reyes', showName: 'Beacon Field Summit', venue: 'Moscone West',
+  cityState: null, organizationName: 'Northwind Staging Co.', role: 'A1',
+  days: run(['travel', 'work', 'out']),
+})
+// A company name ending in a period must not produce "Co..".
+check('no doubled period after a company name', /Co\.\./.test(sms), false)
+check('the travel note is its own sentence', sms.includes('First day travel, last day travel and work.'), true)
+check('venue sits with the question, not after the dates', sms.includes('as A1 at Moscone West?'), true)
+// The texted version must never carry a link — an action-link by SMS is
+// indistinguishable from phishing, and Dan asked for no action links.
+check('no link in the text message', /https?:\/\//.test(sms), false)
+check('no money in the text message', /\$/.test(sms), false)
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

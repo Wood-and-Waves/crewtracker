@@ -87,12 +87,23 @@ export default async function BookingPage({
       <div className="mb-5 rounded-field border border-line bg-surface-2 px-4 py-3">
         <p className="text-sm font-semibold text-ink">{invite.crewName}</p>
         {invite.role && <p className="text-xs text-muted">{invite.role}</p>}
+        {/* Each day says what it IS. A range alone cannot distinguish a
+            travel day from a full day on site, and that is the difference
+            between being able to answer and having to ring someone. */}
         <ul className="mt-2 space-y-0.5">
-          {invite.dates.map(d => (
-            <li key={d} className="text-sm text-ink">{fmtDate(d)}</li>
-          ))}
+          {invite.days.map(d => {
+            const label = d.isTravelDay ? 'Travel'
+              : (d.travelIn || d.travelOut) ? 'Travel + work'
+              : null
+            return (
+              <li key={d.date} className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="text-ink">{fmtDate(d.date)}</span>
+                {label && <span className="shrink-0 text-xs text-muted">{label}</span>}
+              </li>
+            )
+          })}
         </ul>
-        {invite.dates.length === 0 && (
+        {invite.days.length === 0 && (
           <p className="mt-2 text-sm text-muted">Dates to be confirmed.</p>
         )}
       </div>

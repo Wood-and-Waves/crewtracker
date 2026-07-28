@@ -49,18 +49,29 @@ export async function POST(request: Request) {
   // selected: the request tells them nothing about money.
   const { data: timecards } = await supabase
     .from('timecards')
-    .select('id, role, rooms!inner ( work_days!inner ( date, show_id ) )')
+    .select('id, role, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id ) )')
     .eq('crew_member_id', crewMemberId)
     .eq('rooms.work_days.show_id', showId)
 
-  const dates = new Set<string>()
+  // Keyed by date so a person in two rooms on one day is still one day, and so
+  // the travel flags are ORed rather than whichever row came back last.
+  const byDate = new Map<string, { date: string; isTravelDay: boolean; travelIn: boolean; travelOut: boolean }>()
   let role: string | null = null
   for (const t of (timecards ?? []) as any[]) {
     const room = Array.isArray(t.rooms) ? t.rooms[0] : t.rooms
     const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-    if (wd?.date) dates.add(wd.date)
+    if (wd?.date) {
+      const prev = byDate.get(wd.date)
+      byDate.set(wd.date, {
+        date: wd.date,
+        isTravelDay: !!prev?.isTravelDay || t.is_travel_day === true,
+        travelIn: !!prev?.travelIn || t.travel_in_day === true,
+        travelOut: !!prev?.travelOut || t.travel_out_day === true,
+      })
+    }
     if (!role && t.role) role = t.role
   }
+  const dates = byDate
   if (dates.size === 0) {
     return NextResponse.json(
       { error: 'Book them onto a day before asking them to confirm.' },
@@ -112,7 +123,7 @@ export async function POST(request: Request) {
     cityState: show.city_state ?? null,
     organizationName: org?.name ?? 'the production team',
     role,
-    dates: [...dates].sort(),
+    days: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
   }
   const smsText = buildBookingRequestText(common)
 

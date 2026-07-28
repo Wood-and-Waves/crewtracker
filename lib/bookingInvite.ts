@@ -20,6 +20,7 @@
 // ==========================================================================
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { EngagementDay } from '@/lib/bookingEmail'
 
 export type BookingInviteView = {
   token: string
@@ -28,8 +29,8 @@ export type BookingInviteView = {
   venue: string | null
   cityState: string | null
   organizationName: string
-  /** Just this person's days, as 'YYYY-MM-DD', ascending. */
-  dates: string[]
+  /** Just this person's days, ascending, each marked travel or work. */
+  days: EngagementDay[]
   role: string | null
   expiresAt: string
   respondedAt: string | null
@@ -67,16 +68,26 @@ export async function loadBookingInvite(token: string): Promise<BookingInviteVie
   // deliberately absent — see the header.
   const { data: timecards } = await admin
     .from('timecards')
-    .select('role, rooms!inner ( work_days!inner ( date, show_id ) )')
+    .select('role, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id ) )')
     .eq('crew_member_id', invite.crew_member_id)
     .eq('rooms.work_days.show_id', invite.show_id)
 
-  const dates = new Set<string>()
+  // Keyed by date, flags ORed: somebody in two rooms on one day is one day, and
+  // a travel flag on either row makes the day a travel day.
+  const byDate = new Map<string, EngagementDay>()
   let role: string | null = null
   for (const t of (timecards ?? []) as any[]) {
     const room = Array.isArray(t.rooms) ? t.rooms[0] : t.rooms
     const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-    if (wd?.date) dates.add(wd.date)
+    if (wd?.date) {
+      const prev = byDate.get(wd.date)
+      byDate.set(wd.date, {
+        date: wd.date,
+        isTravelDay: !!prev?.isTravelDay || t.is_travel_day === true,
+        travelIn: !!prev?.travelIn || t.travel_in_day === true,
+        travelOut: !!prev?.travelOut || t.travel_out_day === true,
+      })
+    }
     if (!role && t.role) role = t.role
   }
 
@@ -87,7 +98,7 @@ export async function loadBookingInvite(token: string): Promise<BookingInviteVie
     venue: show.venue ?? null,
     cityState: show.city_state ?? null,
     organizationName: org?.name ?? 'the production team',
-    dates: [...dates].sort(),
+    days: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     role,
     expiresAt: invite.expires_at,
     respondedAt: invite.responded_at ?? null,
