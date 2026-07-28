@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
 import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -41,6 +42,19 @@ export default async function ShowDetailPage({
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
+  ])
+
+  // The crew call across the whole show, and who it was handed to. Counted
+  // rather than fetched — the sidebar only needs to know whether there is
+  // anything to hand over.
+  const [{ count: positionCount }, { data: scheduler }] = await Promise.all([
+    supabase
+      .from('crew_call_positions')
+      .select('id, rooms!inner(work_days!inner(show_id))', { count: 'exact', head: true })
+      .eq('rooms.work_days.show_id', id),
+    show?.scheduler_id
+      ? supabase.from('profiles').select('full_name, email').eq('id', show.scheduler_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
   if (!user) redirect('/login')
 
@@ -315,6 +329,12 @@ export default async function ShowDetailPage({
             showId={id}
             currentWorkDayId={activeDay.id}
             remainingWorkDayIds={remainingWorkDayIds}
+          />
+          <HandoffToSchedulerButton
+            showId={id}
+            approvedAt={show.call_approved_at ?? null}
+            schedulerName={(scheduler as any)?.full_name || (scheduler as any)?.email || null}
+            positionCount={positionCount ?? 0}
           />
           <Link href={`/dashboard/shows/${id}/edit`} className="w-full">
             <Button variant="ghost" size="sm" className="w-full">Edit Show</Button>
