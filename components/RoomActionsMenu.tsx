@@ -14,6 +14,7 @@ export default function RoomActionsMenu({
   crew = [],
   canViewRates = false,
   canEditRates = false,
+  locked = false,
 }: {
   roomId: string
   roomName: string
@@ -21,6 +22,8 @@ export default function RoomActionsMenu({
   crew?: RoomCrew[]
   canViewRates?: boolean
   canEditRates?: boolean
+  /** Show is finalized: crew edits write timecards, which are refused. */
+  locked?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -131,7 +134,11 @@ export default function RoomActionsMenu({
         <div className="absolute right-0 z-20 mt-1 w-64 rounded-card bg-surface border border-line p-3 shadow-xl">
           {mode === 'menu' && (
             <div className="flex flex-col gap-1">
-              <button onClick={startEditCrew} className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2">
+              <button
+                onClick={startEditCrew}
+                disabled={locked}
+                title={locked ? 'Times are locked — the final report has been sent.' : undefined}
+                className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
                 Edit crew
               </button>
               <button onClick={() => setMode('rename')} className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2">

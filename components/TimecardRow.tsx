@@ -9,6 +9,8 @@ import TimeEntryModal from '@/components/TimeEntryModal'
 import { cn } from '@/lib/cn'
 import { punchGridCols } from '@/lib/trackerLayout'
 
+const LOCKED_NOTE = 'Times are locked — the final report has been sent. An admin can unlock the show.'
+
 export default function TimecardRow({
   timecard,
   punches,
@@ -19,6 +21,7 @@ export default function TimecardRow({
   use24Hour = false,
   roundingMinutes = 1,
   visibleTypes,
+  locked = false,
 }: {
   timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean }
   punches: Punch[]
@@ -27,6 +30,8 @@ export default function TimecardRow({
   allTimecards: TimecardLike[]
   dayDate: string
   use24Hour?: boolean
+  /** Show is finalized: the database refuses punch and timecard writes. */
+  locked?: boolean
   roundingMinutes?: number
   /** Punch columns to render, computed once for the whole day so every row and
    *  every room lines up under the same header. */
@@ -140,11 +145,14 @@ export default function TimecardRow({
 
   function PunchCell({ type }: { type: PunchType }) {
     const done = punches.find(p => p.punch_type === type)
-    const disabled = isDisabled(type)
+    // Locked wins over chronology: a finalized show refuses every punch write,
+    // so offering a live-looking button that fails is worse than showing it off.
+    const disabled = locked || isDisabled(type)
     return (
       <button
         onClick={() => setEditingType(type)}
         disabled={disabled}
+        title={locked ? LOCKED_NOTE : undefined}
         className={cn(
           'rounded-[5px] h-12 lg:h-auto lg:aspect-[2/1] px-2 py-1 lg:px-1 lg:py-2 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
           'flex flex-col items-center justify-center gap-0.5 lg:gap-0',
@@ -215,6 +223,8 @@ export default function TimecardRow({
       <div className="flex flex-wrap gap-1.5 px-4 pb-3 lg:pb-3">
         <button
           onClick={() => toggleFlag('travel_in_day')}
+          disabled={locked}
+          title={locked ? LOCKED_NOTE : undefined}
           className={cn(
             'rounded-pill px-3 py-1 text-xs transition-colors',
             timecard.travel_in_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
@@ -224,6 +234,8 @@ export default function TimecardRow({
         </button>
         <button
           onClick={() => toggleFlag('travel_out_day')}
+          disabled={locked}
+          title={locked ? LOCKED_NOTE : undefined}
           className={cn(
             'rounded-pill px-3 py-1 text-xs transition-colors',
             timecard.travel_out_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
@@ -234,7 +246,8 @@ export default function TimecardRow({
         {showHalfDay && (
           <button
             onClick={() => toggleFlag('pay_as_half_day')}
-            title="Pay this day at half the day rate (offered only at 5 net hours or less)"
+            disabled={locked}
+            title={locked ? LOCKED_NOTE : 'Pay this day at half the day rate (offered only at 5 net hours or less)'}
             className={cn(
               'rounded-pill px-3 py-1 text-xs transition-colors',
               timecard.pay_as_half_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
@@ -246,8 +259,8 @@ export default function TimecardRow({
         {hasAnything && (
           <button
             onClick={resetRow}
-            disabled={busy}
-            title={`Reset ${timecard.crew_member_name}'s day — clears all punches and flags`}
+            disabled={busy || locked}
+            title={locked ? LOCKED_NOTE : `Reset ${timecard.crew_member_name}'s day — clears all punches and flags`}
             aria-label={`Reset ${timecard.crew_member_name}'s day`}
             className="ml-auto rounded-pill px-3 py-1 text-xs text-muted transition-colors hover:text-danger disabled:opacity-40"
           >

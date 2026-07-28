@@ -46,6 +46,7 @@ export default function MobileRoomTracker({
   canEditRates,
   copySourceByRoom = {},
   addDayControl,
+  locked = false,
 }: {
   className?: string
   showId: string
@@ -80,6 +81,8 @@ export default function MobileRoomTracker({
   copySourceByRoom?: Record<string, CopySource>
   /** Rendered in place of the next-day chevron on the last day. */
   addDayControl?: React.ReactNode
+  /** Show is finalized: punch and timecard writes are refused. */
+  locked?: boolean
 }) {
   const [selected, setSelected] = useState<'all' | string>('all')
   const [addCrewOpen, setAddCrewOpen] = useState(false)
@@ -113,6 +116,7 @@ export default function MobileRoomTracker({
         <p className="text-sm text-muted p-4 pb-2">No crew staffed yet.</p>
         {src && (
           <CopyCrewButton
+            locked={locked}
             targetRoomId={roomId}
             sourceRoomId={src.roomId}
             sourceDayNumber={src.dayNumber}
@@ -131,6 +135,7 @@ export default function MobileRoomTracker({
   function rowsFor(crew: any[]) {
     return crew.map(tc => (
       <TimecardRow
+        locked={locked}
         key={tc.id}
         timecard={tc}
         punches={tc.punches}
@@ -260,7 +265,7 @@ export default function MobileRoomTracker({
         <div className="space-y-4">
           {dayCrew.length > 0 && (
             <div className="rounded-card border border-line bg-surface">
-              <BatchPunchBar timecards={dayCrew} dayDate={dayDate} timezone={timezone} />
+              <BatchPunchBar timecards={dayCrew} dayDate={dayDate} timezone={timezone} locked={locked} />
             </div>
           )}
           {rooms.map(room => {
@@ -269,7 +274,7 @@ export default function MobileRoomTracker({
               <div key={room.id} className="rounded-card border border-line bg-surface">
                 <div className="flex items-center justify-between p-4 border-b border-line">
                   <h2 className="text-lg font-bold text-ink">{room.name}</h2>
-                  <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+                  <RoomActionsMenu locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
                 </div>
                 <div>
                   {crew.length === 0 && emptyRoster(room.id)}
@@ -286,9 +291,9 @@ export default function MobileRoomTracker({
             <div className="rounded-card border border-line bg-surface">
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{activeRoom!.name}</h2>
-                <RoomActionsMenu roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+                <RoomActionsMenu locked={locked} roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
-              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} />}
+              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} locked={locked} />}
               <div>
                 {crew.length === 0 && emptyRoster(activeRoom!.id)}
                 {rowsFor(crew)}
@@ -331,6 +336,7 @@ export default function MobileRoomTracker({
       {/* Controlled add-crew modal, opened by the header person+ icon */}
       {addCrewRoom && (
         <StaffRoomModal
+          locked={locked}
           open={addCrewOpen}
           onOpenChange={setAddCrewOpen}
           hideTrigger

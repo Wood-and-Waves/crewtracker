@@ -54,6 +54,13 @@ export default async function ShowDetailPage({
   const organizationId = user.organizationId
 
   const timezone = show.timezone_identifier || 'America/Chicago'
+  // Finalized shows: the database refuses every punch and timecard write
+  // (triggers on both tables). The UI used to present live controls anyway and
+  // surface the rejection on the row afterwards, which reads as a bug rather
+  // than a rule. Threaded into every control that writes those two tables.
+  // Room rename/delete and Add Day are deliberately NOT disabled — the lock
+  // does not cover rooms or work_days, so disabling them would misrepresent it.
+  const locked = !!show.finalized_at
 
   const { data: organization } = organizationId
     ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', organizationId).single()
@@ -337,6 +344,7 @@ export default async function ShowDetailPage({
         {roomsList.length > 1 && dayTimecards.length > 0 && (
           <div className="rounded-card border border-line bg-surface">
             <BatchPunchBar
+              locked={locked}
               timecards={dayTimecards}
               dayDate={activeDay.date}
               timezone={timezone}
@@ -351,10 +359,10 @@ export default async function ShowDetailPage({
             <div key={room.id} className="rounded-card border border-line bg-surface">
               <div className="flex items-center justify-between p-4 border-b border-line">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
-                <RoomActionsMenu roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+                <RoomActionsMenu locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
 
-              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} timezone={timezone} />}
+              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} timezone={timezone} locked={locked} />}
 
               {/* Column headers — only meaningful once there's a ruled table
                   to head; hidden on mobile where TimecardRow renders labeled
@@ -377,6 +385,7 @@ export default async function ShowDetailPage({
                     <p className="text-sm text-muted p-4 pb-2">No crew staffed yet.</p>
                     {copySourceByRoom[room.id] && (
                       <CopyCrewButton
+                        locked={locked}
                         targetRoomId={room.id}
                         sourceRoomId={copySourceByRoom[room.id]!.roomId}
                         sourceDayNumber={copySourceByRoom[room.id]!.dayNumber}
@@ -387,6 +396,7 @@ export default async function ShowDetailPage({
                 )}
                 {crew.map(tc => (
                   <TimecardRow
+                    locked={locked}
                     key={tc.id}
                     timecard={tc}
                     punches={tc.punches}
@@ -403,6 +413,7 @@ export default async function ShowDetailPage({
 
               <div className="p-4 pt-3">
                 <StaffRoomModal
+                  locked={locked}
                   organizationId={organizationId}
                   roomId={room.id}
                   roomName={room.name}
@@ -418,6 +429,7 @@ export default async function ShowDetailPage({
       </div>
 
       <MobileRoomTracker
+        locked={locked}
         className="lg:hidden min-w-0"
         showId={id}
         showName={show.name}
