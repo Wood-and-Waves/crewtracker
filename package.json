@@ -13,7 +13,10 @@
     "db:seed": "node --env-file=.env.local scripts/db-seed.mjs",
     "db:grants": "node --env-file=.env.local scripts/db-grants.mjs",
     "db:migrate": "node --env-file=.env.local scripts/db-migrate.mjs",
-    "dev:login": "node --env-file=.env.local scripts/dev-login.mjs"
+    "dev:login": "node --env-file=.env.local scripts/dev-login.mjs",
+    "test:payroll": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/payroll.mts",
+    "test:rls": "node --no-warnings --env-file=.env.local --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/rls.mts",
+    "test": "npm run test:payroll && npm run test:rls"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
