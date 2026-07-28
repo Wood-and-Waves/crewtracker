@@ -52,6 +52,33 @@ export default async function DashboardPage({
   const shows = (allShows || []).filter(s => !!s.archived === showingArchived)
   const archivedCount = (allShows || []).filter(s => s.archived).length
 
+  // How far along each show's crewing is, for the New / Staffing / Pre-show
+  // distinction on the cards.
+  //
+  // One query for the whole page rather than one per show: the card list is the
+  // first thing anyone sees, and N+1 queries behind it is how a dashboard gets
+  // slow quietly. Aggregated here rather than in SQL because PostgREST cannot
+  // group, and at beta size the row count is small — worth revisiting with a
+  // view if an organization ever carries hundreds of live shows.
+  const { data: callRows } = await supabase
+    .from('crew_call_positions')
+    .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( show_id ) )')
+
+  const callByShow = new Map<string, { total: number; filled: number }>()
+  for (const row of (callRows ?? []) as any[]) {
+    const room = Array.isArray(row.rooms) ? row.rooms[0] : row.rooms
+    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+    const showId = wd?.show_id
+    if (!showId) continue
+    const entry = callByShow.get(showId) ?? { total: 0, filled: 0 }
+    entry.total += 1
+    // A declined person does not hold their position, so they do not count it
+    // as filled — the same rule the database enforces with a partial index.
+    const live = (row.timecards ?? []).some((t: any) => t.booking_status !== 'declined')
+    if (live) entry.filled += 1
+    callByShow.set(showId, entry)
+  }
+
   return (
     <div className="p-6 md:p-10">
       <div className="mb-6 flex items-center justify-between gap-4">
@@ -104,7 +131,12 @@ export default async function DashboardPage({
                   )}
                   <div className="mt-4">
                     {(() => {
-                      const status = showStatus(show)
+                      const call = callByShow.get(show.id)
+                      const status = showStatus({
+                        ...show,
+                        positionsTotal: call?.total ?? 0,
+                        positionsFilled: call?.filled ?? 0,
+                      })
                       const { label, tone } = SHOW_STATUS_META[status]
                       return (
                         <Chip tone={tone}>

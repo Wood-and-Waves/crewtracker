@@ -19,7 +19,7 @@
 import { addDays, dateRange } from '../../lib/datetime.ts'
 import { byShowAndDate, coverageFor, crewKey, resolveWindow,
          type ScheduleBooking, type ScheduleShow } from '../../lib/schedule.ts'
-import { todayInZone } from '../../lib/showStatus.ts'
+import { todayInZone, showStatus } from '../../lib/showStatus.ts'
 import { describeDates, buildBookingRequestText } from '../../lib/bookingEmail.ts'
 
 let pass = 0, fail = 0
@@ -224,6 +224,45 @@ check('venue sits with the question, not after the dates', sms.includes('as A1 a
 // indistinguishable from phishing, and Dan asked for no action links.
 check('no link in the text message', /https?:\/\//.test(sms), false)
 check('no money in the text message', /\$/.test(sms), false)
+
+// ---------------------------------------------------------------------------
+// Show status. Dan asked for New and Staffing alongside the existing states, so
+// a created show and a fully-crewed one stop looking identical. The precedence
+// is the subtle part: dates win once a show has reached them.
+// ---------------------------------------------------------------------------
+console.log('\nshowStatus')
+const future = { start_date: '2026-12-01', end_date: '2026-12-05' }
+const today = '2026-07-28'
+const st = (over: Record<string, unknown>) => showStatus({ ...future, ...over } as any, today)
+
+check('a show with no call yet is New', st({ positionsTotal: 0, positionsFilled: 0 }), 'new')
+check('a part-filled call is Staffing', st({ positionsTotal: 4, positionsFilled: 1 }), 'staffing')
+check('an unfilled call is Staffing, not New', st({ positionsTotal: 4, positionsFilled: 0 }), 'staffing')
+check('a fully filled call is Pre-show', st({ positionsTotal: 4, positionsFilled: 4 }), 'preshow')
+// Shows created before the crew call existed carry no counts at all and must
+// not all collapse to one state by accident.
+check('missing counts read as New rather than crashing', st({}), 'new')
+
+// Dates outrank crewing once reached: a show on site today is Active whether or
+// not its paperwork was ever finished.
+check('a running show is Active even with an empty call',
+  showStatus({ start_date: '2026-07-27', end_date: '2026-07-29', positionsTotal: 0, positionsFilled: 0 } as any, today), 'active')
+check('a running show is Active even when short-staffed',
+  showStatus({ start_date: '2026-07-27', end_date: '2026-07-29', positionsTotal: 6, positionsFilled: 2 } as any, today), 'active')
+check('a past show is Wrapped, not Staffing',
+  showStatus({ start_date: '2026-07-01', end_date: '2026-07-05', positionsTotal: 6, positionsFilled: 0 } as any, today), 'wrapped')
+check('the first day counts as Active',
+  showStatus({ start_date: today, end_date: '2026-07-30' } as any, today), 'active')
+check('the last day counts as Active',
+  showStatus({ start_date: '2026-07-26', end_date: today } as any, today), 'active')
+
+// Archiving and finalizing are filing decisions and outrank everything.
+check('archived beats every other state',
+  st({ archived: true, positionsTotal: 0 }), 'archived')
+check('finalized beats crewing state',
+  st({ finalized_at: '2026-07-20T00:00:00Z', positionsTotal: 4, positionsFilled: 0 }), 'finalized')
+check('archived beats finalized',
+  st({ archived: true, finalized_at: '2026-07-20T00:00:00Z' }), 'archived')
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

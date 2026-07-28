@@ -6,7 +6,8 @@
 //
 // Plain module, no 'use client': used by the server-rendered dashboard.
 
-export type ShowStatus = 'preshow' | 'active' | 'wrapped' | 'finalized' | 'archived'
+export type ShowStatus =
+  | 'new' | 'staffing' | 'preshow' | 'active' | 'wrapped' | 'finalized' | 'archived'
 
 export type ShowStatusInput = {
   archived?: boolean | null
@@ -14,6 +15,12 @@ export type ShowStatusInput = {
   start_date: string
   end_date: string
   timezone_identifier?: string | null
+  /**
+   * The crew call. Both default to 0, which reads as 'new' — correct for every
+   * show created before the call existed, and for one nobody has built yet.
+   */
+  positionsTotal?: number
+  positionsFilled?: number
 }
 
 /**
@@ -40,9 +47,19 @@ export function showStatus(show: ShowStatusInput, now?: string): ShowStatus {
   if (show.finalized_at) return 'finalized'
 
   const today = now ?? todayInZone(show.timezone_identifier || 'America/Chicago')
-  if (today < show.start_date) return 'preshow'
+  // Dates decide first once a show has reached them. A show running today is
+  // Active whether or not its call was ever finished — "still staffing" is not
+  // useful information about something already on site, and a PM opening the
+  // tracker needs to see the show's real state, not its paperwork.
   if (today > show.end_date) return 'wrapped'
-  return 'active'
+  if (today >= show.start_date) return 'active'
+
+  // Before it starts, the interesting question is how far along the crewing is.
+  const total = show.positionsTotal ?? 0
+  const filled = show.positionsFilled ?? 0
+  if (total === 0) return 'new'
+  if (filled < total) return 'staffing'
+  return 'preshow'
 }
 
 /**
@@ -56,6 +73,12 @@ export const SHOW_STATUS_META: Record<
   ShowStatus,
   { label: string; tone: 'neutral' | 'live' | 'ot' | 'good' | 'danger' }
 > = {
+  // 'new' and 'staffing' both carry work outstanding, but only one of them is
+  // waiting on somebody: a show with no call yet is waiting on whoever builds
+  // it, so it stays quiet, while a part-filled call is the amber the app
+  // already uses for needs-attention.
+  new:       { label: 'New',       tone: 'neutral' },
+  staffing:  { label: 'Staffing',  tone: 'ot' },
   preshow:   { label: 'Pre-show',  tone: 'neutral' },
   active:    { label: 'Active',    tone: 'live' },
   wrapped:   { label: 'Wrapped',   tone: 'ot' },
