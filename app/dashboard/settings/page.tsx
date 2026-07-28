@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, getMyOrganizations } from '@/lib/session'
 import { redirect } from 'next/navigation'
+import OrgSwitcherCard from '@/components/OrgSwitcherCard'
 import PersonalSettingsClient from '@/components/PersonalSettingsClient'
 import OrgSettingsClient from '@/components/OrgSettingsClient'
 import AVRolesEditor from '@/components/AVRolesEditor'
@@ -9,6 +10,7 @@ import PayrollPresetsEditor from '@/components/PayrollPresetsEditor'
 export default async function SettingsPage() {
   const supabase = await createClient()
   const user = await getCurrentUser()
+  const organizations = await getMyOrganizations()
   if (!user) redirect('/login')
 
   if (!user.organizationId) {
@@ -32,6 +34,13 @@ export default async function SettingsPage() {
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start max-w-4xl">
         <div className="mb-5 lg:mb-0">
+          {/* Renders nothing below two companies. This is the ONLY switcher on
+              mobile — AppShell's account menu is desktop-only. */}
+          {organizations.length > 1 && (
+            <div className="mb-5">
+              <OrgSwitcherCard organizations={organizations} userId={user.id} />
+            </div>
+          )}
           <PersonalSettingsClient
             use24HourTime={user.use24Hour}
             shoulderSurferMode={user.shoulderSurfer}
