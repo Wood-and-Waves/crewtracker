@@ -21,6 +21,8 @@ export type ShowStatusInput = {
    */
   positionsTotal?: number
   positionsFilled?: number
+  /** Non-null once the call has been approved and handed to a scheduler. */
+  call_approved_at?: string | null
 }
 
 /**
@@ -57,9 +59,19 @@ export function showStatus(show: ShowStatusInput, now?: string): ShowStatus {
   // Before it starts, the interesting question is how far along the crewing is.
   const total = show.positionsTotal ?? 0
   const filled = show.positionsFilled ?? 0
-  if (total === 0) return 'new'
-  if (filled < total) return 'staffing'
-  return 'preshow'
+
+  // Nothing to crew: fully filled is ready regardless of who did it, which
+  // covers an admin who simply booked everyone themselves.
+  if (total > 0 && filled >= total) return 'preshow'
+
+  // STAFFING MEANS HANDED OVER, not merely "a call exists". Since the call is
+  // now built during show creation, every show has positions from the moment it
+  // exists — so keying off positions alone made 'new' unreachable and marked
+  // shows as being staffed while the person who created them was still writing
+  // the call. The handoff is the real transition, and it is the one Dan's
+  // process turns on: admin builds the call, approves it, and only then does
+  // the scheduler start work.
+  return show.call_approved_at ? 'staffing' : 'new'
 }
 
 /**
@@ -71,14 +83,13 @@ export function showStatus(show: ShowStatusInput, now?: string): ShowStatus {
  */
 export const SHOW_STATUS_META: Record<
   ShowStatus,
-  { label: string; tone: 'neutral' | 'live' | 'ot' | 'good' | 'danger' }
+  { label: string; tone: 'neutral' | 'live' | 'ot' | 'good' | 'danger' | 'staffing' }
 > = {
-  // 'new' and 'staffing' both carry work outstanding, but only one of them is
-  // waiting on somebody: a show with no call yet is waiting on whoever builds
-  // it, so it stays quiet, while a part-filled call is the amber the app
-  // already uses for needs-attention.
+  // Staffing gets its own colour rather than the needs-attention amber: a show
+  // being crewed is on track, not a problem, and colouring it the same as an
+  // overdue one teaches people to ignore the amber.
   new:       { label: 'New',       tone: 'neutral' },
-  staffing:  { label: 'Staffing',  tone: 'ot' },
+  staffing:  { label: 'Staffing',  tone: 'staffing' },
   preshow:   { label: 'Pre-show',  tone: 'neutral' },
   active:    { label: 'Active',    tone: 'live' },
   wrapped:   { label: 'Wrapped',   tone: 'ot' },

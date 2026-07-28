@@ -1,8 +1,9 @@
 import { cn } from "@/lib/cn"
 
 // Status chip. `tone` carries semantic state (separate from the brand accent):
-// live = in progress, ot = overtime, good = complete/ok, danger = needs attention.
-type Tone = "neutral" | "live" | "ot" | "good" | "danger"
+// live = in progress, ot = overtime, good = complete/ok, danger = needs attention,
+// staffing = being crewed.
+type Tone = "neutral" | "live" | "ot" | "good" | "danger" | "staffing"
 
 const tones: Record<Tone, string> = {
   neutral: "border-line text-muted",
@@ -10,6 +11,9 @@ const tones: Record<Tone, string> = {
   ot: "border-ot text-ot",
   good: "border-good text-good",
   danger: "border-danger text-danger",
+  // Crewing in progress. Deliberately not the amber used for "needs
+  // attention": a show being staffed is on track, not a problem.
+  staffing: "border-staffing text-staffing",
 }
 
 export default function Chip({

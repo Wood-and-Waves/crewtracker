@@ -235,10 +235,24 @@ const future = { start_date: '2026-12-01', end_date: '2026-12-05' }
 const today = '2026-07-28'
 const st = (over: Record<string, unknown>) => showStatus({ ...future, ...over } as any, today)
 
+const approved = '2026-07-20T00:00:00Z'
 check('a show with no call yet is New', st({ positionsTotal: 0, positionsFilled: 0 }), 'new')
-check('a part-filled call is Staffing', st({ positionsTotal: 4, positionsFilled: 1 }), 'staffing')
-check('an unfilled call is Staffing, not New', st({ positionsTotal: 4, positionsFilled: 0 }), 'staffing')
-check('a fully filled call is Pre-show', st({ positionsTotal: 4, positionsFilled: 4 }), 'preshow')
+// The call is now built during show creation, so positions exist from the
+// moment a show does. Keying Staffing off positions alone made New unreachable
+// and flagged shows as being crewed while their author was still writing the
+// call — the handoff is the real transition.
+check('a call still being built is New, not Staffing',
+  st({ positionsTotal: 4, positionsFilled: 0 }), 'new')
+check('a part-filled call AFTER handoff is Staffing',
+  st({ positionsTotal: 4, positionsFilled: 1, call_approved_at: approved }), 'staffing')
+check('an untouched call after handoff is Staffing',
+  st({ positionsTotal: 4, positionsFilled: 0, call_approved_at: approved }), 'staffing')
+check('a fully filled call is Pre-show once handed off',
+  st({ positionsTotal: 4, positionsFilled: 4, call_approved_at: approved }), 'preshow')
+// An admin who books everyone personally never hands off, and the show is
+// still ready — reporting it as New would be wrong.
+check('fully filled without a handoff is still Pre-show',
+  st({ positionsTotal: 4, positionsFilled: 4 }), 'preshow')
 // Shows created before the crew call existed carry no counts at all and must
 // not all collapse to one state by accident.
 check('missing counts read as New rather than crashing', st({}), 'new')
@@ -248,7 +262,7 @@ check('missing counts read as New rather than crashing', st({}), 'new')
 check('a running show is Active even with an empty call',
   showStatus({ start_date: '2026-07-27', end_date: '2026-07-29', positionsTotal: 0, positionsFilled: 0 } as any, today), 'active')
 check('a running show is Active even when short-staffed',
-  showStatus({ start_date: '2026-07-27', end_date: '2026-07-29', positionsTotal: 6, positionsFilled: 2 } as any, today), 'active')
+  showStatus({ start_date: '2026-07-27', end_date: '2026-07-29', positionsTotal: 6, positionsFilled: 2, call_approved_at: approved } as any, today), 'active')
 check('a past show is Wrapped, not Staffing',
   showStatus({ start_date: '2026-07-01', end_date: '2026-07-05', positionsTotal: 6, positionsFilled: 0 } as any, today), 'wrapped')
 check('the first day counts as Active',
@@ -260,7 +274,7 @@ check('the last day counts as Active',
 check('archived beats every other state',
   st({ archived: true, positionsTotal: 0 }), 'archived')
 check('finalized beats crewing state',
-  st({ finalized_at: '2026-07-20T00:00:00Z', positionsTotal: 4, positionsFilled: 0 }), 'finalized')
+  st({ finalized_at: '2026-07-20T00:00:00Z', positionsTotal: 4, positionsFilled: 0, call_approved_at: approved }), 'finalized')
 check('archived beats finalized',
   st({ archived: true, finalized_at: '2026-07-20T00:00:00Z' }), 'archived')
 
