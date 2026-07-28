@@ -12,17 +12,21 @@ export default function InviteAuthForm({
   orgName,
   isNewOrg,
   restrictedEmail,
+  hasExistingAccount = false,
 }: {
   token: string
   orgName: string | null
   isNewOrg: boolean
   restrictedEmail: string | null
+  hasExistingAccount?: boolean
 }) {
   const supabase = createClient()
   const [email, setEmail] = useState(restrictedEmail || '')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
-  const [isSignUp, setIsSignUp] = useState(true)
+  // Defaults to signing IN when the invited address already has a login —
+  // otherwise signup silently no-ops and the invite dead-ends.
+  const [isSignUp, setIsSignUp] = useState(!hasExistingAccount)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [magicSent, setMagicSent] = useState(false)
@@ -108,6 +112,12 @@ export default function InviteAuthForm({
           <p className="mt-2 text-sm text-muted">
             {isNewOrg ? `You've been invited to create ${orgName}` : `You've been invited to join ${orgName}`}
           </p>
+          {hasExistingAccount && (
+            <p className="mt-3 rounded-field bg-surface-2 px-3 py-2 text-xs text-muted">
+              You already have a CrewTracker account. Sign in below and {orgName} will be
+              added to it — you&apos;ll be able to switch between them from your account menu.
+            </p>
+          )}
         </div>
 
         <button
