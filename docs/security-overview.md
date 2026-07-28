@@ -1,6 +1,6 @@
 # How CrewTracker protects your data
 
-*Last verified 27 July 2026 against the live system.*
+*Last verified 28 July 2026 against the live system.*
 
 CrewTracker holds information that production companies are right to be careful
 about: crew names and phone numbers, day rates, and a record of who worked which
@@ -30,7 +30,7 @@ actually in place, and the last section explains how each one was tested.
 ## Separation between companies
 
 Every table that holds your information carries an access policy that checks
-which organisation the person asking belongs to. There are **17 tables and 44
+which organisation the person asking belongs to. There are **17 tables and 46
 access policies**, and **no table is left without protection**.
 
 The important detail is *where* the check happens. It is applied by PostgreSQL
@@ -147,7 +147,7 @@ against the **live production system** using real, authenticated sessions rather
 than by reading the configuration:
 
 - Each account was exercised in turn and confirmed to see only its own company's
-  shows and crew — and specifically **not** the others' (29 checks, all passed).
+  shows and crew — and specifically **not** the others'.
 - Reading a pay rate directly was attempted from a signed-in session, including
   as an administrator, and was **refused by the database every time**.
 - The permission-checked route returned rates for the users entitled to see them
@@ -155,6 +155,13 @@ than by reading the configuration:
 - Access without signing in returned nothing from any table.
 - Turning off an individual permission was confirmed to block exactly the
   corresponding action and nothing else.
+- Removing someone from a company, and a stale record of which company they were
+  working in, were both confirmed to grant nothing.
+
+These are not one-off checks. They run as an automated suite against a separate
+development database — 58 assertions covering both the access rules and the
+payroll arithmetic — so a change that weakened any of them would be caught
+rather than noticed later.
 
 ## What we do not claim
 
