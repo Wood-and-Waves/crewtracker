@@ -26,7 +26,15 @@ export default async function SuperAdminPage() {
       admin.from('organizations').select('id, name, created_at, disabled_at').order('created_at', { ascending: false }),
       admin.from('subscriptions').select('organization_id, plan, status, trial_ends_at'),
       // organization_id only — counting members must not mean reading them.
-      admin.from('profiles').select('organization_id'),
+      //
+      // From memberships, not profiles: membership IS what "in this org" means
+      // now, and profiles.organization_id is being dropped. It is also simply
+      // more correct — one person working for two companies is a seat at each,
+      // which the old single column could not express.
+      //
+      // Deactivated members are excluded: they cannot sign in, so counting them
+      // would overstate every organization's seats on this screen.
+      admin.from('memberships').select('organization_id').is('deactivated_at', null),
       admin.from('shows').select('organization_id'),
       admin.from('invitations').select('*, organizations(name)').is('accepted_at', null).order('created_at', { ascending: false }),
     ])
