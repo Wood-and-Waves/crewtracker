@@ -83,16 +83,27 @@ export function showStatus(show: ShowStatusInput, now?: string): ShowStatus {
  */
 export const SHOW_STATUS_META: Record<
   ShowStatus,
-  { label: string; tone: 'neutral' | 'live' | 'ot' | 'good' | 'danger' | 'staffing' }
+  {
+    label: string
+    tone: 'neutral' | 'live' | 'ot' | 'good' | 'danger' | 'staffing' | 'preshow' | 'archived'
+  }
 > = {
-  // Staffing gets its own colour rather than the needs-attention amber: a show
-  // being crewed is on track, not a problem, and colouring it the same as an
-  // overdue one teaches people to ignore the amber.
+  // EVERY STATUS IS ITS OWN COLOUR. Three of them shared the neutral grey,
+  // which made New, Pre-show and Archived indistinguishable at a glance — the
+  // exact thing the badge exists to prevent.
+  //
+  // The one still on grey is New, and that is deliberate rather than left over:
+  // "nothing has happened yet" is the honest neutral state, and giving it a
+  // colour would imply it wants something from you.
+  //
+  // Staffing is not the needs-attention amber: a show being crewed is on track,
+  // not a problem, and colouring it like an overdue one is how people learn to
+  // ignore the amber that does mean trouble.
   new:       { label: 'New',       tone: 'neutral' },
   staffing:  { label: 'Staffing',  tone: 'staffing' },
-  preshow:   { label: 'Pre-show',  tone: 'neutral' },
+  preshow:   { label: 'Pre-show',  tone: 'preshow' },
   active:    { label: 'Active',    tone: 'live' },
   wrapped:   { label: 'Wrapped',   tone: 'ot' },
   finalized: { label: 'Finalized', tone: 'good' },
-  archived:  { label: 'Archived',  tone: 'neutral' },
+  archived:  { label: 'Archived',  tone: 'archived' },
 }
