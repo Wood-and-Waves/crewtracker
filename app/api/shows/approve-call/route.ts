@@ -62,14 +62,23 @@ export async function POST(request: Request) {
   // this, a stale or tampered id could name someone from another company — and
   // the shows SELECT policy now admits scheduler_id, so that would be handing
   // an outsider visibility of the show.
-  const { data: membership } = await supabase
+  const { data: membership, error: membershipError } = await supabase
     .from('memberships')
-    .select('profile_id, profiles(full_name, email)')
+    .select('profile_id')
     .eq('profile_id', schedulerId)
     .eq('organization_id', show.organization_id)
     .is('deactivated_at', null)
     .maybeSingle()
 
+  // A failed query is not the same as "they are not a member", and reporting it
+  // as one sends the caller looking for a permissions problem that does not
+  // exist. This exact conflation cost a debugging session here.
+  if (membershipError) {
+    return NextResponse.json(
+      { error: `Could not check that person's membership: ${membershipError.message}` },
+      { status: 500 },
+    )
+  }
   if (!membership) {
     return NextResponse.json(
       { error: 'That person is not an active member of this organization.' },
@@ -99,15 +108,16 @@ export async function POST(request: Request) {
     )
   }
 
-  const scheduler: any = Array.isArray((membership as any).profiles)
-    ? (membership as any).profiles[0]
-    : (membership as any).profiles
-  const to = scheduler?.email
-
-  const [{ data: org }, { data: approver }] = await Promise.all([
+  // Fetched separately rather than embedded in the membership query. An
+  // embedded join returning nothing is indistinguishable from the parent row
+  // being absent, which is precisely how a query problem gets misreported as a
+  // permissions one.
+  const [{ data: scheduler }, { data: org }, { data: approver }] = await Promise.all([
+    supabase.from('profiles').select('full_name, email').eq('id', schedulerId).maybeSingle(),
     supabase.from('organizations').select('name').eq('id', show.organization_id).maybeSingle(),
     supabase.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
   ])
+  const to = scheduler?.email
 
   if (!to) {
     // The handoff itself succeeded and the show now shows as theirs in the app.
@@ -122,7 +132,7 @@ export async function POST(request: Request) {
   const origin = new URL(request.url).origin
   const result = await sendCallHandoffEmail({
     to,
-    schedulerName: scheduler?.full_name ?? null,
+    schedulerName: (scheduler as any)?.full_name ?? null,
     showName: show.name,
     venue: show.venue,
     startDate: show.start_date,
