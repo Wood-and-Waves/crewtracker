@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Constructed inside the handler, NOT at module scope.
+//
+// `next build` imports every route module while collecting page data, so a
+// top-level `new Resend(process.env.RESEND_API_KEY)` runs at BUILD time — and
+// Resend throws immediately when the key is missing. That made the whole build
+// fail in any environment without the secret, which is why every Vercel Preview
+// deployment errored while Production (where the key is set) was fine.
+//
+// A missing key should break the one request that needs to send an email, not
+// the build. app/api/reports/final/route.ts already does it this way.
+function mailer() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
+}
 
 export async function POST(request: Request) {
   let body;
@@ -33,6 +47,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Please fill in your name, email, team size, and number of admin users." },
       { status: 400 }
+    );
+  }
+
+  const resend = mailer();
+  if (!resend) {
+    // Only reachable in an environment with no RESEND_API_KEY — a Preview
+    // deployment, say. Log it and tell the truth rather than reporting success
+    // for a form submission that went nowhere.
+    console.error("beta-signup: RESEND_API_KEY is not set; cannot send.");
+    return NextResponse.json(
+      { error: "Something went wrong sending your request. Please try again." },
+      { status: 500 }
     );
   }
 
