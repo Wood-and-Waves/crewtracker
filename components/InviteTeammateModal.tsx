@@ -25,6 +25,8 @@ export default function InviteTeammateModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [inviteLink, setInviteLink] = useState('')
+  // Null = no address was given, so nothing was attempted.
+  const [emailStatus, setEmailStatus] = useState<{ sentTo?: string; error?: string } | null>(null)
 
   async function createInvite() {
     setSaving(true)
@@ -39,7 +41,7 @@ export default function InviteTeammateModal({
         base_role: role,
         ...values,
       })
-      .select('token')
+      .select('id, token')
       .single()
 
     if (insertError || !data) {
@@ -49,6 +51,23 @@ export default function InviteTeammateModal({
     }
 
     setInviteLink(`${window.location.origin}/invite/${data.token}`)
+
+    // Send the email if an address was given. A failure here does NOT fail the
+    // invite: the row exists and the link works, so we report it and fall back
+    // to copying the link — which is also why the link stays on screen.
+    if (email.trim()) {
+      try {
+        const res = await fetch('/api/invites/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invitationId: data.id }),
+        })
+        const payload = await res.json()
+        setEmailStatus(res.ok ? { sentTo: payload.sentTo } : { error: payload.error || 'The email could not be sent.' })
+      } catch {
+        setEmailStatus({ error: 'The email could not be sent.' })
+      }
+    }
     setSaving(false)
   }
 
@@ -62,9 +81,21 @@ export default function InviteTeammateModal({
 
         {inviteLink ? (
           <div>
-            <p className="mb-3 text-sm text-muted">
-              Invite created — share this link with your teammate:
-            </p>
+            {emailStatus?.sentTo ? (
+              <p className="mb-3 rounded-field bg-surface-2 px-3 py-2 text-sm text-ink">
+                Invite emailed to <span className="font-medium">{emailStatus.sentTo}</span>. You can
+                also share the link directly:
+              </p>
+            ) : emailStatus?.error ? (
+              <p className="mb-3 rounded-field bg-surface-2 px-3 py-2 text-sm text-danger">
+                Invite created, but the email didn&rsquo;t send ({emailStatus.error}) — send them
+                this link instead:
+              </p>
+            ) : (
+              <p className="mb-3 text-sm text-muted">
+                Invite created — share this link with your teammate:
+              </p>
+            )}
             <div className="flex items-center gap-2">
               <input readOnly value={inviteLink} className={inputCls} />
               <Button size="sm" onClick={() => navigator.clipboard.writeText(inviteLink)}>Copy</Button>

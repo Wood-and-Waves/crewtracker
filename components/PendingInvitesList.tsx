@@ -12,16 +12,16 @@ import Chip from '@/components/ui/Chip'
 //
 // WHY
 // ---
-// Inviting someone produces a link shown once in a modal, and that link is the
-// entire delivery mechanism — nothing is emailed. Until now the Team page never
-// loaded invitations at all, so closing that modal stranded the invite: no way to
-// see it existed, copy the link again, or cancel it. The only recovery was
-// querying Postgres, which is a support call to Dan every single time.
+// Invitations are emailed when created (lib/inviteEmail.ts), but email fixes
+// initial delivery and nothing else. A typo'd address, a message in a spam
+// folder, someone who left before accepting, or simply "did I already invite
+// them?" all still need this screen — which is why it was built first, before
+// the email existed at all.
 //
-// Emailing invitations (planned) does NOT make this redundant. It fixes initial
-// delivery and nothing else — a typo'd address, a message in a spam folder, a
-// person who left before accepting, or "did I already invite them?" all still
-// need this screen.
+// Before either, the link was shown once in a modal and nowhere else, so closing
+// that modal stranded the invitation: no way to see it existed, copy the link
+// again, or cancel it. The only recovery was querying Postgres directly, which
+// meant a support call to Dan every single time.
 //
 // No migration was needed: invitations already carries a single ALL policy gated
 // on can_manage_users within the caller's organization, so an admin can already
@@ -48,6 +48,7 @@ export default function PendingInvitesList({ invites }: { invites: PendingInvite
   const supabase = createClient()
   const [busy, setBusy] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [sent, setSent] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   if (invites.length === 0) return null
@@ -88,6 +89,26 @@ export default function PendingInvitesList({ invites }: { invites: PendingInvite
     router.refresh()
   }
 
+  // "I invited them but they never got it" is the single most likely support
+  // question once email exists, so the admin needs to answer it themselves.
+  async function resend(invite: PendingInvite) {
+    setBusy(invite.id)
+    setError('')
+    try {
+      const res = await fetch('/api/invites/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationId: invite.id }),
+      })
+      const payload = await res.json()
+      if (!res.ok) setError(payload.error || 'The email could not be sent.')
+      else { setSent(invite.id); setTimeout(() => setSent(null), 3000) }
+    } catch {
+      setError('The email could not be sent.')
+    }
+    setBusy(null)
+  }
+
   async function revoke(invite: PendingInvite) {
     if (!confirm(
       `Cancel the invitation to ${invite.email || 'this person'}?\n\n` +
@@ -113,8 +134,8 @@ export default function PendingInvitesList({ invites }: { invites: PendingInvite
     <Card className="mt-8 p-6">
       <h2 className="text-lg font-bold text-ink">Pending invitations</h2>
       <p className="mt-1 text-sm text-muted">
-        These people have been invited but haven&rsquo;t joined yet. Nothing is emailed
-        automatically — copy the link and send it to them.
+        These people have been invited but haven&rsquo;t joined yet. They were emailed a link
+        when the invite was created — resend it, or copy the link and send it yourself.
       </p>
 
       <div className="mt-4 flex flex-col gap-3">
@@ -149,6 +170,11 @@ export default function PendingInvitesList({ invites }: { invites: PendingInvite
               </div>
 
               <div className="flex shrink-0 gap-2">
+                {inv.email && (
+                  <Button size="sm" variant="ghost" onClick={() => resend(inv)} disabled={busy === inv.id}>
+                    {sent === inv.id ? 'Sent' : busy === inv.id ? 'Sending…' : 'Resend email'}
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => copy(inv)} disabled={busy === inv.id}>
                   {copied === inv.id ? 'Copied' : 'Copy link'}
                 </Button>
