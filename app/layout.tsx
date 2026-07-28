@@ -34,8 +34,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // suppressHydrationWarning below is required, not cosmetic: ThemeScript sets
+  // data-theme on <html> before paint (that's how the saved theme avoids a
+  // flash), so the server's markup and the client's DOM differ by design on
+  // every page. Without it, every route logs a hydration mismatch — noise that
+  // hides the real ones. Scoped to this one element.
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
         {/* Next only emits the standardised `mobile-web-app-capable`. iOS
             versions before manifest support (pre-16.4) honour nothing but
