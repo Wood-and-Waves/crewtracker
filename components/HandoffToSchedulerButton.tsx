@@ -25,12 +25,15 @@ export default function HandoffToSchedulerButton({
   approvedAt,
   schedulerName,
   positionCount,
+  callSize,
 }: {
   showId: string
   approvedAt: string | null
   schedulerName: string | null
-  /** Positions across the whole show. Zero means there is nothing to hand over. */
+  /** Position ROWS across the whole show. Zero means nothing to hand over. */
   positionCount: number
+  /** Human phrasing, e.g. "12 crew across 5 days" — what the scheduler reads. */
+  callSize: string
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -130,8 +133,8 @@ export default function HandoffToSchedulerButton({
           <div className="w-full max-w-md rounded-t-card border border-line bg-surface p-5 sm:rounded-card">
             <h2 className="text-lg font-bold text-ink">Hand off to scheduler</h2>
             <p className="mb-4 mt-1 text-xs text-muted">
-              This approves the crew call — {positionCount} position
-              {positionCount === 1 ? '' : 's'} — and emails them that it&rsquo;s ready to staff.
+              This approves the crew call — {callSize} — and emails them that
+              it&rsquo;s ready to staff.
             </p>
 
             <select

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
+import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -47,15 +48,23 @@ export default async function ShowDetailPage({
   // The crew call across the whole show, and who it was handed to. Counted
   // rather than fetched — the sidebar only needs to know whether there is
   // anything to hand over.
-  const [{ count: positionCount }, { data: scheduler }] = await Promise.all([
+  const [{ data: positionRows }, { data: scheduler }] = await Promise.all([
     supabase
       .from('crew_call_positions')
-      .select('id, rooms!inner(work_days!inner(show_id))', { count: 'exact', head: true })
+      .select('id, rooms!inner(work_days!inner(date, show_id))')
       .eq('rooms.work_days.show_id', id),
     show?.scheduler_id
       ? supabase.from('profiles').select('full_name, email').eq('id', show.scheduler_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ])
+
+  // Per-day, not per-row: a five-day show needing twelve people has sixty
+  // position rows, and "60" is not a number anybody crews against.
+  const callSummary = summarizeCall((positionRows ?? []).map((p: any) => {
+    const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
+    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+    return { date: wd?.date }
+  }).filter((r: any) => r.date))
   if (!user) redirect('/login')
 
   if (!show) notFound()
@@ -334,7 +343,8 @@ export default async function ShowDetailPage({
             showId={id}
             approvedAt={show.call_approved_at ?? null}
             schedulerName={(scheduler as any)?.full_name || (scheduler as any)?.email || null}
-            positionCount={positionCount ?? 0}
+            positionCount={callSummary.total}
+            callSize={describeCallSize(callSummary)}
           />
           <Link href={`/dashboard/shows/${id}/edit`} className="w-full">
             <Button variant="ghost" size="sm" className="w-full">Edit Show</Button>

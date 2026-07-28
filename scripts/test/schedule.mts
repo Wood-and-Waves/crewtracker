@@ -21,6 +21,7 @@ import { byShowAndDate, coverageFor, crewKey, resolveWindow,
          type ScheduleBooking, type ScheduleShow } from '../../lib/schedule.ts'
 import { todayInZone, showStatus } from '../../lib/showStatus.ts'
 import { describeDates, buildBookingRequestText } from '../../lib/bookingEmail.ts'
+import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -277,6 +278,40 @@ check('finalized beats crewing state',
   st({ finalized_at: '2026-07-20T00:00:00Z', positionsTotal: 4, positionsFilled: 0, call_approved_at: approved }), 'finalized')
 check('archived beats finalized',
   st({ archived: true, finalized_at: '2026-07-20T00:00:00Z' }), 'archived')
+
+// ---------------------------------------------------------------------------
+// Call size. Positions are stored per room PER DAY, so a five-day show needing
+// twelve people carries sixty rows. Dan saw "60 positions to fill" in a handoff
+// email for a show needing 12 people and rightly called it alarming.
+// ---------------------------------------------------------------------------
+console.log('\ncrew call size')
+const rowsFor = (perDay: number[], start = '2026-07-31') =>
+  perDay.flatMap((n, d) => Array.from({ length: n }, () => ({ date: addDays(start, d) })))
+
+// Dan's actual case: 12 people, 5 days, 60 rows.
+const soup = summarizeCall(rowsFor([12, 12, 12, 12, 12]))
+check('counts every position row', soup.total, 60)
+check('reports the people needed, not the rows', soup.peakPerDay, 12)
+check('knows how many days', soup.dayCount, 5)
+check('a level call reads without hedging', describeCallSize(soup), '12 crew across 5 days')
+
+// A call that varies — riggers on load-in, full complement on show days — cannot
+// be described by one number without saying "up to".
+const varied = summarizeCall(rowsFor([4, 12, 12, 6]))
+check('peak is the busiest day, not the average', varied.peakPerDay, 12)
+check('a varying call is hedged', describeCallSize(varied), 'up to 12 crew across 4 days')
+check('a varying call is not reported as level', varied.uniform, false)
+
+check('a single day drops the day count',
+  describeCallSize(summarizeCall(rowsFor([3]))), '3 crew')
+check('one person one day reads plainly',
+  describeCallSize(summarizeCall(rowsFor([1]))), '1 crew')
+check('an empty call says so rather than "0 crew"',
+  describeCallSize(summarizeCall([])), 'no positions yet')
+// Rows arriving without a date must not invent a day or crash.
+check('undated rows are ignored', summarizeCall([{ date: '' } as any]).peakPerDay, 0)
+// The whole point: the phrasing must never be the row count.
+check('never leads with the row count', describeCallSize(soup).includes('60'), false)
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

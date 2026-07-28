@@ -23,7 +23,8 @@ export type CallHandoffEmailInput = {
   endDate: string
   organizationName: string
   approvedByName: string | null
-  positionCount: number
+  /** Already-phrased size, e.g. "12 crew across 5 days". Never a raw row count. */
+  callSize: string
   link: string
 }
 
@@ -50,7 +51,10 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
 
   const greeting = input.schedulerName ? `Hi ${input.schedulerName},` : 'Hi,'
   const approvedBy = input.approvedByName ? ` by ${input.approvedByName}` : ''
-  const positions = `${input.positionCount} position${input.positionCount === 1 ? '' : 's'}`
+  // NOT the position-row count. Positions are stored per room per day, so a
+  // five-day show needing twelve people has sixty rows — and an email saying
+  // "60 positions to fill" reads as a crisis rather than a normal week.
+  const positions = input.callSize
 
   const text = [
     greeting,
@@ -60,7 +64,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
     `Show:   ${input.showName}`,
     input.venue ? `Venue:  ${input.venue}` : null,
     `Dates:  ${dates}`,
-    `Call:   ${positions} to fill`,
+    `Call:   ${positions}`,
     '',
     `Open it here: ${input.link}`,
     '',
@@ -78,7 +82,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
     <tr><td style="padding:6px 0;color:#71717a;width:80px">Show</td><td style="padding:6px 0">${escapeHtml(input.showName)}</td></tr>
     ${input.venue ? `<tr><td style="padding:6px 0;color:#71717a">Venue</td><td style="padding:6px 0">${escapeHtml(input.venue)}</td></tr>` : ''}
     <tr><td style="padding:6px 0;color:#71717a">Dates</td><td style="padding:6px 0">${escapeHtml(dates)}</td></tr>
-    <tr><td style="padding:6px 0;color:#71717a">Call</td><td style="padding:6px 0">${escapeHtml(positions)} to fill</td></tr>
+    <tr><td style="padding:6px 0;color:#71717a">Call</td><td style="padding:6px 0">${escapeHtml(positions)}</td></tr>
   </table>
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.link)}"

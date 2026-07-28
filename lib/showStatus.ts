@@ -102,8 +102,11 @@ export const SHOW_STATUS_META: Record<
   new:       { label: 'New',       tone: 'neutral' },
   staffing:  { label: 'Staffing',  tone: 'staffing' },
   preshow:   { label: 'Pre-show',  tone: 'preshow' },
-  active:    { label: 'Active',    tone: 'live' },
+  // Dan's choice: green for Active, blue for Finalized. Green reading as
+  // "go" for the show that is actually happening is the stronger association,
+  // and it leaves the calm blue for the state that is simply closed.
+  active:    { label: 'Active',    tone: 'good' },
   wrapped:   { label: 'Wrapped',   tone: 'ot' },
-  finalized: { label: 'Finalized', tone: 'good' },
+  finalized: { label: 'Finalized', tone: 'live' },
   archived:  { label: 'Archived',  tone: 'archived' },
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendCallHandoffEmail } from '@/lib/callHandoffEmail'
+import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
 // Approve a show's crew call and hand it to a scheduler.
 //
@@ -44,13 +45,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'This call has already been approved.' }, { status: 400 })
   }
 
-  // The call must actually exist. Counted through the join rather than trusted
-  // from the client.
-  const { count } = await supabase
+  // The call must actually exist. Read with dates rather than counted, because
+  // the number worth reporting is people-per-day and not position rows — see
+  // lib/crewCall.ts.
+  const { data: positionRows } = await supabase
     .from('crew_call_positions')
-    .select('id, rooms!inner(work_days!inner(show_id))', { count: 'exact', head: true })
+    .select('id, rooms!inner(work_days!inner(date, show_id))')
     .eq('rooms.work_days.show_id', showId)
 
+  const call = summarizeCall((positionRows ?? []).map((p: any) => {
+    const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
+    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+    return { date: wd?.date }
+  }).filter((r: any) => r.date))
+
+  const count = call.total
   if (!count) {
     return NextResponse.json(
       { error: 'Add at least one position to the crew call before handing this show over.' },
@@ -139,7 +148,7 @@ export async function POST(request: Request) {
     endDate: show.end_date,
     organizationName: org?.name ?? 'your team',
     approvedByName: approver?.full_name || approver?.email || null,
-    positionCount: count,
+    callSize: describeCallSize(call),
     link: `${origin}/dashboard/shows/${show.id}`,
   })
 
