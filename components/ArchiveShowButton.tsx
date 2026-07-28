@@ -25,10 +25,12 @@ export default function ArchiveShowButton({
   }
 
   return (
+    // No longer absolutely positioned: the show cards this sat on top of have
+    // been replaced by table rows, which place it themselves.
     <button
       onClick={toggle}
       disabled={loading}
-      className="absolute top-4 right-4 rounded-pill bg-surface-2 border border-line px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-50"
+      className="rounded-pill bg-surface-2 border border-line px-3 py-1 text-xs text-muted hover:border-accent hover:text-accent disabled:opacity-50"
     >
       {loading ? '...' : archived ? 'Unarchive' : 'Archive'}
     </button>

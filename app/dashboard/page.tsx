@@ -2,21 +2,13 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import NewShowModal from '@/components/NewShowModal'
-import ArchiveShowButton from '@/components/ArchiveShowButton'
+import ShowsListClient, { type ShowRow } from '@/components/ShowsListClient'
 import Card from '@/components/ui/Card'
-import Chip from '@/components/ui/Chip'
 import { cn } from '@/lib/cn'
 import { showStatus, SHOW_STATUS_META } from '@/lib/showStatus'
+import { summarizeCall } from '@/lib/crewCall'
+import { addDays } from '@/lib/datetime'
 import Link from 'next/link'
-
-// start_date/end_date are Postgres `date` columns, so they arrive as bare
-// 'YYYY-MM-DD'. A date-only string parses as UTC midnight, which renders as the
-// PREVIOUS day anywhere west of Greenwich; appending T00:00:00 makes it local
-// midnight and keeps the calendar date intact. Same pattern as the tracker,
-// reports, PDF and CSV.
-function fmtDate(d: string) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
 
 export default async function DashboardPage({
   searchParams,
@@ -62,22 +54,70 @@ export default async function DashboardPage({
   // view if an organization ever carries hundreds of live shows.
   const { data: callRows } = await supabase
     .from('crew_call_positions')
-    .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( show_id ) )')
+    .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( date, show_id ) )')
 
-  const callByShow = new Map<string, { total: number; filled: number }>()
+  // Dates are carried so peak-per-day can be worked out: the list must report
+  // how many PEOPLE a show needs, never the position-row count. A twelve-person
+  // show over five days is sixty rows, which is not a number anybody crews
+  // against.
+  const callByShow = new Map<string, { total: number; filled: number; dates: { date: string }[] }>()
   for (const row of (callRows ?? []) as any[]) {
     const room = Array.isArray(row.rooms) ? row.rooms[0] : row.rooms
     const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
     const showId = wd?.show_id
     if (!showId) continue
-    const entry = callByShow.get(showId) ?? { total: 0, filled: 0 }
+    const entry = callByShow.get(showId) ?? { total: 0, filled: 0, dates: [] }
     entry.total += 1
+    if (wd.date) entry.dates.push({ date: wd.date })
     // A declined person does not hold their position, so they do not count it
     // as filled — the same rule the database enforces with a partial index.
     const live = (row.timecards ?? []).some((t: any) => t.booking_status !== 'declined')
     if (live) entry.filled += 1
     callByShow.set(showId, entry)
   }
+
+  // Scheduler names, one query for the page. Only the shows on screen are
+  // looked up, and only their name is read.
+  const schedulerIds = [...new Set(shows.map(s => s.scheduler_id).filter(Boolean))] as string[]
+  const { data: schedulers } = schedulerIds.length
+    ? await supabase.from('profiles').select('id, full_name, email').in('id', schedulerIds)
+    : { data: [] }
+  const schedulerById = new Map(
+    (schedulers ?? []).map((p: any) => [p.id, p.full_name || p.email || null]),
+  )
+
+  const rows: ShowRow[] = shows.map(show => {
+    const call = callByShow.get(show.id)
+    const summary = summarizeCall(call?.dates ?? [])
+    const status = showStatus({
+      ...show,
+      positionsTotal: call?.total ?? 0,
+      positionsFilled: call?.filled ?? 0,
+    })
+    const meta = SHOW_STATUS_META[status]
+    // Inclusive day count, from the dates themselves rather than a work_days
+    // query — one round trip saved on the first screen anyone sees.
+    let dayCount = 1
+    for (let d = show.start_date; d < show.end_date; d = addDays(d, 1)) dayCount++
+    return {
+      id: show.id,
+      name: show.name,
+      venue: show.venue ?? null,
+      cityState: show.city_state ?? null,
+      clientCompany: show.client_company ?? null,
+      startDate: show.start_date,
+      endDate: show.end_date,
+      dayCount,
+      status,
+      statusLabel: meta.label,
+      statusTone: meta.tone,
+      peakPerDay: summary.peakPerDay,
+      filled: call?.filled ?? 0,
+      total: call?.total ?? 0,
+      schedulerName: show.scheduler_id ? schedulerById.get(show.scheduler_id) ?? null : null,
+      archived: !!show.archived,
+    }
+  })
 
   return (
     <div className="p-6 md:p-10">
@@ -114,46 +154,7 @@ export default async function DashboardPage({
           {showingArchived ? 'No archived shows.' : 'No shows yet. Create your first one to get started.'}
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {shows.map(show => (
-            <div key={show.id} className="relative">
-              <Link href={`/dashboard/shows/${show.id}`} className="block">
-                <Card interactive className="p-6">
-                  <h2 className="mb-1 pr-20 text-xl font-bold text-ink">{show.name}</h2>
-                  <p className="text-sm text-muted">
-                    {fmtDate(show.start_date)} – {fmtDate(show.end_date)}
-                  </p>
-                  {/* iOS shows city/state on the list row alongside the venue. */}
-                  {(show.venue || show.city_state) && (
-                    <p className="mt-1 text-sm text-muted">
-                      {[show.venue, show.city_state].filter(Boolean).join(' · ')}
-                    </p>
-                  )}
-                  <div className="mt-4">
-                    {(() => {
-                      const call = callByShow.get(show.id)
-                      const status = showStatus({
-                        ...show,
-                        positionsTotal: call?.total ?? 0,
-                        positionsFilled: call?.filled ?? 0,
-                      })
-                      const { label, tone } = SHOW_STATUS_META[status]
-                      return (
-                        <Chip tone={tone}>
-                          {status === 'active' && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
-                          {label}
-                        </Chip>
-                      )
-                    })()}
-                  </div>
-                </Card>
-              </Link>
-              {user.can('can_archive_shows') && (
-                <ArchiveShowButton showId={show.id} archived={!!show.archived} />
-              )}
-            </div>
-          ))}
-        </div>
+        <ShowsListClient rows={rows} canArchive={user.can('can_archive_shows')} />
       )}
     </div>
   )
