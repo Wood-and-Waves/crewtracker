@@ -19,10 +19,13 @@
 // rows' tracks out while the header's — holding shorter text like "M1 Out" —
 // stayed put. The two grids then disagreed and the table stopped lining up.
 // A zero minimum keeps every track exactly equal and lets content shrink.
+// Trailing tracks are travel, total and the row menu. Travel moved onto the row
+// so a crew member is ONE line: it used to sit on a second row with Reset,
+// which doubled every person's height for two toggles that are usually off.
 const GRID_BY_PUNCH_COUNT: Record<number, string> = {
-  6: 'lg:grid-cols-[1.7fr_repeat(6,minmax(0,1fr))_1fr]',
-  7: 'lg:grid-cols-[1.7fr_repeat(7,minmax(0,1fr))_1fr]',
-  8: 'lg:grid-cols-[1.7fr_repeat(8,minmax(0,1fr))_1fr]',
+  6: 'lg:grid-cols-[1.7fr_repeat(6,minmax(0,1fr))_86px_84px_30px]',
+  7: 'lg:grid-cols-[1.7fr_repeat(7,minmax(0,1fr))_86px_84px_30px]',
+  8: 'lg:grid-cols-[1.7fr_repeat(8,minmax(0,1fr))_86px_84px_30px]',
 }
 
 /**

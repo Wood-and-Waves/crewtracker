@@ -154,11 +154,16 @@ export default function TimecardRow({
         disabled={disabled}
         title={locked ? LOCKED_NOTE : undefined}
         className={cn(
-          'rounded-[5px] h-12 lg:h-auto lg:aspect-[2/1] px-2 py-1 lg:px-1 lg:py-2 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
+          'rounded-[5px] h-12 px-2 py-1 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
           'flex flex-col items-center justify-center gap-0.5 lg:gap-0',
-          done && 'bg-surface-2 text-ink hover:opacity-90',
-          !done && !disabled && 'bg-accent/25 text-ink font-bold hover:opacity-90',
-          disabled && 'bg-surface-3 text-muted cursor-not-allowed',
+          // Mobile keeps every punch as a filled button — Dan rejected
+          // collapsing them, and a thumb needs the target. Desktop drops the
+          // chrome: a done punch is just its time, and only the NEXT action
+          // stays a button, which is what puts a crew member on one line.
+          'lg:h-auto lg:rounded-pill lg:px-2 lg:py-1.5',
+          done && 'bg-surface-2 text-ink hover:opacity-90 lg:bg-transparent lg:text-ink lg:hover:bg-surface-2',
+          !done && !disabled && 'bg-accent/25 text-ink font-bold hover:opacity-90 lg:bg-accent lg:text-accent-ink lg:font-semibold',
+          disabled && 'bg-surface-3 text-muted cursor-not-allowed lg:bg-transparent',
         )}
       >
         {done ? (
@@ -171,9 +176,17 @@ export default function TimecardRow({
             </span>
           </>
         ) : (
-          <span className="block text-lg leading-none font-bold lg:text-xs lg:font-medium lg:leading-normal">
-            {PUNCH_LABELS[type]}
-          </span>
+          <>
+            <span className="block text-lg leading-none font-bold lg:hidden">
+              {PUNCH_LABELS[type]}
+            </span>
+            {/* An em dash rather than a greyed label: a punch that cannot be
+                taken yet is not an offer, and six dim labels read as six
+                broken buttons. */}
+            <span className="hidden lg:block text-xs font-medium leading-normal">
+              {disabled ? '—' : PUNCH_LABELS[type]}
+            </span>
+          </>
         )}
       </button>
     )
@@ -209,6 +222,26 @@ export default function TimecardRow({
           visibleTypes.map(type => <PunchCell key={type} type={type} />)
         )}
 
+        {/* Travel, desktop only — the pill row below still serves mobile. */}
+        <div className="hidden lg:flex items-center justify-center gap-1">
+          {(['travel_in_day', 'travel_out_day'] as const).map(flag => (
+            <button
+              key={flag}
+              onClick={() => toggleFlag(flag)}
+              disabled={locked}
+              title={locked ? LOCKED_NOTE : flag === 'travel_in_day' ? 'Travel in' : 'Travel out'}
+              className={cn(
+                'rounded-pill border px-1.5 py-0.5 text-[10px] transition-colors disabled:opacity-40',
+                timecard[flag]
+                  ? 'border-accent text-accent'
+                  : 'border-line text-muted hover:text-ink',
+              )}
+            >
+              {flag === 'travel_in_day' ? 'in' : 'out'}
+            </button>
+          ))}
+        </div>
+
         <div className="col-span-3 lg:col-span-1 flex items-center justify-end lg:flex-col lg:items-end mt-2 lg:mt-0 gap-2 lg:gap-0.5">
           {wrapped && (
             <p className="text-sm font-bold text-ink tabular-nums">
@@ -218,15 +251,31 @@ export default function TimecardRow({
             </p>
           )}
         </div>
+
+        {/* Reset, desktop only. Rare and destructive, so it sits at the end of
+            the row rather than taking a line of its own. */}
+        <div className="hidden lg:flex items-center justify-end">
+          {hasAnything && (
+            <button
+              onClick={resetRow}
+              disabled={busy || locked}
+              title={locked ? LOCKED_NOTE : `Reset ${timecard.crew_member_name}'s day — clears all punches and flags`}
+              aria-label={`Reset ${timecard.crew_member_name}'s day`}
+              className="rounded-pill px-1 text-sm text-muted transition-colors hover:text-danger disabled:opacity-40"
+            >
+              ↺
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 px-4 pb-3 lg:pb-3">
+      <div className={cn('flex flex-wrap gap-1.5 px-4 pb-3', showHalfDay ? '' : 'lg:hidden')}>
         <button
           onClick={() => toggleFlag('travel_in_day')}
           disabled={locked}
           title={locked ? LOCKED_NOTE : undefined}
           className={cn(
-            'rounded-pill px-3 py-1 text-xs transition-colors',
+            'lg:hidden rounded-pill px-3 py-1 text-xs transition-colors',
             timecard.travel_in_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
           )}
         >
@@ -237,7 +286,7 @@ export default function TimecardRow({
           disabled={locked}
           title={locked ? LOCKED_NOTE : undefined}
           className={cn(
-            'rounded-pill px-3 py-1 text-xs transition-colors',
+            'lg:hidden rounded-pill px-3 py-1 text-xs transition-colors',
             timecard.travel_out_day ? 'bg-accent text-accent-ink' : 'bg-surface-3 text-muted',
           )}
         >
@@ -262,7 +311,7 @@ export default function TimecardRow({
             disabled={busy || locked}
             title={locked ? LOCKED_NOTE : `Reset ${timecard.crew_member_name}'s day — clears all punches and flags`}
             aria-label={`Reset ${timecard.crew_member_name}'s day`}
-            className="ml-auto rounded-pill px-3 py-1 text-xs text-muted transition-colors hover:text-danger disabled:opacity-40"
+            className="lg:hidden ml-auto rounded-pill px-3 py-1 text-xs text-muted transition-colors hover:text-danger disabled:opacity-40"
           >
             ↺ Reset
           </button>

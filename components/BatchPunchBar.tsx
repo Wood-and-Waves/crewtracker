@@ -180,7 +180,8 @@ export default function BatchPunchBar({
             </button>
           )
         })}
-        {gridCols && <div className="hidden lg:block" />}
+        {/* Travel, total and menu columns. */}
+        {gridCols && <><div className="hidden lg:block" /><div className="hidden lg:block" /><div className="hidden lg:block" /></>}
       </div>
 
       {overlay.kind === 'picker' && (

@@ -424,7 +424,9 @@ export default async function ShowDetailPage({
                       {PUNCH_LABELS[type]}
                     </div>
                   ))}
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-muted text-center">Travel</div>
                   <div className="text-[10px] font-bold uppercase tracking-wide text-muted text-right">Total</div>
+                  <div />
                 </div>
               )}
 
