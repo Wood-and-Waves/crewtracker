@@ -48,9 +48,16 @@ Dan (the developer) has no professional dev background — so explain the *why* 
   - **Revoked privileges.** `pg_dump` emits GRANTs computed against Postgres's built-in default, so a REVOKE is an *absence* — and on Supabase an absence is inherited from `ALTER DEFAULT PRIVILEGES` rather than removed. The `day_rate` lockdown is written as an absence, so without `grants.sql` it silently doesn't exist in the rebuilt database. `npm run db:grants` regenerates it from production; re-run after changing any privilege.
 
   Verified 2026-07-26 to reproduce production exactly: 15 tables, 43 policies, 17 functions, 12 public + 6 non-public triggers, 2 views, 23 indexes, 47 constraints, 7 event triggers, 208 table grants, 1390 column privileges.
+- **Dev browser sign-in**: `app/api/dev/login/route.ts` mints a session so a browser can be signed in for UI verification. Three independent gates — `NODE_ENV` must be development (Vercel builds everything, preview included, as production), the Supabase project must not be production, and `DEV_LOGIN_SECRET` from `.env.local` must match. Every rejection is a bare 404.
 - **Vercel CLI**: `npx vercel inspect crewtracker-lime.vercel.app` / `npx vercel ls crewtracker` to check deployment status and build info directly after a push, instead of guessing whether a deploy succeeded.
 
 ## Design system — "Signal" (redesigned 2026-07-14/15)
+
+**2026-07-28 — cards are being retired.** Dan: *"I think I am about done with the 'cards' design. It is just too clunky with the cards of all different sizes."* The replacement is **ruled sections**: small-caps headings, hairline rules, content at full width, and nothing in a box. Rows are label-left / control-right with a `border-b border-line` between them. Converted so far: the **shows list** (a real table), **New Show** (a full page), the **tracker** (header strip instead of a left rail, one line per crew member), and **Settings** (a left nav, one section at a time). Still on cards: **Reports** and the admin screens (Team, Edit Crew, Edit Show). `components/ui/Card` still exists and is still correct for a genuinely raised surface *inside* a section — it is the wrapper-around-a-whole-screen use that is going.
+
+**No fixed-position dialogs for editing.** An editor that covers the thing you are editing is the pattern being removed. Cell editors, pickers and the payroll-preset editor all open **in place, below** what they belong to. `fixed inset-0` overlays remain fine for genuine confirmations.
+
+**Terminology: it is a POSITION, never a "call".** In this industry a call is a TIME ("call is 8am"), so using it for a list of required roles collides every time. The database table is still `crew_call_positions` and the components are still `CrewCall*` — renaming those is a migration for no user-visible gain — but **every user-facing string says positions**.
 
 The app was fully redesigned from the original pure-black/zinc/iOS-blue look to a direction called **Signal**: near-true-black (light theme also fully supported, both first-class), bold white headers, the brand's electric blue as the sole accent, no glow effects (tried in an early mockup round, Dan rejected it — use a crisp `ring-1 ring-inset ring-accent` instead), minimal monospace (tried "everywhere," Dan found it too techy — reserve mono for places digits must align in columns).
 
@@ -91,6 +98,8 @@ app/
     shows/[id]/page.tsx        — Show workspace: day nav, room columns, tracker console
     shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
+    shows/new/page.tsx          — create a show: details, payroll preset, and the rooms×days positions grid
+    schedule/page.tsx           — company-wide calendar across shows
     settings/page.tsx           — personal prefs, org settings, AV Roles editor, payroll presets
   api/
     admin/create-invite/route.ts — server-side invite creation (service role, bypasses RLS)
@@ -126,6 +135,10 @@ components/
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
+  schedule.ts   — the cross-show booking query; the only place that reads across shows
+  crewCall.ts   — position counting (summarizeCall/describeCallSize) + day scopes
+  crewCallGrid.ts — the rooms×days call model, pure and unit-tested
+  bookingEmail.ts / callHandoffEmail.ts / bookingInvite.ts — crew requests and the handoff
   supabase/client.ts / server.ts / admin.ts
   payroll.ts    — TypeScript port of iOS PayrollCalculator
   punches.ts    — punch ordering/labels + chronology validation; formatPunchTime takes a use24Hour flag
@@ -154,6 +167,9 @@ scripts/
     out-of-schema.sql— generated; triggers pg_dump --schema=public can't see
     grants.sql       — generated; revoke-then-grant, carries the day_rate lockdown
     migrations/      — numbered changes applied by db:migrate. Append only; never edit one that ran.
+                       0011 schedule indexes · 0012 crew_call_positions + booking_status
+                       0013 scheduler_id/call_approved_at · 0014 booking_invites
+                       ALL APPLIED TO DEV ONLY — production has none of them yet.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
@@ -210,6 +226,9 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 - **Per-organization branding of outward-facing email and pages (white-label).** Raised by Dan 2026-07-28 after seeing the handoff and crew-request emails: a production company sending a booking request to its own crew will want it to look like *their* company, not CrewTracker. Affects every outward surface — `lib/inviteEmail.ts`, `lib/callHandoffEmail.ts`, `lib/bookingEmail.ts`, the Final Report PDF, and the public `/book/[token]` page. Deferred, not designed. Two things make it more than a logo swap: the sender domain (Resend needs a verified domain per sender, so `noreply@contact.crewtracker.app` cannot simply become the customer's address without them proving ownership), and the fact that a crew member working for three companies should see three different-looking asks. Build the surfaces so the org name and mark are already data rather than constants, and this stays a change of values rather than a rewrite.
 
+- **Reports and the admin screens still use cards** — the last of the card retirement (see Design system).
+- **Tracker leftovers** — mobile still has card wrappers around rooms and crew; booking status is not yet shown beside the role, which needs `booking_status` adding to `lib/timecardFields.ts`.
+- **Historical shows have no positions**, so the shows list reports them as booked-without-positions. Whether to backfill positions from existing timecards is an open data decision, not a display one.
 - **Stripe billing** — planned. `can_manage_billing` and the `subscriptions` table exist as placeholders; no integration started.
 - ~~Supabase auth emails are unbranded.~~ **DONE 2026-07-28.** Custom SMTP points Supabase Auth at Resend (`noreply@contact.crewtracker.app`), which also lifts the built-in sender's rate limit, and all four templates are branded — source of truth in `docs/email-templates/`, applied by hand in the dashboard. Verified live: password reset and magic-link sign-in both arrive branded and work. Supabase's "Invite user" template is deliberately untouched; CrewTracker sends its own.
 
@@ -220,6 +239,13 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The "Join the Beta" form is a lead-capture funnel, not an auto-provisioning flow, so this stays true. **One thing did quietly contradict it:** `signInWithOtp` defaults `shouldCreateUser` to TRUE, so the login page's "Send magic link instead" created an account for any address typed in and sent the *Confirm signup* email. Found 2026-07-28 when a magic-link request recreated an account deleted the day before. The login page now passes `shouldCreateUser: false`; the invite page keeps the default, because creating an account is the point there and it is gated by a valid token. Any future `signInWithOtp` call needs the same decision made explicitly.
 
 ### Already built — do not rebuild these
+
+- **Scheduling (2026-07-28).** The whole workflow, on branch `scheduling` and **not yet merged to main — none of it is in production**:
+  - `/dashboard/schedule` — company-wide calendar, rooms×days grid on desktop, agenda on mobile. `lib/schedule.ts` holds the cross-show query.
+  - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
+  - **Handoff to a scheduler** — `shows.scheduler_id` / `call_approved_at`, approved from the show page, emails the scheduler. Requires at least one position.
+  - **Booking requests** — `booking_invites`, emailed confirm/decline link at `/book/[token]` with no login, plus an SMS-ready text with deliberately no link. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
+  - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reachable from the positions panel **and** from open-position rows in the tracker.
 
 This list drifted badly once and sent a session off to re-implement finished work. If something here looks missing, search the repo before believing it.
 
