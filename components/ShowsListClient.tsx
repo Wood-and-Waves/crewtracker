@@ -185,7 +185,7 @@ export default function ShowsListClient({
               {header('name', 'Show')}
               {header('dates', 'Dates')}
               {header('status', 'Status')}
-              {header('crewed', 'Positions')}
+              {header('crewed', 'Staffing')}
               <span />
             </div>
 

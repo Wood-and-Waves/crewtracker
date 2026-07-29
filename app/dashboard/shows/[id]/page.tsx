@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
+import OpenPositionRow from '@/components/OpenPositionRow'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
@@ -165,6 +166,27 @@ export default async function ShowDetailPage({
     firstName(a.crew_member_name).localeCompare(firstName(b.crew_member_name)) ||
     (a.crew_member_name || '').localeCompare(b.crew_member_name || '') ||
     a.id.localeCompare(b.id)
+
+  // Unfilled positions on this day's rooms. A gap in the crew belongs on the
+  // screen that shows the crew — not behind a menu, which is where filling one
+  // used to live.
+  const dayRoomIds = roomsList.map(r => r.id)
+  const { data: openPositionRows } = dayRoomIds.length > 0
+    ? await supabase
+        .from('crew_call_positions')
+        .select('id, room_id, role, sort_order, timecards(booking_status)')
+        .in('room_id', dayRoomIds)
+        .order('sort_order')
+    : { data: [] }
+
+  const openByRoom: Record<string, { id: string; role: string }[]> = {}
+  for (const row of (openPositionRows ?? []) as any[]) {
+    // A declined person does not hold their position, so it is open again —
+    // the same rule the database enforces with its partial unique index.
+    const live = (row.timecards ?? []).some((t: any) => t.booking_status !== 'declined')
+    if (live) continue
+    openByRoom[row.room_id] = [...(openByRoom[row.room_id] ?? []), { id: row.id, role: row.role }]
+  }
 
   const roomTimecards: Record<string, any[]> = {}
   for (const room of roomsList) {
@@ -458,6 +480,19 @@ export default async function ShowDetailPage({
                     use24Hour={user.use24Hour}
                     roundingMinutes={roundingMinutes}
                     visibleTypes={dayPunchTypes}
+                  />
+                ))}
+
+                {(openByRoom[room.id] ?? []).map(pos => (
+                  <OpenPositionRow
+                    key={pos.id}
+                    positionId={pos.id}
+                    role={pos.role}
+                    roomId={room.id}
+                    date={activeDay.date}
+                    gridCols={punchGridCols(dayPunchTypes.length)}
+                    punchCount={dayPunchTypes.length}
+                    locked={locked}
                   />
                 ))}
               </div>
