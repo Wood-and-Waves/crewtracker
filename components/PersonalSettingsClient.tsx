@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Card from '@/components/ui/Card'
 import Toggle from '@/components/ui/Toggle'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import Button from '@/components/ui/Button'
@@ -59,8 +58,7 @@ export default function PersonalSettingsClient({
   }
 
   return (
-    <Card className="p-5">
-      <h2 className="text-lg font-bold text-ink mb-4">Personal Preferences</h2>
+    <div className="border-t border-line">
 
       <div className="py-3 border-b border-line">
         <label htmlFor="full-name" className="block text-sm text-ink">Your name</label>
@@ -125,6 +123,6 @@ export default function PersonalSettingsClient({
           {loggingOut ? 'Logging out…' : 'Log out'}
         </Button>
       </div>
-    </Card>
+    </div>
   )
 }

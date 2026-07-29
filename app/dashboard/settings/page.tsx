@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, getMyOrganizations } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import OrgSwitcherCard from '@/components/OrgSwitcherCard'
+import SettingsLayout, { type SettingsSection } from '@/components/SettingsLayout'
 import PersonalSettingsClient from '@/components/PersonalSettingsClient'
 import OrgSettingsClient from '@/components/OrgSettingsClient'
 import AVRolesEditor from '@/components/AVRolesEditor'
@@ -28,54 +29,67 @@ export default async function SettingsPage() {
     supabase.from('payroll_presets').select('*').eq('organization_id', user.organizationId).order('sort_order'),
   ])
 
+  const sections: SettingsSection[] = [
+    {
+      id: 'personal',
+      label: 'Personal',
+      description: 'Only affects your account on this device.',
+      node: (
+        <PersonalSettingsClient
+          use24HourTime={user.use24Hour}
+          shoulderSurferMode={user.shoulderSurfer}
+          fullName={user.fullName || ''}
+        />
+      ),
+    },
+  ]
+
+  if (user.can('can_manage_users') && organization) {
+    sections.push({
+      id: 'organization',
+      label: 'Organization',
+      description: 'Applies to everyone in your organization.',
+      node: (
+        <OrgSettingsClient
+          organizationId={organization.id}
+          timecardRoundingMinutes={organization.timecard_rounding_minutes ?? 1}
+          finalReportEmails={organization.final_report_emails}
+        />
+      ),
+    })
+    sections.push({
+      id: 'roles',
+      label: 'AV roles',
+      description: 'The job titles available when staffing crew.',
+      node: <AVRolesEditor organizationId={user.organizationId} initialRoles={avRoles || []} />,
+    })
+  }
+
+  if (user.can('can_manage_rulesets')) {
+    sections.push({
+      id: 'presets',
+      label: 'Payroll presets',
+      description: 'Named rule sets, copied into a show when it is created.',
+      node: <PayrollPresetsEditor organizationId={user.organizationId} initialPresets={(presets || []) as any} />,
+    })
+  }
+
+  // Below two companies there is nothing to switch between. This is also the
+  // ONLY switcher on mobile — AppShell's account menu is desktop-only — so it
+  // cannot simply move into that menu.
+  if (organizations.length > 1) {
+    sections.push({
+      id: 'companies',
+      label: 'Companies',
+      description: 'Switch which company you are working in.',
+      node: <OrgSwitcherCard organizations={organizations} userId={user.id} />,
+    })
+  }
+
   return (
     <div className="p-6 md:p-10">
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
-
-      <div className="lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start max-w-4xl">
-        <div className="mb-5 lg:mb-0">
-          {/* Renders nothing below two companies. This is the ONLY switcher on
-              mobile — AppShell's account menu is desktop-only. */}
-          {organizations.length > 1 && (
-            <div className="mb-5">
-              <OrgSwitcherCard organizations={organizations} userId={user.id} />
-            </div>
-          )}
-          <PersonalSettingsClient
-            use24HourTime={user.use24Hour}
-            shoulderSurferMode={user.shoulderSurfer}
-            fullName={user.fullName || ''}
-          />
-        </div>
-
-        {user.can('can_manage_users') && organization && (
-          <div className="mb-5 lg:mb-0">
-            <OrgSettingsClient
-              organizationId={organization.id}
-              timecardRoundingMinutes={organization.timecard_rounding_minutes ?? 1}
-              finalReportEmails={organization.final_report_emails}
-            />
-          </div>
-        )}
-
-        {user.can('can_manage_users') && organization && (
-          <div className="lg:col-span-2 mb-5">
-            <AVRolesEditor
-              organizationId={user.organizationId}
-              initialRoles={avRoles || []}
-            />
-          </div>
-        )}
-
-        {user.can('can_manage_rulesets') && (
-          <div className="lg:col-span-2">
-            <PayrollPresetsEditor
-              organizationId={user.organizationId}
-              initialPresets={(presets || []) as any}
-            />
-          </div>
-        )}
-      </div>
+      <h1 className="mb-6 text-2xl font-bold">Settings</h1>
+      <SettingsLayout sections={sections} />
     </div>
   )
 }
