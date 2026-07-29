@@ -162,7 +162,10 @@ export default function TimecardRow({
           // stays a button, which is what puts a crew member on one line.
           'lg:h-auto lg:rounded-pill lg:px-2 lg:py-1.5',
           done && 'bg-surface-2 text-ink hover:opacity-90 lg:bg-transparent lg:text-ink lg:hover:bg-surface-2',
-          !done && !disabled && 'bg-accent/25 text-ink font-bold hover:opacity-90 lg:bg-accent lg:text-accent-ink lg:font-semibold',
+          // One treatment at both widths. Desktop briefly used solid accent and
+          // it shouted next to the boxless times — the tinted fill mobile
+          // already used reads as "this one" without dominating the row.
+          !done && !disabled && 'bg-accent/25 text-ink font-bold hover:opacity-90 lg:font-semibold',
           disabled && 'bg-surface-3 text-muted cursor-not-allowed lg:bg-transparent',
         )}
       >
