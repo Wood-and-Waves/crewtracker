@@ -218,20 +218,24 @@ export default function PayrollPresetsEditor({
       </div>
 
       {editing && draft && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl my-8">
-            <Card className="p-5 mb-4">
+        // Opens in place rather than over the page. A dialog on a settings
+        // screen hides the list you are editing against and cannot be scrolled
+        // alongside it; the rest of this redesign has been removing exactly
+        // that. RulesetFields is long, so it simply extends the section.
+        <div className="mt-4 border-t border-line pt-4">
+          <div className="w-full">
+            <div className="mb-4">
               <p className="text-xs uppercase tracking-wide text-muted mb-3">Preset Name</p>
               <input
                 value={draftName}
                 onChange={e => setDraftName(e.target.value)}
                 className={cn(inputCls, 'w-full px-4 py-3')}
               />
-            </Card>
+            </div>
 
             <RulesetFields values={draft} onChange={(f, v) => setDraft(prev => (prev ? applyRulesetChange(prev, f, v) : prev))} />
 
-            <Card className="p-5">
+            <div className="mt-4">
               {error && <p className="text-xs text-danger mb-3">{error}</p>}
               <div className="flex gap-3">
                 <Button variant="ghost" className="flex-1 py-3" onClick={closeEditor}>Cancel</Button>
@@ -239,7 +243,7 @@ export default function PayrollPresetsEditor({
                   {busy ? 'Saving…' : 'Save Preset'}
                 </Button>
               </div>
-            </Card>
+            </div>
           </div>
         </div>
       )}

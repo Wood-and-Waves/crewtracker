@@ -97,9 +97,14 @@ export default function AVRolesEditor({
   return (
     <div className="border-t border-line pt-4">
 
-      <div className="flex flex-wrap gap-2 mb-4">
+      {/* A ruled list in columns, not a wrapped wall of pills. Thirty-one
+          bubbles of differing widths have no alignment to read along, so
+          finding one means scanning every bubble; alphabetical names in fixed
+          columns can be read down. The × appears on hover so the resting state
+          is just the list. */}
+      <div className="mb-4 grid grid-cols-1 gap-x-8 sm:grid-cols-2 lg:grid-cols-3">
         {sortedRoles.map(role => (
-          <div key={role.id} className="flex items-center gap-1.5 rounded-pill bg-surface-2 border border-line px-2 py-1">
+          <div key={role.id} className="group flex items-center justify-between gap-2 border-b border-line py-1.5">
             {editingId === role.id ? (
               <input
                 autoFocus
@@ -112,7 +117,7 @@ export default function AVRolesEditor({
             ) : (
               <button
                 onClick={() => { setEditingId(role.id); setEditingName(role.name); setError('') }}
-                className="text-sm text-ink hover:text-accent"
+                className="min-w-0 flex-1 truncate text-left text-sm text-ink hover:text-accent"
               >
                 {role.name}
               </button>
@@ -121,7 +126,7 @@ export default function AVRolesEditor({
             <button
               onClick={() => deleteRole(role.id)}
               disabled={busy}
-              className="text-muted hover:text-danger disabled:opacity-30"
+              className="shrink-0 text-muted opacity-0 transition-opacity hover:text-danger focus:opacity-100 group-hover:opacity-100 disabled:opacity-30"
               aria-label={`Delete ${role.name}`}
             >
               ×
