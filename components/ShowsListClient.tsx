@@ -72,9 +72,9 @@ function Crewed({ row }: { row: ShowRow }) {
     // call yet", which reads as "nobody" — and would say that about every show
     // created before the crew call existed.
     return row.bookedPeakPerDay > 0 ? (
-      <div title="Booked without a crew call, so there is nothing to measure against">
-        <div className="text-xs font-semibold text-ink">{row.bookedPeakPerDay} a day</div>
-        <div className="mt-0.5 text-[10.5px] text-muted">No call</div>
+      <div title="Nobody wrote down what this show needs, so there is nothing to measure against">
+        <div className="text-xs font-semibold text-ink">{row.bookedPeakPerDay} booked</div>
+        <div className="mt-0.5 text-[10.5px] text-muted">No positions set</div>
       </div>
     ) : (
       <span className="text-xs text-muted">Not staffed</span>
@@ -86,15 +86,17 @@ function Crewed({ row }: { row: ShowRow }) {
     // 12-person show over 5 days has 60 rows — a number nobody crews against,
     // and the reason the handoff email was rewritten. The headcount underneath
     // says how big the show is; the exact shift counts live in the tooltip.
-    <div title={`${row.filled} of ${row.total} shifts filled · ${row.peakPerDay} crew a day`}>
-      <div className="text-xs font-semibold text-ink">{pct}%</div>
+    // "45 of 60" reads plainly under a column called Positions — they are
+    // positions, one per person per day, and the header says so. The busiest
+    // day's headcount, which is what a scheduler works to, is in the tooltip.
+    <div title={`${row.peakPerDay} crew on the busiest day`}>
+      <div className="text-xs font-semibold text-ink">{row.filled} of {row.total}</div>
       <div className="mt-1 h-1 w-full rounded-pill bg-surface-2">
         <div
           className={cn('h-1 rounded-pill', pct === 100 ? 'bg-good' : 'bg-accent')}
           style={{ width: `${Math.max(pct, 2)}%` }}
         />
       </div>
-      <div className="mt-0.5 text-[10.5px] text-muted">{row.peakPerDay} a day</div>
     </div>
   )
 }
@@ -182,7 +184,7 @@ export default function ShowsListClient({
               {header('name', 'Show')}
               {header('dates', 'Dates')}
               {header('status', 'Status')}
-              {header('crewed', 'Crewed')}
+              {header('crewed', 'Positions')}
               <span />
             </div>
 
@@ -248,7 +250,11 @@ export default function ShowsListClient({
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     {row.total === 0 ? (
-                      <span className="text-xs text-muted">No call yet</span>
+                      <span className="text-xs text-muted">
+                        {row.bookedPeakPerDay > 0
+                          ? `${row.bookedPeakPerDay} booked · no positions set`
+                          : 'Not staffed'}
+                      </span>
                     ) : (
                       <div className="flex items-center gap-2">
                         <div className="h-1 w-20 rounded-pill bg-surface-2">
@@ -261,7 +267,7 @@ export default function ShowsListClient({
                           />
                         </div>
                         <span className="text-xs text-muted">
-                          {Math.round((row.filled / row.total) * 100)}% · {row.peakPerDay} a day
+                          {row.filled} of {row.total} positions
                         </span>
                       </div>
                     )}

@@ -124,7 +124,7 @@ export default function CrewCallGrid({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-xs uppercase tracking-wide text-muted">Rooms &amp; crew call</span>
+        <span className="text-xs uppercase tracking-wide text-muted">Rooms &amp; positions</span>
         <span className="text-xs text-muted">
           {perDay > 0 ? `${perDay} crew on the busiest day` : 'No positions yet'}
         </span>

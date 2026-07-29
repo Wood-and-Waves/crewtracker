@@ -59,7 +59,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
   const text = [
     greeting,
     '',
-    `The crew call for ${input.showName} has been approved${approvedBy}, so it's ready for you to staff.`,
+    `The positions for ${input.showName} have been approved${approvedBy}, so it's ready for you to staff.`,
     '',
     `Show:   ${input.showName}`,
     input.venue ? `Venue:  ${input.venue}` : null,
@@ -75,7 +75,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
   <p style="font-size:15px;margin:0 0 16px">${escapeHtml(greeting)}</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">
-    The crew call for <strong>${escapeHtml(input.showName)}</strong> has been approved${escapeHtml(approvedBy)},
+    The positions for <strong>${escapeHtml(input.showName)}</strong> have been approved${escapeHtml(approvedBy)},
     so it&rsquo;s ready for you to staff.
   </p>
   <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 24px">

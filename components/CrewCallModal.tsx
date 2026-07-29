@@ -259,11 +259,11 @@ export default function CrewCallModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-card border border-line bg-surface p-5 sm:rounded-card">
         <div className="mb-1 flex items-baseline justify-between gap-3">
-          <h2 className="text-lg font-bold text-ink">Crew call</h2>
+          <h2 className="text-lg font-bold text-ink">Positions</h2>
           <span className="text-sm text-muted">{roomName}</span>
         </div>
         <p className="mb-4 text-xs text-muted">
-          What this room needs on this day. The scheduler fills these.
+          The roles this room needs on this day. The scheduler fills them.
         </p>
 
         {loading ? (
@@ -272,7 +272,7 @@ export default function CrewCallModal({
           <>
             <div className="mb-4 flex items-center gap-2">
               <Chip tone={positions.length === 0 ? 'neutral' : filled === positions.length ? 'good' : 'ot'}>
-                {positions.length === 0 ? 'No call yet' : `${filled} of ${positions.length} filled`}
+                {positions.length === 0 ? 'No positions yet' : `${filled} of ${positions.length} filled`}
               </Chip>
             </div>
 

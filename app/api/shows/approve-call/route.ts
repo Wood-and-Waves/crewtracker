@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   const count = call.total
   if (!count) {
     return NextResponse.json(
-      { error: 'Add at least one position to the crew call before handing this show over.' },
+      { error: 'Add at least one position before handing this show over.' },
       { status: 400 },
     )
   }

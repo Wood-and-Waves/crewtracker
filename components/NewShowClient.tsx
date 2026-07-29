@@ -200,7 +200,7 @@ export default function NewShowClient({
         // failing the whole creation — sending someone back to an empty form
         // would lose everything they typed.
         if (posError) {
-          setError(`Show created, but the crew call didn't save: ${posError.message}`)
+          setError(`Show created, but the positions didn't save: ${posError.message}`)
           setLoading(false)
           return
         }
@@ -265,7 +265,7 @@ export default function NewShowClient({
 
       {dates.length === 0 ? (
         <p className="rounded-card border border-dashed border-line px-4 py-8 text-center text-sm text-muted">
-          Set the start and end dates to build the crew call.
+          Set the start and end dates to add positions.
         </p>
       ) : (
         <CrewCallGrid

@@ -146,7 +146,7 @@ export default function RoomActionsMenu({
               <button
                 onClick={() => { setMenuOpen(false); setCallOpen(true) }}
                 className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2">
-                Crew call
+                Positions
               </button>
               <button
                 onClick={startEditCrew}

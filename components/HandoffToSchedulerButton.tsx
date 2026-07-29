@@ -129,14 +129,14 @@ export default function HandoffToSchedulerButton({
         onClick={() => setOpen(true)}
         disabled={nothingToHandOff}
         title={nothingToHandOff
-          ? 'Add positions to the crew call first — there is nothing to hand over yet.'
+          ? 'Add positions first — there is nothing to hand over yet.'
           : undefined}
       >
         Hand off to scheduler
       </Button>
       {nothingToHandOff && !compact && (
         <p className="mt-1 text-center text-[11px] text-muted">
-          Build the crew call first
+          Add positions first
         </p>
       )}
 
@@ -145,7 +145,7 @@ export default function HandoffToSchedulerButton({
           <div className="w-full max-w-md rounded-t-card border border-line bg-surface p-5 sm:rounded-card">
             <h2 className="text-lg font-bold text-ink">Hand off to scheduler</h2>
             <p className="mb-4 mt-1 text-xs text-muted">
-              This approves the crew call — {callSize} — and emails them that
+              This approves the positions — {callSize} — and emails them that
               it&rsquo;s ready to staff.
             </p>
 
