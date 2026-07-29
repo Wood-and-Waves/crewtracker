@@ -227,11 +227,20 @@ async function seedInto(orgId) {
         // Split this show's crew between its rooms, so a room has a plausible
         // 3–5 people rather than everyone being everywhere.
         const perRoom = Math.max(3, Math.ceil(onShow.length / rooms.length))
-        for (const c of onShow.slice(ri * perRoom, ri * perRoom + perRoom)) {
+        const assigned = onShow.slice(ri * perRoom, ri * perRoom + perRoom)
+        let posOrder = 0
+        for (const c of assigned) {
+          // Every booking answers a position, because that is how the work
+          // really goes: somebody decides the room needs an A1 and then somebody
+          // fills it. Seeding crew without positions produced shows that read
+          // "no positions set", which is not a state a real show is ever in.
+          const { rows: [pos] } = await client.query(
+            `insert into crew_call_positions (room_id, role, sort_order) values ($1,$2,$3) returning id`,
+            [room.id, c.role, posOrder++])
           const { rows: [tc] } = await client.query(
-            `insert into timecards (room_id, crew_member_id, crew_member_name, role, day_rate)
-             values ($1,$2,$3,$4,$5) returning id`,
-            [room.id, c.id, c.name, c.role, c.rate])
+            `insert into timecards (room_id, crew_member_id, crew_member_name, role, day_rate, call_position_id, booking_status)
+             values ($1,$2,$3,$4,$5,$6,'confirmed') returning id`,
+            [room.id, c.id, c.name, c.role, c.rate, pos.id])
 
           // 'full' = every day punched, 'partial' = only days already past.
           const isPast = startOffset + d < 0
@@ -243,6 +252,22 @@ async function seedInto(orgId) {
                 `insert into punches (timecard_id, punch_type, punched_at) values ($1,$2,$3)`,
                 [tc.id, type, `${dayDate}T${at}:00Z`])
             }
+          }
+        }
+
+        // Shows that have not started yet are still being crewed: leave a
+        // couple of positions open so the list shows real progress rather than
+        // every show sitting at 100%.
+        if (punches === 'none') {
+          // A room with nobody assigned still gets a call — that is exactly the
+          // "sold but not yet crewed" state Kestrel exists to demonstrate, and
+          // without positions it reads as "not staffed", which is a different
+          // and much rarer situation.
+          const open = assigned.length === 0 ? 4 : ri === 0 ? 2 : 1
+          for (let k = 0; k < open; k++) {
+            await client.query(
+              `insert into crew_call_positions (room_id, role, sort_order) values ($1,$2,$3)`,
+              [room.id, ROLES[(ri + k) % ROLES.length], posOrder++])
           }
         }
       }

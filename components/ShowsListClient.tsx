@@ -86,17 +86,18 @@ function Crewed({ row }: { row: ShowRow }) {
     // 12-person show over 5 days has 60 rows — a number nobody crews against,
     // and the reason the handoff email was rewritten. The headcount underneath
     // says how big the show is; the exact shift counts live in the tooltip.
-    // "45 of 60" reads plainly under a column called Positions — they are
-    // positions, one per person per day, and the header says so. The busiest
-    // day's headcount, which is what a scheduler works to, is in the tooltip.
+    // Percentage leads because it is what you scan for; the exact fraction sits
+    // under it for when the answer is "how many short". The busiest day's
+    // headcount stays in the tooltip.
     <div title={`${row.peakPerDay} crew on the busiest day`}>
-      <div className="text-xs font-semibold text-ink">{row.filled} of {row.total}</div>
+      <div className="text-xs font-semibold text-ink">{pct}%</div>
       <div className="mt-1 h-1 w-full rounded-pill bg-surface-2">
         <div
           className={cn('h-1 rounded-pill', pct === 100 ? 'bg-good' : 'bg-accent')}
           style={{ width: `${Math.max(pct, 2)}%` }}
         />
       </div>
+      <div className="mt-0.5 text-[10.5px] text-muted">{row.filled} of {row.total}</div>
     </div>
   )
 }
@@ -267,7 +268,7 @@ export default function ShowsListClient({
                           />
                         </div>
                         <span className="text-xs text-muted">
-                          {row.filled} of {row.total} positions
+                          {Math.round((row.filled / row.total) * 100)}% · {row.filled} of {row.total}
                         </span>
                       </div>
                     )}
