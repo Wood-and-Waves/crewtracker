@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 
 type AVRole = { id: string; name: string; sort_order: number }
@@ -96,9 +95,7 @@ export default function AVRolesEditor({
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
 
   return (
-    <Card className="p-5">
-      <h2 className="text-lg font-bold text-ink mb-1">AV Roles</h2>
-      <p className="text-xs text-muted mb-4">Standard job titles available when staffing crew, shared across your organization.</p>
+    <div className="border-t border-line pt-4">
 
       <div className="flex flex-wrap gap-2 mb-4">
         {sortedRoles.map(role => (
@@ -146,6 +143,6 @@ export default function AVRolesEditor({
         />
         <Button size="sm" onClick={addRole} disabled={busy || !newName.trim()}>Add</Button>
       </div>
-    </Card>
+    </div>
   )
 }

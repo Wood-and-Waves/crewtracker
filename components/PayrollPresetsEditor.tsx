@@ -159,12 +159,14 @@ export default function PayrollPresetsEditor({
   const editing = presets.find(p => p.id === editingId) || null
 
   return (
-    <Card className="p-5">
-      <h2 className="text-lg font-bold text-ink mb-1">Payroll Presets</h2>
-      <p className="text-xs text-muted mb-4">
-        Named rule sets you can pick when creating a show. The one marked Default is pre-selected.
-        Picking a preset <span className="text-ink">copies</span> its rules into that show — editing or deleting a preset
-        later never changes a show that already exists.
+    <div className="border-t border-line pt-4">
+      {/* The section header says what presets are; this says the thing it does
+          not — that a preset is copied, so editing one never rewrites a show
+          that already exists. */}
+      <p className="mb-4 text-xs text-muted">
+        The one marked Default is pre-selected. Picking a preset{' '}
+        <span className="text-ink">copies</span> its rules into that show — editing or deleting
+        a preset later never changes a show that already exists.
       </p>
 
       <div className="flex flex-col gap-2 mb-4">
@@ -241,6 +243,6 @@ export default function PayrollPresetsEditor({
           </div>
         </div>
       )}
-    </Card>
+    </div>
   )
 }
