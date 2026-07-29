@@ -51,7 +51,9 @@ const STATUS_RANK: Record<ShowStatus, number> = {
   new: 0, staffing: 1, preshow: 2, active: 3, wrapped: 4, finalized: 5, archived: 6,
 }
 
-const COLS = 'grid-cols-[minmax(0,1.8fr)_116px_104px_112px_104px_84px]'
+// Scheduler dropped at Dan's request: it was blank on most rows, and who is
+// crewing a show is a fact you want on the show, not while scanning the list.
+const COLS = 'grid-cols-[minmax(0,1.8fr)_116px_104px_112px_84px]'
 
 function fmtRange(start: string, end: string) {
   // Bare 'YYYY-MM-DD' + T00:00:00 = local midnight. A date-only string parses as
@@ -100,7 +102,7 @@ export default function ShowsListClient({
     const q = query.trim().toLowerCase()
     const filtered = q
       ? rows.filter(r =>
-          [r.name, r.venue, r.cityState, r.clientCompany, r.schedulerName]
+          [r.name, r.venue, r.cityState, r.clientCompany]
             .some(v => v?.toLowerCase().includes(q)),
         )
       : rows
@@ -167,7 +169,6 @@ export default function ShowsListClient({
               {header('dates', 'Dates')}
               {header('status', 'Status')}
               {header('crewed', 'Crewed')}
-              <span className="text-[10.5px] font-bold uppercase tracking-wide text-muted">Scheduler</span>
               <span />
             </div>
 
@@ -198,8 +199,6 @@ export default function ShowsListClient({
                 </div>
 
                 <Crewed row={row} />
-
-                <div className="truncate text-xs text-muted">{row.schedulerName || '—'}</div>
 
                 <div className="flex justify-end">
                   {canArchive && <ArchiveShowButton showId={row.id} archived={row.archived} />}
