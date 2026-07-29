@@ -174,6 +174,9 @@ scripts/
   db-grants.mjs — regenerates sql/grants.sql from production (npm run db:grants)
   db-migrate.mjs— applies sql/migrations/ in order, once each (npm run db:migrate)
   db-seed.mjs   — fills a DEV database with generated fake data (npm run db:seed)
+  dev-set-password.mjs — sets a DEV account's password when the generated one is lost
+                  (npm run dev:password -- <email> '<password>'). Service role, so it needs
+                  no old password — which is why it refuses the production ref, no override.
   sql/
     schema.sql       — generated baseline; the shape of the database. Do not hand-edit.
     out-of-schema.sql— generated; triggers pg_dump --schema=public can't see
