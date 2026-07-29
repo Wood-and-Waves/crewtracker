@@ -39,6 +39,8 @@ export type ShowRow = {
   /** Position rows filled and total. Exact, but not what the column leads with. */
   filled: number
   total: number
+  /** People actually booked on the busiest day, whether or not a call exists. */
+  bookedPeakPerDay: number
   schedulerName: string | null
   archived: boolean
 }
@@ -66,7 +68,17 @@ function fmtRange(start: string, end: string) {
 
 function Crewed({ row }: { row: ShowRow }) {
   if (row.total === 0) {
-    return <span className="text-xs text-muted">No call yet</span>
+    // No call was built. Report who is actually on the show rather than "No
+    // call yet", which reads as "nobody" — and would say that about every show
+    // created before the crew call existed.
+    return row.bookedPeakPerDay > 0 ? (
+      <div title="Booked without a crew call, so there is nothing to measure against">
+        <div className="text-xs font-semibold text-ink">{row.bookedPeakPerDay} a day</div>
+        <div className="mt-0.5 text-[10.5px] text-muted">No call</div>
+      </div>
+    ) : (
+      <span className="text-xs text-muted">Not staffed</span>
+    )
   }
   const pct = Math.round((row.filled / row.total) * 100)
   return (
@@ -115,8 +127,10 @@ export default function ShowsListClient({
         case 'crewed': {
           // A show with no call sorts as least-crewed rather than as 100%,
           // which is what dividing by zero would otherwise imply.
-          const pa = a.total === 0 ? -1 : a.filled / a.total
-          const pb = b.total === 0 ? -1 : b.filled / b.total
+          const rank = (r: ShowRow) =>
+            r.total > 0 ? r.filled / r.total : r.bookedPeakPerDay > 0 ? -0.5 : -1
+          const pa = rank(a)
+          const pb = rank(b)
           return dir * (pa - pb)
         }
         default: return dir * a.startDate.localeCompare(b.startDate)

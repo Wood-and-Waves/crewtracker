@@ -76,6 +76,26 @@ export default async function DashboardPage({
     callByShow.set(showId, entry)
   }
 
+  // People actually booked, independent of whether a call exists.
+  //
+  // The Crewed column measures the CALL, and a show with crew on it but no call
+  // reported "No call yet" — true, and useless: it is how every show worked
+  // before the crew call existed, so every historical show reads as empty. The
+  // fallback below shows the headcount that is really there.
+  const { data: bookedRows } = await supabase
+    .from('timecards')
+    .select('id, rooms!inner ( work_days!inner ( date, show_id ) )')
+
+  const bookedByShow = new Map<string, Map<string, number>>()
+  for (const row of (bookedRows ?? []) as any[]) {
+    const room = Array.isArray(row.rooms) ? row.rooms[0] : row.rooms
+    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+    if (!wd?.show_id || !wd?.date) continue
+    const perDay = bookedByShow.get(wd.show_id) ?? new Map<string, number>()
+    perDay.set(wd.date, (perDay.get(wd.date) ?? 0) + 1)
+    bookedByShow.set(wd.show_id, perDay)
+  }
+
   // Scheduler names, one query for the page. Only the shows on screen are
   // looked up, and only their name is read.
   const schedulerIds = [...new Set(shows.map(s => s.scheduler_id).filter(Boolean))] as string[]
@@ -112,6 +132,7 @@ export default async function DashboardPage({
       statusLabel: meta.label,
       statusTone: meta.tone,
       peakPerDay: summary.peakPerDay,
+      bookedPeakPerDay: Math.max(0, ...[...(bookedByShow.get(show.id)?.values() ?? [0])]),
       filled: call?.filled ?? 0,
       total: call?.total ?? 0,
       schedulerName: show.scheduler_id ? schedulerById.get(show.scheduler_id) ?? null : null,
