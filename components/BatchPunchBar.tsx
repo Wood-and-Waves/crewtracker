@@ -30,6 +30,8 @@ export default function BatchPunchBar({
   timezone,
   label = 'Batch Actions',
   locked = false,
+  gridCols,
+  columns,
 }: {
   timecards: BatchTimecard[]
   dayDate: string
@@ -40,9 +42,23 @@ export default function BatchPunchBar({
    * identically-labelled bars on one screen is a good way to wrap the wrong
    * people. Scope is whatever `timecards` is; this just names it.
    */
-  label?: string
+  label?: string | null
   /** Show is finalized: batch punching is refused by the database. */
   locked?: boolean
+  /**
+   * The punch table's grid template, so each batch button sits directly above
+   * the column it fills. Alignment is what lets the "Batch Actions" caption go:
+   * position explains the buttons better than a label ever did.
+   */
+  gridCols?: string
+  /**
+   * The DAY's punch types, not this bar's own. A room where nobody has taken a
+   * second break shows fewer punch columns than the day's header does, and a bar
+   * that rendered only its own would drift out of alignment with the table
+   * underneath it. Columns come from the day; buttons for punches this scope
+   * cannot apply are simply inactive, which is the existing behaviour.
+   */
+  columns?: PunchType[]
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -122,14 +138,24 @@ export default function BatchPunchBar({
     router.refresh()
   }
 
+  // Same reveal as the punch table: no M3 button until someone has finished a
+  // second break. Falls back to this bar's own scope when the day's columns are
+  // not supplied.
+  const types = columns ?? visiblePunchTypes(timecards.map(tc => tc.punches))
+
   return (
     <div className="px-4 pt-3 pb-1">
-      <p className="text-[10.5px] uppercase tracking-wide text-muted font-bold mb-2">{label}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {/* Same reveal as the punch table: no M3 button until someone in scope
-            has finished a second break. Derived from the timecards this bar
-            already has, so nothing needs threading in. */}
-        {visiblePunchTypes(timecards.map(tc => tc.punches)).map(type => {
+      {label && (
+        <p className="text-[10.5px] uppercase tracking-wide text-muted font-bold mb-2">{label}</p>
+      )}
+      {/* Three across on a phone rather than flex-wrap, which left "Wrap All"
+          orphaned on a line of its own, and which matches the 3x2 punch block
+          each crew member gets. On desktop the punch table's own template takes
+          over so every button lands on its column. */}
+      <div className={cn('grid grid-cols-3 gap-1.5', gridCols && `lg:gap-3 ${gridCols}`)}>
+        {/* Empty cell under the Crew column, desktop only. */}
+        {gridCols && <div className="hidden lg:block" />}
+        {types.map(type => {
           const active = canApplyBatch(timecards, type)
           return (
             <button
@@ -138,7 +164,7 @@ export default function BatchPunchBar({
               disabled={busy || locked}
               title={locked ? 'Times are locked — the final report has been sent.' : undefined}
               className={cn(
-                'rounded-[5px] border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
+                'w-full rounded-[5px] border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
                 // `active` marks the punch this bar would apply next, in accent.
                 // On a locked show that highlight has to go: opacity-50 alone
                 // leaves an accent button still reading as the thing to press,
@@ -154,6 +180,7 @@ export default function BatchPunchBar({
             </button>
           )
         })}
+        {gridCols && <div className="hidden lg:block" />}
       </div>
 
       {overlay.kind === 'picker' && (

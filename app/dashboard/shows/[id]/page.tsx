@@ -254,21 +254,57 @@ export default async function ShowDetailPage({
   const showMeta = [show.venue, show.city_state, show.client_company].filter(Boolean).join(' · ')
 
   return (
-    <div className="p-6 md:p-10 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8 lg:max-w-[1400px] lg:mx-auto">
-      {/* Left rail (desktop only): show info, day nav, day summary, actions.
-          The mobile header lives inside MobileRoomTracker so its add-crew
+    <div className="p-6 md:p-10 lg:mx-auto lg:max-w-[1400px]">
+      {/* Desktop header strip. This was a 240px left rail holding the show
+          name, day nav, four stat tiles and four stacked buttons — roughly a
+          quarter of the width, permanently, to hold things you read rather than
+          work in. Laid across the top instead, the punch grid gets the whole
+          page. The mobile header lives inside MobileRoomTracker so its add-crew
           icon can target the currently selected room. */}
-      <aside className="hidden lg:block space-y-4 lg:sticky lg:top-20 lg:self-start">
-        <div>
-          <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
-          <h1 className="text-2xl font-extrabold tracking-tight mt-2">{show.name}</h1>
-          {showMeta && <p className="text-sm text-muted mt-1">{showMeta}</p>}
+      <header className="hidden lg:block">
+        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+
+        <div className="mt-2 flex items-start justify-between gap-6">
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-extrabold tracking-tight">{show.name}</h1>
+            {showMeta && <p className="mt-1 truncate text-sm text-muted">{showMeta}</p>}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={prevDay ? `?day=${prevDay.day_number}` : '#'}
+              aria-label="Previous day"
+              className={cn(
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2',
+                !prevDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
+              )}
+            >
+              ‹
+            </Link>
+            <div className="min-w-[132px] text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                Day {activeDay.day_number} of {workDays.length}
+              </p>
+              <p className="text-base font-bold tabular-nums text-ink">{dateLabel}</p>
+            </div>
+            {nextDay ? (
+              <Link
+                href={`?day=${nextDay.day_number}`}
+                aria-label="Next day"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 hover:border-accent hover:text-accent"
+              >
+                ›
+              </Link>
+            ) : (
+              addDayControl
+            )}
+          </div>
         </div>
 
         {show.finalized_at && (
-          <div className="rounded-card border border-line bg-surface-2 p-3">
+          <div className="mt-3 rounded-field border border-line bg-surface-2 px-3 py-2">
             <p className="text-sm font-semibold text-ink">Times locked</p>
-            <p className="text-xs text-muted mt-1">
+            <p className="mt-1 text-xs text-muted">
               The final report was sent{' '}
               {new Date(show.finalized_at).toLocaleDateString('en-US', {
                 month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone,
@@ -281,79 +317,50 @@ export default async function ShowDetailPage({
           </div>
         )}
 
-        <div className="rounded-card border border-line bg-surface p-3">
-          <div className="flex items-center justify-between gap-2">
-            <Link
-              href={prevDay ? `?day=${prevDay.day_number}` : '#'}
-              aria-label="Previous day"
-              className={cn(
-                'rounded-full bg-surface-2 border border-line h-9 w-9 flex items-center justify-center shrink-0',
-                !prevDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
-              )}
-            >
-              ‹
+        {/* Stats inline, not as four tiles in a 2x2 grid. Same four numbers,
+            one line, and the actions sit on the same rule rather than stacking
+            underneath them. */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-line py-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Crew</p>
+            <p className="text-lg font-bold tabular-nums text-ink">{summary.crew}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</p>
+            <p className="text-lg font-bold tabular-nums text-ink">{summary.rooms}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">ST hrs</p>
+            <p className="text-lg font-bold tabular-nums text-ink">{summary.st.toFixed(2)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">OT / DT</p>
+            <p className="text-lg font-bold tabular-nums text-ink">{summary.otdt.toFixed(2)}</p>
+          </div>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <AddRoomModal
+              showId={id}
+              currentWorkDayId={activeDay.id}
+              remainingWorkDayIds={remainingWorkDayIds}
+            />
+            <HandoffToSchedulerButton
+              showId={id}
+              approvedAt={show.call_approved_at ?? null}
+              schedulerName={(scheduler as any)?.full_name || (scheduler as any)?.email || null}
+              positionCount={callSummary.total}
+              callSize={describeCallSize(callSummary)}
+              compact
+            />
+            <Link href={`/dashboard/shows/${id}/edit`}>
+              <Button variant="ghost" size="sm">Edit Show</Button>
             </Link>
-            <div className="text-center">
-              <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {activeDay.day_number} of {workDays.length}</p>
-              <p className="text-base font-bold text-ink tabular-nums">{dateLabel}</p>
-            </div>
-            {nextDay ? (
-              <Link
-                href={`?day=${nextDay.day_number}`}
-                aria-label="Next day"
-                className="rounded-full bg-surface-2 border border-line h-9 w-9 flex items-center justify-center shrink-0 hover:border-accent hover:text-accent"
-              >
-                ›
-              </Link>
-            ) : (
-              addDayControl
-            )}
+            <Link href={`/dashboard/shows/${id}/reports`}>
+              <Button variant="ghost" size="sm">View Report</Button>
+            </Link>
           </div>
         </div>
-
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted mb-2">Day summary</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-field bg-surface-2 px-3 py-2">
-              <p className="text-xs text-muted">Crew</p>
-              <p className="text-xl font-bold text-ink tabular-nums">{summary.crew}</p>
-            </div>
-            <div className="rounded-field bg-surface-2 px-3 py-2">
-              <p className="text-xs text-muted">Rooms</p>
-              <p className="text-xl font-bold text-ink tabular-nums">{summary.rooms}</p>
-            </div>
-            <div className="rounded-field bg-surface-2 px-3 py-2">
-              <p className="text-xs text-muted">ST hrs</p>
-              <p className="text-xl font-bold text-ink tabular-nums">{summary.st.toFixed(2)}</p>
-            </div>
-            <div className="rounded-field bg-surface-2 px-3 py-2">
-              <p className="text-xs text-muted">OT / DT</p>
-              <p className="text-xl font-bold text-ink tabular-nums">{summary.otdt.toFixed(2)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-stretch gap-2">
-          <AddRoomModal
-            showId={id}
-            currentWorkDayId={activeDay.id}
-            remainingWorkDayIds={remainingWorkDayIds}
-          />
-          <HandoffToSchedulerButton
-            showId={id}
-            approvedAt={show.call_approved_at ?? null}
-            schedulerName={(scheduler as any)?.full_name || (scheduler as any)?.email || null}
-            positionCount={callSummary.total}
-            callSize={describeCallSize(callSummary)}
-          />
-          <Link href={`/dashboard/shows/${id}/edit`} className="w-full">
-            <Button variant="ghost" size="sm" className="w-full">Edit Show</Button>
-          </Link>
-          <Link href={`/dashboard/shows/${id}/reports`} className="w-full">
-            <Button variant="ghost" size="sm" className="w-full">View Report</Button>
-          </Link>
-        </div>
-      </aside>
+      </header>
 
       {/* One room per row, at every width.
           Rooms used to sit two-up on a 2xl screen, which meant the punch table
@@ -372,13 +379,15 @@ export default async function ShowDetailPage({
             bar exactly. Matters more now rooms stack one per row, since reaching
             each room's bar means scrolling past the one above it. */}
         {roomsList.length > 1 && dayTimecards.length > 0 && (
-          <div className="rounded-card border border-line bg-surface">
+          <div className="border-b border-line pb-2">
             <BatchPunchBar
               locked={locked}
               timecards={dayTimecards}
               dayDate={activeDay.date}
               timezone={timezone}
               label={`All Rooms · ${dayTimecards.length} crew`}
+              gridCols={punchGridCols(dayPunchTypes.length)}
+              columns={dayPunchTypes}
             />
           </div>
         )}
@@ -386,13 +395,23 @@ export default async function ShowDetailPage({
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
           return (
-            <div key={room.id} className="rounded-card border border-line bg-surface">
-              <div className="flex items-center justify-between p-4 border-b border-line">
+            <div key={room.id} className="min-w-0">
+              <div className="flex items-center justify-between px-4 pt-2 pb-1">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
                 <RoomActionsMenu locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
 
-              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={activeDay.date} timezone={timezone} locked={locked} />}
+              {crew.length > 0 && (
+                <BatchPunchBar
+                  timecards={crew}
+                  dayDate={activeDay.date}
+                  timezone={timezone}
+                  locked={locked}
+                  label={null}
+                  gridCols={punchGridCols(dayPunchTypes.length)}
+                  columns={dayPunchTypes}
+                />
+              )}
 
               {/* Column headers — only meaningful once there's a ruled table
                   to head; hidden on mobile where TimecardRow renders labeled

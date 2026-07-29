@@ -26,6 +26,7 @@ export default function HandoffToSchedulerButton({
   schedulerName,
   positionCount,
   callSize,
+  compact = false,
 }: {
   showId: string
   approvedAt: string | null
@@ -34,6 +35,8 @@ export default function HandoffToSchedulerButton({
   positionCount: number
   /** Human phrasing, e.g. "12 crew across 5 days" — what the scheduler reads. */
   callSize: string
+  /** Inline in a horizontal toolbar rather than stacked in a sidebar. */
+  compact?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -96,6 +99,14 @@ export default function HandoffToSchedulerButton({
   }
 
   if (approvedAt) {
+    if (compact) {
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-muted">
+          <Chip tone="good">Handed off</Chip>
+          <span className="max-w-[120px] truncate">{schedulerName || 'A scheduler'}</span>
+        </span>
+      )
+    }
     return (
       <div className="rounded-card border border-line bg-surface px-3 py-2">
         <div className="flex items-center justify-between gap-2">
@@ -113,7 +124,8 @@ export default function HandoffToSchedulerButton({
     <>
       <Button
         variant="ghost"
-        className="w-full"
+        size={compact ? 'sm' : 'md'}
+        className={compact ? '' : 'w-full'}
         onClick={() => setOpen(true)}
         disabled={nothingToHandOff}
         title={nothingToHandOff
@@ -122,7 +134,7 @@ export default function HandoffToSchedulerButton({
       >
         Hand off to scheduler
       </Button>
-      {nothingToHandOff && (
+      {nothingToHandOff && !compact && (
         <p className="mt-1 text-center text-[11px] text-muted">
           Build the crew call first
         </p>
