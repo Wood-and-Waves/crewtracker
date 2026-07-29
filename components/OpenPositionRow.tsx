@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/cn'
 import FillPositionPicker from '@/components/FillPositionPicker'
 
@@ -34,6 +35,7 @@ export default function OpenPositionRow({
   punchCount: number
   locked?: boolean
 }) {
+  const router = useRouter()
   const [filling, setFilling] = useState(false)
 
   return (
@@ -73,7 +75,13 @@ export default function OpenPositionRow({
             roomId={roomId}
             date={date}
             onCancel={() => setFilling(false)}
-            onFilled={() => setFilling(false)}
+            onFilled={() => {
+              setFilling(false)
+              // Without this the insert succeeds and the row still says "Open
+              // position", which is indistinguishable from the booking having
+              // failed — exactly how it looked to Dan.
+              router.refresh()
+            }}
           />
         </div>
       )}

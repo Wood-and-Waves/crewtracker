@@ -60,19 +60,36 @@ export default async function DashboardPage({
   // how many PEOPLE a show needs, never the position-row count. A twelve-person
   // show over five days is sixty rows, which is not a number anybody crews
   // against.
-  const callByShow = new Map<string, { total: number; filled: number; dates: { date: string }[] }>()
+  type ShowCall = {
+    total: number
+    filled: number
+    dates: { date: string }[]
+    // Per day, so the column can report PEOPLE. Positions are stored per person
+    // per day, so a 12-person show over 5 days is 60 rows — the percentage is
+    // honest about the whole run, but the fraction beneath it has to be a
+    // number of humans or it means nothing to a scheduler.
+    byDate: Map<string, { total: number; filled: number }>
+  }
+  const callByShow = new Map<string, ShowCall>()
   for (const row of (callRows ?? []) as any[]) {
     const room = Array.isArray(row.rooms) ? row.rooms[0] : row.rooms
     const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
     const showId = wd?.show_id
     if (!showId) continue
-    const entry = callByShow.get(showId) ?? { total: 0, filled: 0, dates: [] }
+    const entry: ShowCall = callByShow.get(showId)
+      ?? { total: 0, filled: 0, dates: [], byDate: new Map() }
     entry.total += 1
     if (wd.date) entry.dates.push({ date: wd.date })
     // A declined person does not hold their position, so they do not count it
     // as filled — the same rule the database enforces with a partial index.
     const live = (row.timecards ?? []).some((t: any) => t.booking_status !== 'declined')
     if (live) entry.filled += 1
+    if (wd.date) {
+      const day = entry.byDate.get(wd.date) ?? { total: 0, filled: 0 }
+      day.total += 1
+      if (live) day.filled += 1
+      entry.byDate.set(wd.date, day)
+    }
     callByShow.set(showId, entry)
   }
 
@@ -132,6 +149,13 @@ export default async function DashboardPage({
       statusLabel: meta.label,
       statusTone: meta.tone,
       peakPerDay: summary.peakPerDay,
+      // The busiest day decides the headline: it is the day that needs the most
+      // people, so it is the one a scheduler is working to.
+      peakDayFilled: (() => {
+        let best = { total: 0, filled: 0 }
+        for (const d of call?.byDate.values() ?? []) if (d.total > best.total) best = d
+        return best.filled
+      })(),
       bookedPeakPerDay: Math.max(0, ...[...(bookedByShow.get(show.id)?.values() ?? [0])]),
       filled: call?.filled ?? 0,
       total: call?.total ?? 0,

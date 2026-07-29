@@ -36,6 +36,8 @@ export type ShowRow = {
   statusTone: 'neutral' | 'live' | 'ot' | 'good' | 'danger' | 'staffing' | 'preshow' | 'archived'
   /** Headcount on the busiest day — how many people must be found. */
   peakPerDay: number
+  /** How many of those are filled. */
+  peakDayFilled: number
   /** Position rows filled and total. Exact, but not what the column leads with. */
   filled: number
   total: number
@@ -89,7 +91,7 @@ function Crewed({ row }: { row: ShowRow }) {
     // Percentage leads because it is what you scan for; the exact fraction sits
     // under it for when the answer is "how many short". The busiest day's
     // headcount stays in the tooltip.
-    <div title={`${row.peakPerDay} crew on the busiest day`}>
+    <div title={`${row.filled} of ${row.total} shifts filled across the run`}>
       <div className="text-xs font-semibold text-ink">{pct}%</div>
       <div className="mt-1 h-1 w-full rounded-pill bg-surface-2">
         <div
@@ -97,7 +99,12 @@ function Crewed({ row }: { row: ShowRow }) {
           style={{ width: `${Math.max(pct, 2)}%` }}
         />
       </div>
-      <div className="mt-0.5 text-[10.5px] text-muted">{row.filled} of {row.total}</div>
+      {/* People on the busiest day, not position-shifts. A 12-person show over
+          five days is 60 shifts, and "40 of 52" is not a number anybody crews
+          against — the exact shift count is in the tooltip. */}
+      <div className="mt-0.5 text-[10.5px] text-muted">
+        {row.peakDayFilled} of {row.peakPerDay} crew
+      </div>
     </div>
   )
 }
@@ -268,7 +275,7 @@ export default function ShowsListClient({
                           />
                         </div>
                         <span className="text-xs text-muted">
-                          {Math.round((row.filled / row.total) * 100)}% · {row.filled} of {row.total}
+                          {Math.round((row.filled / row.total) * 100)}% · {row.peakDayFilled} of {row.peakPerDay} crew
                         </span>
                       </div>
                     )}
