@@ -88,8 +88,17 @@ export default async function SettingsPage() {
 
   return (
     <div className="p-6 md:p-10">
-      <h1 className="mb-6 text-2xl font-bold">Settings</h1>
-      <SettingsLayout sections={sections} />
+      <h1 className="mb-6 text-3xl font-extrabold tracking-tight">Settings</h1>
+      {/* One bordered surface around the whole screen, the same as the table on
+          Shows, Directory and Team and the grid on Schedule. Settings was the
+          only nav destination whose content sat bare on the page background,
+          which read as an unfinished page rather than a deliberate one.
+          This is not the card retirement coming back: what is going is the
+          ragged grid of differently-sized cards, not a single container that
+          gives a screen its edge. */}
+      <div className="rounded-card border border-line bg-surface p-4 md:p-6">
+        <SettingsLayout sections={sections} />
+      </div>
     </div>
   )
 }

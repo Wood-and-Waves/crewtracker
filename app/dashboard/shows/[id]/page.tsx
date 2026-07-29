@@ -401,7 +401,11 @@ export default async function ShowDetailPage({
             bar exactly. Matters more now rooms stack one per row, since reaching
             each room's bar means scrolling past the one above it. */}
         {roomsList.length > 1 && dayTimecards.length > 0 && (
-          <div className="border-b border-line pb-2">
+          // No rule under it now the rooms below are boxed — a bare hairline
+          // floating above a bordered surface reads as a leftover. This is a
+          // page-level control sitting above the content, the same shape as the
+          // search field above Directory's table.
+          <div className="pb-1">
             <BatchPunchBar
               locked={locked}
               timecards={dayTimecards}
@@ -417,8 +421,16 @@ export default async function ShowDetailPage({
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
           return (
-            <div key={room.id} className="min-w-0">
-              <div className="flex items-center justify-between px-4 pt-2 pb-1">
+            // Each room is its own bordered surface, matching what
+            // MobileRoomTracker already did — the two halves of this screen
+            // disagreed, and desktop was the odd one out. A room is a real unit
+            // (its own name, ⋮ menu and batch bar), and punching someone into
+            // the wrong room is a live error, so the boundary is worth an edge.
+            // No `overflow-hidden` to clip the corners the way the shows table
+            // does: RoomActionsMenu opens a dropdown out of this box, and
+            // clipping would cut it off.
+            <div key={room.id} className="min-w-0 rounded-card border border-line bg-surface">
+              <div className="flex items-center justify-between px-4 pt-3 pb-1">
                 <h2 className="text-lg font-bold text-ink">{room.name}</h2>
                 <RoomActionsMenu locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>

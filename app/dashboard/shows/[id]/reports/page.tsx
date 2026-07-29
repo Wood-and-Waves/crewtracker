@@ -13,6 +13,7 @@ import ExportCSVButton from '@/components/ExportCSVButton'
 import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
 import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
+import Chip from '@/components/ui/Chip'
 import { cn } from '@/lib/cn'
 import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
@@ -20,6 +21,59 @@ function fmt(n: number): string {
   if (n === 0) return '0'
   const rounded = Math.round(n * 100) / 100
   return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+// One column template for both views, so By Day and By Crew line up rather than
+// each inventing its own table. Desktop is a real three-column ruled grid —
+// label, breakdown, hours hard right. Below 1024px it drops to two columns and
+// the breakdown moves onto a second line under the label, which is why every
+// cell places itself explicitly instead of relying on auto-placement.
+// The label column takes all the slack and the two number columns are fixed and
+// adjacent, so breakdown sits beside its total instead of stranded mid-row —
+// on a 1600px screen a proportional middle column puts 500px of nothing between
+// a name and its hours.
+const REPORT_COLS =
+  'grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_200px_104px]'
+const CELL_LABEL = 'col-start-1 row-start-1 min-w-0'
+const CELL_BREAKDOWN = 'col-start-1 row-start-2 min-w-0 lg:col-start-2 lg:row-start-1'
+const CELL_HOURS = 'col-start-2 row-start-1 text-right lg:col-start-3'
+
+// Each repeating unit — a work day in By Day, a person in By Crew — is its own
+// bordered surface, the same as a room on the tracker. What stays outside on the
+// page background is the page header, the Master Summary and the view tabs:
+// summaries and controls sit above the content, the content is what gets edges.
+const PANEL = 'rounded-card border border-line bg-surface'
+// Horizontal inset for every band inside a panel. It goes on the bands rather
+// than on the panel so their `border-b` still spans the full width — padding is
+// inside the border box, so the hairlines run edge to edge like the tracker's
+// crew rows, instead of stopping 16px short on each side.
+const PANEL_X = 'px-4'
+
+// Small-caps section heading on a hairline rule — the house ruled-section
+// pattern. `note` sits opposite the title on the same rule.
+function SectionHead({ title, note, className }: { title: string; note?: string; className?: string }) {
+  return (
+    // Wraps rather than stacking unconditionally: a short pair (a date and a
+    // crew count) stays on one line with the count hard right, while a long note
+    // drops to its own line instead of squeezing the heading into two.
+    <div className={cn('flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-line pb-2', className)}>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</h2>
+      {note && <p className="text-[11px] text-muted">{note}</p>}
+    </div>
+  )
+}
+
+// Column headers for the ruled table. Desktop only: at 375px the rows restack
+// to two columns, and headers over a restacked layout label the wrong things.
+function ColumnHeads({ label, className }: { label: string; className?: string }) {
+  const cls = 'text-[10px] font-bold uppercase tracking-wide text-muted'
+  return (
+    <div className={cn('hidden gap-3 border-b border-line py-2 lg:grid', REPORT_COLS, className)}>
+      <span className={cls}>{label}</span>
+      <span className={cls}>Breakdown</span>
+      <span className={cn(cls, 'text-right')}>Hours</span>
+    </div>
+  )
 }
 
 export default async function ShowReportPage({
@@ -266,9 +320,9 @@ export default async function ShowReportPage({
   return (
     <div className="p-6 md:p-10">
       <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
-      <div className="flex items-center justify-between mt-2 mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">{show.name} — Report</h1>
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{show.name} — Report</h1>
           {/* Date range, matching iOS's "Show Info" section. Date-only columns
               need the T00:00:00 suffix or they render a day early. */}
           <p className="text-sm text-muted mt-1">
@@ -278,7 +332,7 @@ export default async function ShowReportPage({
             {show.city_state ? ` · ${show.city_state}` : ''}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <ExportCSVButton
             showName={show.name}
             showFinancials={canSeeFinancials}
@@ -320,24 +374,64 @@ export default async function ShowReportPage({
       </div>
 
       {show.finalized_at && (
-        <div className="rounded-card border border-line bg-surface-2 px-4 py-3 mb-6 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-semibold text-ink">Times locked</span>
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-line py-3">
+          <Chip tone="neutral">Times locked</Chip>
+          {/* Date AND time, in the SHOW's timezone — a lock stamped 11pm Pacific
+              on a Chicago show reads as the wrong day without it. Honours the
+              user's 24-hour preference, same as every other time in the app. */}
           <span className="text-sm text-muted">
             Final report sent{' '}
-            {new Date(show.finalized_at).toLocaleDateString('en-US', {
-              month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone,
+            {new Date(show.finalized_at).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+              hour: 'numeric', minute: '2-digit',
+              hour12: !use24Hour,
+              timeZone: timezone,
             })}
-            {show.final_report_recipients ? ` to ${show.final_report_recipients}` : ''}.
-            Punches and staffing are read-only until an admin unlocks the show.
+            . Punches and staffing are read-only.
           </span>
         </div>
       )}
 
-      <div className="flex gap-2 mb-6">
+      {/* The show's headline numbers, above the view tabs rather than below
+          them: they are the same whichever view is open, and sitting under the
+          tabs made them read as belonging to By Day.
+          Four stats inline on one rule, the way the tracker header does it —
+          this was a max-w-md card of stacked label/value rows. */}
+      <section className="mt-6">
+        <SectionHead title="Master summary" note="Paid hours — each day rounded up, as billed" />
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-line py-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Total crew hours</p>
+            <p className="text-lg font-bold tabular-nums text-ink">{fmt(totalPaidHours)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Straight time</p>
+            <p className="text-lg font-bold tabular-nums text-ink">{fmt(totalPaidST)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Overtime</p>
+            <p className="text-lg font-bold tabular-nums text-ink">{fmt(totalPaidOT)}</p>
+          </div>
+          {totalPaidDT > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Double time</p>
+              <p className="text-lg font-bold tabular-nums text-ink">{fmt(totalPaidDT)}</p>
+            </div>
+          )}
+          {canSeeFinancials && (
+            <div className="lg:ml-auto lg:text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Direct labor total</p>
+              <p className="text-lg font-bold tabular-nums text-good">{money(totalLaborCost)}</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <div className="mb-6 mt-6 flex gap-2">
         <Link
           href="?view=day"
           className={cn(
-            'rounded-pill px-4 py-2 text-sm font-medium',
+            'rounded-field px-4 py-2 text-sm font-medium',
             activeView === 'day' ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink',
           )}
         >
@@ -346,7 +440,7 @@ export default async function ShowReportPage({
         <Link
           href="?view=crew"
           className={cn(
-            'rounded-pill px-4 py-2 text-sm font-medium',
+            'rounded-field px-4 py-2 text-sm font-medium',
             activeView === 'crew' ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink',
           )}
         >
@@ -354,35 +448,8 @@ export default async function ShowReportPage({
         </Link>
       </div>
 
-      <div className="rounded-card border border-line bg-surface p-5 mb-6 max-w-md">
-        <div className="flex justify-between mb-2">
-          <span className="text-sm text-muted">Total Crew Hours (Paid)</span>
-          <span className="text-lg font-bold text-ink tabular-nums">{fmt(totalPaidHours)} hrs</span>
-        </div>
-        <div className="flex justify-between mb-2 text-sm text-muted">
-          <span>Straight Time</span>
-          <span className="tabular-nums">{fmt(totalPaidST)} hrs</span>
-        </div>
-        <div className="flex justify-between text-sm text-muted">
-          <span>Overtime</span>
-          <span className="tabular-nums">{fmt(totalPaidOT)} hrs</span>
-        </div>
-        {totalPaidDT > 0 && (
-          <div className="flex justify-between text-sm text-muted">
-            <span>Double Time</span>
-            <span className="tabular-nums">{fmt(totalPaidDT)} hrs</span>
-          </div>
-        )}
-        {canSeeFinancials && (
-          <div className="flex justify-between mt-3 pt-3 border-t border-line">
-            <span className="text-sm font-semibold text-ink">Direct Labor Total</span>
-            <span className="text-base font-bold text-good tabular-nums">{money(totalLaborCost)}</span>
-          </div>
-        )}
-      </div>
-
       {activeView === 'day' ? (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-8">
           {(workDays || []).map(wd => {
             const dayRooms = (rooms || []).filter(r => r.work_day_id === wd.id)
             const dayRoomIds = dayRooms.map(r => r.id)
@@ -393,53 +460,68 @@ export default async function ShowReportPage({
             if (dayTimecards.length === 0) return null
 
             return (
-              <div key={wd.id}>
-                <p className="text-sm font-semibold text-muted mb-2">{dayLabel(wd.date)}</p>
-                <div className="rounded-card border border-line bg-surface divide-y divide-line">
-                  {dayTimecards.map(tc => {
-                    if (tc.is_travel_day) {
-                      return (
-                        <div key={tc.id} className="flex justify-between p-4">
-                          <div>
-                            <p className="text-sm text-ink">{tc.crew_member_name}</p>
-                            <p className="text-xs text-muted">{tc.role}</p>
-                          </div>
+              <section key={wd.id} className={PANEL}>
+                <SectionHead
+                  title={dayLabel(wd.date)}
+                  note={`${dayTimecards.length} crew`}
+                  className={cn(PANEL_X, 'pt-3')}
+                />
+                <ColumnHeads label="Crew" className={PANEL_X} />
+
+                {dayTimecards.map(tc => {
+                  if (tc.is_travel_day) {
+                    return (
+                      <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                        <div className={CELL_LABEL}>
+                          <p className="truncate text-sm text-ink">{tc.crew_member_name}</p>
+                          <p className="truncate text-xs text-muted">{tc.role}</p>
+                        </div>
+                        <div className={CELL_BREAKDOWN}>
                           <span className="text-sm font-semibold text-accent">Travel Day</span>
                         </div>
-                      )
-                    }
-                    const b = breakdownString(tc)
-                    return (
-                      <div key={tc.id} className="flex justify-between p-4">
-                        <div className="flex items-center gap-1.5">
-                          <div>
-                            <p className="text-sm text-ink">{tc.crew_member_name}</p>
-                            <p className="text-xs text-muted">{tc.role}</p>
-                          </div>
-                          {tc.travel_in_day && <span className="text-xs text-accent">✈️</span>}
-                          {tc.travel_out_day && <span className="text-xs text-accent">✈️</span>}
-                          {tc.pay_as_half_day && <span className="text-xs text-half-day">◑</span>}
-                          {b.shortTurn && <span className="text-xs text-ot">⚠️</span>}
-                        </div>
-                        <div className="text-right">
-                          <p className={cn('text-sm font-semibold tabular-nums', b.shortTurn ? 'text-ot' : 'text-ink')}>
-                            {fmt(b.dayTotal)} hrs
-                          </p>
-                          <p className="text-xs text-muted">{b.text}</p>
-                          {canSeeFinancials && b.mpTotal > 0 && (
-                            <p className="text-xs text-ot">{b.mpCount} MP — {money(b.mpTotal)}</p>
-                          )}
+                        <div className={CELL_HOURS}>
+                          <span className="text-sm text-muted tabular-nums">—</span>
                         </div>
                       </div>
                     )
-                  })}
-                </div>
-              </div>
+                  }
+                  const b = breakdownString(tc)
+                  return (
+                    <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                      <div className={cn(CELL_LABEL, 'flex items-center gap-1.5')}>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-ink">{tc.crew_member_name}</p>
+                          <p className="truncate text-xs text-muted">{tc.role}</p>
+                        </div>
+                        {tc.travel_in_day && <span className="text-xs text-accent">✈️</span>}
+                        {tc.travel_out_day && <span className="text-xs text-accent">✈️</span>}
+                        {tc.pay_as_half_day && <span className="text-xs text-half-day">◑</span>}
+                        {b.shortTurn && <span className="text-xs text-ot">⚠️</span>}
+                      </div>
+                      <div className={CELL_BREAKDOWN}>
+                        <p className="text-xs text-muted">{b.text}</p>
+                        {canSeeFinancials && b.mpTotal > 0 && (
+                          <p className="text-xs text-ot">{b.mpCount} MP — {money(b.mpTotal)}</p>
+                        )}
+                      </div>
+                      <div className={CELL_HOURS}>
+                        <span className={cn('text-sm font-semibold tabular-nums', b.shortTurn ? 'text-ot' : 'text-ink')}>
+                          {fmt(b.dayTotal)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </section>
             )
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        // One crew member per full-width section, not a two-up grid of cards.
+        // The cards were never the same height — a two-day crew member against a
+        // ten-day one — so every other row had a ragged gap beside it, which is
+        // the specific thing the card retirement is removing.
+        <div className="flex flex-col gap-8">
           {Object.values(
             (timecards || []).reduce((acc: Record<string, any>, tc) => {
               const key = `${tc.crew_member_name}|${tc.role}`
@@ -462,11 +544,11 @@ export default async function ShowReportPage({
               return (
                 // Keyed on name AND role — the grouping is by `name|role`, so one
                 // person billed in two roles would otherwise collide.
-                <div key={`${crew.name}|${crew.role}`} className="rounded-card border border-line bg-surface p-5">
-                  <div className="flex items-start justify-between gap-3 mb-3">
+                <section key={`${crew.name}|${crew.role}`} className={PANEL}>
+                  <div className={cn('flex items-start justify-between gap-3 border-b border-line pt-3 pb-2', PANEL_X)}>
                     <div className="min-w-0">
-                      <h2 className="text-lg font-bold text-ink">{crew.name}</h2>
-                      <p className="text-xs text-muted">{crew.role}</p>
+                      <h2 className="truncate text-base font-bold text-ink">{crew.name}</h2>
+                      <p className="truncate text-xs text-muted">{crew.role}</p>
                     </div>
                     {user.can('can_send_reports') && (() => {
                       const ts = timesheetFor(crew)
@@ -481,8 +563,14 @@ export default async function ShowReportPage({
                     })()}
                   </div>
 
-                  <div className="flex flex-col gap-2 mb-3">
-                    {crew.entries
+                  <ColumnHeads label="Day" className={PANEL_X} />
+
+                  {/* Rows are direct children of the panel, not wrapped in a
+                      div: `last:border-b-0` on a row must NOT fire here, because
+                      the totals strip follows and the last day still needs a
+                      rule separating it from the totals. Unwrapped, the totals
+                      strip is the real last child, so no row matches. */}
+                  {crew.entries
                       .slice()
                       .sort((a: any, b: any) => {
                         const wdA = (workDays || []).find(d => (rooms || []).find(r => r.id === a.room_id)?.work_day_id === d.id)
@@ -503,9 +591,16 @@ export default async function ShowReportPage({
 
                         if (tc.is_travel_day) {
                           return (
-                            <div key={tc.id} className="flex justify-between text-sm">
-                              <span className="text-muted">{wd ? dayLabel(wd.date) : ''}</span>
-                              <span className="font-semibold text-accent">Travel Day</span>
+                            <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                              <div className={CELL_LABEL}>
+                                <span className="truncate text-sm text-ink">{wd ? dayLabel(wd.date) : ''}</span>
+                              </div>
+                              <div className={CELL_BREAKDOWN}>
+                                <span className="text-sm font-semibold text-accent">Travel Day</span>
+                              </div>
+                              <div className={CELL_HOURS}>
+                                <span className="text-sm text-muted tabular-nums">—</span>
+                              </div>
                             </div>
                           )
                         }
@@ -513,43 +608,50 @@ export default async function ShowReportPage({
                         crewTotal += b.dayTotal
 
                         return (
-                          <div key={tc.id} className="flex justify-between text-sm">
-                            <span className="text-muted flex items-center gap-1">
-                              {wd ? dayLabel(wd.date) : ''}
-                              {b.shortTurn && <span className="text-ot">⚠️</span>}
-                              {tc.travel_in_day && <span className="text-accent">✈️</span>}
-                              {tc.travel_out_day && <span className="text-accent">✈️</span>}
-                              {tc.pay_as_half_day && <span className="text-half-day">◑</span>}
-                            </span>
-                            <div className="text-right">
-                              <p className={cn('font-semibold tabular-nums', b.shortTurn ? 'text-ot' : 'text-ink')}>{fmt(b.dayTotal)} hrs</p>
+                          <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                            <div className={cn(CELL_LABEL, 'flex items-center gap-1')}>
+                              <span className="truncate text-sm text-ink">{wd ? dayLabel(wd.date) : ''}</span>
+                              {b.shortTurn && <span className="text-xs text-ot">⚠️</span>}
+                              {tc.travel_in_day && <span className="text-xs text-accent">✈️</span>}
+                              {tc.travel_out_day && <span className="text-xs text-accent">✈️</span>}
+                              {tc.pay_as_half_day && <span className="text-xs text-half-day">◑</span>}
+                            </div>
+                            <div className={CELL_BREAKDOWN}>
                               <p className="text-xs text-muted">{b.text}</p>
+                            </div>
+                            <div className={CELL_HOURS}>
+                              <span className={cn('text-sm font-semibold tabular-nums', b.shortTurn ? 'text-ot' : 'text-ink')}>
+                                {fmt(b.dayTotal)}
+                              </span>
                             </div>
                           </div>
                         )
                       })}
-                  </div>
 
-                  <div className="border-t border-line pt-3 flex justify-between">
-                    <span className="text-sm font-semibold text-ink">Total Show Hours</span>
-                    <span className="text-sm font-semibold text-ink tabular-nums">{fmt(crewTotal)} hrs</span>
-                  </div>
-
-                  {canSeeFinancials && (
-                    <>
-                      {crewMP > 0 && (
-                        <div className="flex justify-between mt-1">
-                          <span className="text-sm text-muted">Meal Penalties</span>
-                          <span className="text-sm text-muted tabular-nums">{money(crewMP)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between mt-1">
-                        <span className="text-sm font-semibold text-ink">Total Pay</span>
-                        <span className="text-sm font-bold text-good tabular-nums">{money(crewPay)}</span>
+                  {/* Totals as an inline strip on a rule, the same shape as the
+                      Master Summary above — every total on this page reads the
+                      same way rather than each block inventing its own.
+                      No bottom rule: this closes the panel, and a hairline one
+                      pixel above the panel's own border reads as a double line. */}
+                  <div className={cn('flex flex-wrap items-center gap-x-8 gap-y-2 py-3', PANEL_X)}>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Total show hours</p>
+                      <p className="text-base font-bold tabular-nums text-ink">{fmt(crewTotal)}</p>
+                    </div>
+                    {canSeeFinancials && crewMP > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Meal penalties</p>
+                        <p className="text-base font-bold tabular-nums text-ot">{money(crewMP)}</p>
                       </div>
-                    </>
-                  )}
-                </div>
+                    )}
+                    {canSeeFinancials && (
+                      <div className="lg:ml-auto lg:text-right">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Total pay</p>
+                        <p className="text-base font-bold tabular-nums text-good">{money(crewPay)}</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
               )
             })}
         </div>
