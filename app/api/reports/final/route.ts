@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildReportCsv } from '@/lib/reportCsv'
 import { buildReportPdf } from '@/lib/reportPdf'
+import { fetchLiveTimecards } from '@/lib/timecardFields'
 
 // The Final Report: a PM signs off that times are locked and the complete
 // payroll report — INCLUDING financials — goes to the addresses an admin
@@ -114,9 +115,11 @@ export async function POST(request: Request) {
     : { data: [] as any[] }
   const roomIds = (rooms || []).map(r => r.id)
 
-  const { data: timecards } = roomIds.length
-    ? await admin.from('timecards').select('*').in('room_id', roomIds)
-    : { data: [] as any[] }
+  // Declined bookings excluded. This is the one that reaches a customer: the
+  // admin client bypasses RLS, so nothing else stands between a person who said
+  // no and the CSV/PDF attached to this email. '*' stays — the service role has
+  // full column access and the documents genuinely need day_rate.
+  const timecards = await fetchLiveTimecards<any>(admin, roomIds, '*')
   const timecardIds = (timecards || []).map(t => t.id)
 
   const { data: punches } = timecardIds.length

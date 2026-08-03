@@ -66,6 +66,10 @@ export async function loadBookingInvite(token: string): Promise<BookingInviteVie
 
   // This person's own days on this show. `role` is included and `day_rate` is
   // deliberately absent — see the header.
+  //
+  // DELIBERATELY INCLUDES DECLINED ROWS. This is the page a person declines ON;
+  // filtering them out would blank their own booking the instant they answered,
+  // which reads as the link breaking. Do not route this through liveBookings.
   const { data: timecards } = await admin
     .from('timecards')
     .select('role, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id ) )')

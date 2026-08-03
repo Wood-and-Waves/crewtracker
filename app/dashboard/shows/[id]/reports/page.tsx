@@ -15,7 +15,7 @@ import SendHoursButton from '@/components/SendHoursButton'
 import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
 import Chip from '@/components/ui/Chip'
 import { cn } from '@/lib/cn'
-import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
 function fmt(n: number): string {
   if (n === 0) return '0'
@@ -140,10 +140,10 @@ export default async function ShowReportPage({
 
   const roomIds = (rooms || []).map(r => r.id)
 
-  const { data: timecardRows } = roomIds.length > 0
-    ? await supabase.from('timecards').select(TIMECARD_SELECT).in('room_id', roomIds)
-    : { data: [] }
-  const rawTimecards = (timecardRows || []) as unknown as TimecardRowMaybeRate[]
+  // Declined bookings excluded: they are not crew, so they belong in neither the
+  // on-screen report nor the CSV/PDF the export buttons build from these rows —
+  // and they would otherwise trip the pre-send checks as "not started".
+  const rawTimecards = await fetchLiveTimecards<TimecardRowMaybeRate>(supabase, roomIds)
 
   // Rates come from the permission-checked view. Additionally gated on the
   // show's own financials flag: canSeeFinancials is the stricter test (show

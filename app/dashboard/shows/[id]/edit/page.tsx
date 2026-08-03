@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
-import { fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
 export default async function EditShowPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -39,10 +39,13 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   // so don't pull the rate for someone who can't be shown it.
   const canViewRates = user.can('can_view_pay_rates')
 
-  const { data: timecardRows } = roomIds.length > 0
-    ? await supabase.from('timecards').select('id, crew_member_id, crew_member_name, role, room_id').in('room_id', roomIds)
-    : { data: [] }
-  const timecards = (timecardRows || []) as unknown as TimecardRowMaybeRate[]
+  // Declined bookings excluded — the dedupe below keys on (crew|role), so an
+  // unreplaced decliner would otherwise appear in Crew & Rates carrying a rate.
+  const timecards = await fetchLiveTimecards<TimecardRowMaybeRate>(
+    supabase,
+    roomIds,
+    'id, crew_member_id, crew_member_name, role, room_id',
+  )
 
   // Rates via the permission-checked view — empty for a user without
   // can_view_pay_rates, which is also when Crew & Rates is hidden entirely.

@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn'
 import { showStatus, SHOW_STATUS_META } from '@/lib/showStatus'
 import { summarizeCall } from '@/lib/crewCall'
 import { addDays } from '@/lib/datetime'
+import { liveBookings } from '@/lib/timecardFields'
 import Link from 'next/link'
 
 export default async function DashboardPage({
@@ -99,9 +100,11 @@ export default async function DashboardPage({
   // reported "No call yet" — true, and useless: it is how every show worked
   // before the crew call existed, so every historical show reads as empty. The
   // fallback below shows the headcount that is really there.
-  const { data: bookedRows } = await supabase
+  // Declined excluded, matching callRows above — the two counters render into
+  // the same column, so one filtering and the other not would quietly disagree.
+  const { data: bookedRows } = await liveBookings(supabase
     .from('timecards')
-    .select('id, rooms!inner ( work_days!inner ( date, show_id ) )')
+    .select('id, rooms!inner ( work_days!inner ( date, show_id ) )'))
 
   const bookedByShow = new Map<string, Map<string, number>>()
   for (const row of (bookedRows ?? []) as any[]) {

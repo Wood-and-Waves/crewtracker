@@ -24,6 +24,7 @@
 
 import { todayInZone } from '@/lib/showStatus'
 import { addDays } from '@/lib/datetime'
+import { liveBookings } from '@/lib/timecardFields'
 
 /** One person, on one show, on one date. The unit the calendar is built from. */
 export type ScheduleBooking = {
@@ -101,9 +102,14 @@ export async function fetchBookings(
   end: string,
   opts: { excludeShowId?: string } = {},
 ): Promise<ScheduleBooking[]> {
-  const { data, error } = await supabase
+  // liveBookings drops declined rows. Without it a room whose only person said
+  // no still reads as staffed on the calendar, which is the exact question this
+  // screen exists to answer. booking_status is deliberately NOT added to
+  // SCHEDULE_SELECT — PostgREST filters on unselected columns fine, and no
+  // consumer here needs the value.
+  const { data, error } = await liveBookings(supabase
     .from('timecards')
-    .select(SCHEDULE_SELECT)
+    .select(SCHEDULE_SELECT))
     .gte('rooms.work_days.date', start)
     .lte('rooms.work_days.date', end)
     // .not(…, 'is', true), never .eq(…, false): `archived` is nullable, and

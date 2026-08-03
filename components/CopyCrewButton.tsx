@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { liveBookings } from '@/lib/timecardFields'
 
 // iOS offers "Copy Crew from Day N" on any empty roster past day 1
 // (copyCrewFromPreviousDay). Without it, staffing a new day means re-picking
@@ -37,15 +38,22 @@ export default function CopyCrewButton({
     // No day_rate: the BEFORE INSERT trigger inherits the show's rate for this
     // (crew member, role) from the source row itself, which is on the same show.
     // See scripts/sql/applied/show-wide-day-rate.sql.
-    const { data: source, error: srcError } = await supabase
+    // Declined excluded. A decline updates every one of that person's timecards
+    // on the show, so copying the source day forward unfiltered would resurrect
+    // them on the new day as 'pencilled' — re-creating the bug one day later.
+    const { data: source, error: srcError } = await liveBookings(supabase
       .from('timecards')
       .select('crew_member_id, crew_member_name, role')
-      .eq('room_id', sourceRoomId)
+      .eq('room_id', sourceRoomId))
 
     if (srcError) { setBusy(false); setError(srcError.message); return }
     if (!source || source.length === 0) { setBusy(false); setError('That day has no crew to copy.'); return }
 
     // Who's already here — so a re-run can't double anyone up.
+    // DELIBERATELY UNFILTERED, unlike the source read above: timecards_room_crew_uniq
+    // is (room_id, crew_member_id) with no booking_status predicate, so a declined
+    // row still occupies that slot. Hiding it here would mean attempting an insert
+    // the database rejects with 23505.
     const { data: existing, error: exError } = await supabase
       .from('timecards')
       .select('crew_member_id')

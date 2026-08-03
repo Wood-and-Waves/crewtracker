@@ -5,6 +5,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // only null the FK link (crew_member_id) so the crew_members row can be deleted
 // (rate_cards cascade). Reports group by crew_member_name, so historical hours
 // and pay stay intact. Errors are returned, not swallowed.
+//
+// This must reach EVERY row including declined bookings — it is a write, not a
+// read. timecards_crew_member_id_fkey has no ON DELETE action, so a declined row
+// left pointing at the crew member would make the delete below fail. Do not
+// route this through liveBookings.
 export async function removeCrewMemberKeepHistory(
   supabase: SupabaseClient,
   crewMemberId: string,

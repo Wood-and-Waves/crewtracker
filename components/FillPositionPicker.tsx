@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { liveBookings } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import Chip from '@/components/ui/Chip'
 import Toggle from '@/components/ui/Toggle'
@@ -72,12 +73,14 @@ export default function FillPositionPicker({
         supabase.from('crew_rate_cards_visible').select('crew_member_id, role'),
         // Who is already on something this date. Scoped by RLS to this
         // organization's shows; see the header note.
-        supabase
+        // A declined booking is not a commitment — the position is free and so
+        // is the person, so they are not a same-day conflict.
+        liveBookings(supabase
           .from('timecards')
           .select(`
             crew_member_id, booking_status, room_id,
             rooms!inner ( name, work_days!inner ( date, shows!inner ( name ) ) )
-          `)
+          `))
           .eq('rooms.work_days.date', date),
       ])
       if (!active) return
@@ -97,9 +100,6 @@ export default function FillPositionPicker({
       const conflictsByCrew = new Map<string, Candidate['conflicts']>()
       for (const t of (booked ?? []) as any[]) {
         if (!t.crew_member_id) continue
-        // A declined booking is not a commitment — the position is free and so
-        // is the person.
-        if (t.booking_status === 'declined') continue
         const room = Array.isArray(t.rooms) ? t.rooms[0] : t.rooms
         const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
         const show = Array.isArray(wd?.shows) ? wd.shows[0] : wd?.shows

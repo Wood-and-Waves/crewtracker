@@ -270,6 +270,11 @@ export default function StaffRoomModal({
     // the page hasn't re-rendered since a previous insert. Both routes produced
     // duplicate timecards, which then feed batch punching and every report
     // total. A unique index on (room_id, crew_member_id) backs this up.
+    //
+    // DELIBERATELY INCLUDES DECLINED ROWS. timecards_room_crew_uniq carries no
+    // booking_status predicate, so someone who declined still holds that slot as
+    // far as the database is concerned. Filtering them out here would let this
+    // attempt an insert Postgres rejects with 23505.
     const { data: existing, error: exError } = await supabase
       .from('timecards')
       .select('room_id, crew_member_id')

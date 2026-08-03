@@ -17,7 +17,7 @@ import MobileRoomTracker from '@/components/MobileRoomTracker'
 import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
 import { punchGridCols } from '@/lib/trackerLayout'
-import { TIMECARD_SELECT, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 
@@ -123,10 +123,10 @@ export default async function ShowDetailPage({
   // The tracker shows hours, never money — the only thing here that wants a rate
   // is RoomActionsMenu's rate editor. Rates come from the permission-checked
   // view, which yields nothing for a user who can't see them.
-  const { data: allShowTimecardRows } = allRoomIds.length > 0
-    ? await supabase.from('timecards').select(TIMECARD_SELECT).in('room_id', allRoomIds)
-    : { data: [] }
-  const allShowTimecards = (allShowTimecardRows || []) as unknown as TimecardRowMaybeRate[]
+  // Declined bookings are excluded here, once, and every derived object below
+  // inherits it — the roster, the day summary counts, Copy Crew's source, and
+  // everything handed to MobileRoomTracker. Someone who said no is not crew.
+  const allShowTimecards = await fetchLiveTimecards<TimecardRowMaybeRate>(supabase, allRoomIds)
   const rateById = await fetchShowRates(supabase, id)
 
   const allTimecardIds = (allShowTimecards || []).map(t => t.id)
