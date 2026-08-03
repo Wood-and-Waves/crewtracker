@@ -72,7 +72,7 @@ export async function loadBookingInvite(token: string): Promise<BookingInviteVie
   // which reads as the link breaking. Do not route this through liveBookings.
   const { data: timecards } = await admin
     .from('timecards')
-    .select('role, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id ) )')
+    .select('role, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id, day_type ) )')
     .eq('crew_member_id', invite.crew_member_id)
     .eq('rooms.work_days.show_id', invite.show_id)
 
@@ -90,6 +90,9 @@ export async function loadBookingInvite(token: string): Promise<BookingInviteVie
         isTravelDay: !!prev?.isTravelDay || t.is_travel_day === true,
         travelIn: !!prev?.travelIn || t.travel_in_day === true,
         travelOut: !!prev?.travelOut || t.travel_out_day === true,
+        // Comes off work_days, so both rows of a two-room day agree — take
+        // whichever arrives, unlike the travel flags which are ORed per person.
+        dayType: prev?.dayType ?? wd.day_type ?? null,
       })
     }
     if (!role && t.role) role = t.role

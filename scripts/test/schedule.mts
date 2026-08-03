@@ -20,7 +20,9 @@ import { addDays, dateRange } from '../../lib/datetime.ts'
 import { byShowAndDate, coverageFor, crewKey, resolveWindow,
          type ScheduleBooking, type ScheduleShow } from '../../lib/schedule.ts'
 import { todayInZone, showStatus } from '../../lib/showStatus.ts'
-import { describeDates, buildBookingRequestText } from '../../lib/bookingEmail.ts'
+import {
+  describeDates, buildBookingRequestText, describeDayLines, hasAnyDayType,
+} from '../../lib/bookingEmail.ts'
 import {
   summarizeCall, describeCallSize, scopeIncludesDay, daysCoveredBy,
 } from '../../lib/crewCall.ts'
@@ -217,6 +219,39 @@ check('non-contiguous days are listed, never collapsed into a range',
 check('unsorted input still reads in order',
   describeDates([day('2026-07-30'), day('2026-07-28', 'travel'), day('2026-07-29')]),
   'Tue, Jul 28 – Thu, Jul 30 (3 days) · first day travel')
+
+console.log('\ndescribeDayLines — day types beside travel')
+// The two columns answer different questions and must stay independent: what
+// the PRODUCTION is doing, and what THIS PERSON is doing.
+const typed = (date: string, dayType: string | null, kind: 'work' | 'travel' | 'in' | 'out' = 'work') =>
+  ({ ...day(date, kind), dayType })
+
+check('a run with no day types set reports none, and says so',
+  describeDayLines(run(['work', 'work'])).map(l => l.production), [null, null])
+check('hasAnyDayType is false when nothing is set',
+  hasAnyDayType(run(['work', 'work'])), false)
+check('production and personal travel are independent',
+  describeDayLines([typed('2026-07-28', 'travel_load_in', 'travel')]),
+  [{ date: 'Tue, Jul 28', production: 'Travel/Load-in', you: 'Travel' }])
+check('a plain work day on a show day says nothing personal',
+  describeDayLines([typed('2026-07-28', 'show')]),
+  [{ date: 'Tue, Jul 28', production: 'Show', you: null }])
+check('travel-and-work reads as its own thing, not plain travel',
+  describeDayLines([typed('2026-07-28', 'load_out_travel', 'out')]),
+  [{ date: 'Tue, Jul 28', production: 'Load-out/Travel', you: 'Travel and work' }])
+// A value written by a future build must render as blank, never as a raw slug
+// in an email to a crew member.
+check('an unknown stored day type renders as null, not the raw value',
+  describeDayLines([typed('2026-07-28', 'wrap_party')]).map(l => l.production), [null])
+check('hasAnyDayType ignores unknown values too',
+  hasAnyDayType([typed('2026-07-28', 'wrap_party')]), false)
+check('the eighth day type is recognised',
+  describeDayLines([typed('2026-07-28', 'show_load_out')]).map(l => l.production),
+  ['Show/Load-out'])
+// Query order is not guaranteed anywhere else; it must not be here either.
+check('unsorted input still reads in date order',
+  describeDayLines([typed('2026-07-30', 'show'), typed('2026-07-28', 'load_in')])
+    .map(l => l.production), ['Load-in', 'Show'])
 
 console.log('\nbuildBookingRequestText')
 const sms = buildBookingRequestText({

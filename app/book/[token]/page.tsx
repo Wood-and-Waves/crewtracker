@@ -1,4 +1,5 @@
 import { loadBookingInvite } from '@/lib/bookingInvite'
+import { describeDayLines } from '@/lib/bookingEmail'
 import BookingResponseForm from './BookingResponseForm'
 import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
@@ -15,11 +16,10 @@ import Logo from '@/components/Logo'
 // header of lib/bookingInvite.ts for why that is enforced by column lists here
 // rather than by the database.
 
-function fmtDate(d: string) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric',
-  })
-}
+// The local fmtDate ("Saturday, July 25") is gone: dates now come from
+// describeDayLines, which is also what builds the email and the SMS. That makes
+// them shorter here ("Sat, Jul 25") and, more importantly, identical to the
+// message this person was actually sent.
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -90,18 +90,19 @@ export default async function BookingPage({
         {/* Each day says what it IS. A range alone cannot distinguish a
             travel day from a full day on site, and that is the difference
             between being able to answer and having to ring someone. */}
+        {/* Built by describeDayLines, the same function behind the email and
+            the SMS, so what this page says always matches what they were sent. */}
         <ul className="mt-2 space-y-0.5">
-          {invite.days.map(d => {
-            const label = d.isTravelDay ? 'Travel'
-              : (d.travelIn || d.travelOut) ? 'Travel + work'
-              : null
-            return (
-              <li key={d.date} className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="text-ink">{fmtDate(d.date)}</span>
-                {label && <span className="shrink-0 text-xs text-muted">{label}</span>}
-              </li>
-            )
-          })}
+          {describeDayLines(invite.days).map(l => (
+            <li key={l.date} className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="text-ink">{l.date}</span>
+              {(l.production || l.you) && (
+                <span className="shrink-0 text-xs text-muted">
+                  {[l.production, l.you].filter(Boolean).join(' · ')}
+                </span>
+              )}
+            </li>
+          ))}
         </ul>
         {invite.days.length === 0 && (
           <p className="mt-2 text-sm text-muted">Dates to be confirmed.</p>

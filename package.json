@@ -18,6 +18,7 @@
     "test:payroll": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/payroll.mts",
     "test:rls": "node --no-warnings --env-file=.env.local --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/rls.mts",
     "test:schedule": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/schedule.mts",
+    "preview:booking": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/preview-booking-message.mts",
     "test": "npm run test:payroll && npm run test:schedule && npm run test:rls"
   },
   "dependencies": {

@@ -17,6 +17,7 @@
 // shape of a phishing message.
 
 import { Resend } from 'resend'
+import { dayTypeLabel } from '@/lib/dayTypes'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
 
@@ -28,6 +29,19 @@ function fmtDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   })
+}
+
+/**
+ * "Thu 10" — for the SMS, where every character is a character.
+ *
+ * Assembled from two calls rather than one with { weekday, day }: that option
+ * pair renders "10 Thu" in en-US, because the locale's day-and-weekday pattern
+ * leads with the number when there is no month to anchor it.
+ */
+function fmtDateShort(d: string) {
+  const date = new Date(d + 'T00:00:00')
+  const weekday = date.toLocaleDateString('en-US', { weekday: 'short' })
+  return `${weekday} ${date.getDate()}`
 }
 
 /**
@@ -43,6 +57,16 @@ export type EngagementDay = {
   isTravelDay: boolean
   travelIn: boolean
   travelOut: boolean
+  /**
+   * What the PRODUCTION is doing that day — load-in, rehearsal, show, load-out.
+   * Complementary to the travel flags above, not a substitute: those say what
+   * THIS PERSON is doing. "The production is loading in" and "you are
+   * travelling" are different facts and a crew member deciding whether to take
+   * the job wants both. Null when nobody has set one.
+   *
+   * A display field only. It never reaches lib/payroll.ts — see lib/dayTypes.ts.
+   */
+  dayType?: string | null
 }
 
 type Kind = 'work' | 'travel' | 'travel+work'
@@ -117,6 +141,41 @@ export function describeDates(days: EngagementDay[]): string {
   return parts.length ? `${range} · ${parts.join(', ')}` : range
 }
 
+/**
+ * One line per day: the date, what the production is doing, and what this
+ * person is doing.
+ *
+ * The two columns answer different questions and neither substitutes for the
+ * other. `production` is the show's day type — everybody on that day shares it.
+ * `you` is this person's own travel commitment, which is why two people on the
+ * same Travel/Load-in day can legitimately have different answers.
+ *
+ * This is the single builder behind the email, the SMS and the /book page, so
+ * what a crew member reads on the page always matches what they were sent.
+ * describeDates() is deliberately untouched and still carries the summary —
+ * see its header for why collapsing a run is the feature there.
+ */
+export function describeDayLines(
+  days: EngagementDay[],
+): { date: string; production: string | null; you: string | null }[] {
+  return [...days]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(d => {
+      const k = kindOf(d)
+      return {
+        date: fmtDate(d.date),
+        production: dayTypeLabel(d.dayType),
+        // 'work' adds nothing a crew member doesn't already assume.
+        you: k === 'work' ? null : KIND_TEXT[k].replace(/^./, c => c.toUpperCase()),
+      }
+    })
+}
+
+/** True when at least one day has a production day type worth printing. */
+export function hasAnyDayType(days: EngagementDay[]): boolean {
+  return days.some(d => dayTypeLabel(d.dayType) !== null)
+}
+
 export type BookingRequestInput = {
   to: string
   crewName: string
@@ -134,6 +193,19 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   const where = input.venue || input.cityState || null
   const subject = `${input.organizationName}: are you available for ${input.showName}?`
 
+  // The day-by-day schedule sits UNDER the Dates summary rather than replacing
+  // it. The summary answers "how long is this and does it involve travel"; the
+  // list answers "what happens on each day". Only shown when somebody actually
+  // set day types — an unset run would otherwise print a column of blanks.
+  const lines = describeDayLines(input.days)
+  const showSchedule = hasAnyDayType(input.days)
+  const scheduleText = showSchedule
+    ? lines.map(l => {
+        const right = [l.production, l.you].filter(Boolean).join(' · ')
+        return `        ${l.date}${right ? `  ${right}` : ''}`
+      })
+    : []
+
   const text = [
     `Hi ${input.crewName},`,
     '',
@@ -141,6 +213,7 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
     '',
     input.role ? `Role:   ${input.role}` : null,
     `Dates:  ${when}`,
+    ...scheduleText,
     where ? `Where:  ${where}` : null,
     '',
     'Let them know if you can do it:',
@@ -159,6 +232,14 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 24px">
     ${input.role ? `<tr><td style="padding:6px 0;color:#71717a;width:70px">Role</td><td style="padding:6px 0">${escapeHtml(input.role)}</td></tr>` : ''}
     <tr><td style="padding:6px 0;color:#71717a">Dates</td><td style="padding:6px 0">${escapeHtml(when)}</td></tr>
+    ${showSchedule ? `<tr><td></td><td style="padding:2px 0 8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        ${lines.map(l => `<tr>
+          <td style="padding:3px 12px 3px 0;white-space:nowrap">${escapeHtml(l.date)}</td>
+          <td style="padding:3px 0;color:#71717a">${escapeHtml([l.production, l.you].filter(Boolean).join(' · '))}</td>
+        </tr>`).join('')}
+      </table>
+    </td></tr>` : ''}
     ${where ? `<tr><td style="padding:6px 0;color:#71717a">Where</td><td style="padding:6px 0">${escapeHtml(where)}</td></tr>` : ''}
   </table>
   <p style="margin:0 0 24px">
@@ -187,6 +268,26 @@ export function buildBookingRequestText(input: Omit<BookingRequestInput, 'to' | 
   // Company names very often already end in a period ("Northwind Staging Co."),
   // and "Co.." is the kind of detail that makes a message look automated.
   const org = input.organizationName.replace(/\.$/, '')
+
+  // The day-by-day schedule, on ONE line rather than one line per day. Dan
+  // asked for the full list here knowing a long run makes a long message; the
+  // compact form is what keeps it pasteable into a text rather than turning it
+  // into a document. Dates are shortened to "Thu 10" — unambiguous inside a run
+  // and half the width of the email's format.
+  //
+  // Production day types only. The personal travel commitment is already its
+  // own sentence above (`qualifiers`), and repeating it per day would say the
+  // same thing twice at double the length.
+  const schedule = hasAnyDayType(input.days)
+    ? [...input.days]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(d => {
+          const label = dayTypeLabel(d.dayType)
+          return label ? `${fmtDateShort(d.date)} ${label}` : fmtDateShort(d.date)
+        })
+        .join(', ')
+    : null
+
   return [
     `Hi ${input.crewName.split(' ')[0]}, it's ${org}.`,
     `Are you available for ${input.showName}${input.role ? ` as ${input.role}` : ''}${where ? ` at ${where}` : ''}?`,
@@ -194,6 +295,7 @@ export function buildBookingRequestText(input: Omit<BookingRequestInput, 'to' | 
     // separator: it is the part people actually stop and read.
     `${range}.`,
     qualifiers ? `${qualifiers.charAt(0).toUpperCase()}${qualifiers.slice(1)}.` : null,
+    schedule ? `${schedule}.` : null,
     "Let me know either way and I'll get you on the books.",
   ].filter(Boolean).join(' ')
 }
