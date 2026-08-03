@@ -10,6 +10,7 @@ import { SHOW_TIMEZONES, DEFAULT_SHOW_TIMEZONE } from '@/lib/timezones'
 import Button from '@/components/ui/Button'
 import SectionHead from '@/components/ui/SectionHead'
 import { PANEL, PANEL_X } from '@/lib/panel'
+import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, type DayType } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
 import { plannedPositions, roomDayIndices, type CallModel } from '@/lib/crewCallGrid'
@@ -82,6 +83,10 @@ export default function NewShowClient({
   // useState initializer differs between the server render and hydration.
   const [rooms, setRooms] = useState<GridRoom[]>([{ key: 'room-1', name: 'Main Stage' }])
   const [call, setCall] = useState<CallModel>({})
+  // Keyed by DATE, not by index: the run shifts when the start or end date
+  // changes, and a day that is still in the run should keep the type it was
+  // given rather than inherit whatever the day in that position used to be.
+  const [dayTypes, setDayTypes] = useState<Record<string, DayType>>({})
   const [presetId, setPresetId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -131,7 +136,14 @@ export default function NewShowClient({
       return
     }
 
-    const workDayRows = dates.map((date, i) => ({ show_id: show.id, date, day_number: i + 1 }))
+    // day_type is null when nobody picked one. Never invent a default — a made-up
+    // day type ends up on the tracker and in a booking request email.
+    const workDayRows = dates.map((date, i) => ({
+      show_id: show.id,
+      date,
+      day_number: i + 1,
+      day_type: dayTypes[date] ?? null,
+    }))
 
     // The preset's values are COPIED in rather than referenced. The show owns
     // its rules from here, so editing or deleting the preset later can never
@@ -275,6 +287,51 @@ export default function NewShowClient({
             </p>
           </div>
         </div>
+
+        {/* One ruled row per day rather than a column in the positions grid:
+            this scales to a 20-day run by simply being taller, where the grid's
+            58px day columns have no room for a label. Every day starts unset —
+            a guessed day type would show on the tracker and in a crew member's
+            booking request as though somebody had decided it. */}
+        {dates.length > 0 && (
+          <div className={PANEL_X}>
+            <SectionHead
+              title="Day types"
+              note={`${Object.keys(dayTypes).length} of ${dates.length} set · optional`}
+            />
+            {dates.map(date => (
+              <div key={date} className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
+                <span className="shrink-0 whitespace-nowrap text-sm text-ink">
+                  {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+                    weekday: 'short', month: 'short', day: 'numeric',
+                  })}
+                </span>
+                <select
+                  aria-label={`Day type for ${date}`}
+                  value={dayTypes[date] ?? ''}
+                  onChange={e => setDayTypes(prev => {
+                    const next = { ...prev }
+                    if (isDayType(e.target.value)) next[date] = e.target.value
+                    else delete next[date]
+                    return next
+                  })}
+                  // Not inputCls: that carries w-full, which wins over any
+                  // w-auto here (Tailwind precedence is stylesheet order, not
+                  // the order classes appear in the attribute) and stretches the
+                  // select across the whole row.
+                  className="w-[200px] shrink-0 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
+                >
+                  <option value="" className="bg-surface-2 text-ink">—</option>
+                  {DAY_TYPES.map(t => (
+                    <option key={t} value={t} className="bg-surface-2 text-ink">
+                      {DAY_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {dates.length === 0 ? (
@@ -294,6 +351,7 @@ export default function NewShowClient({
           roles={roles}
           onChange={setCall}
           onRoomsChange={setRooms}
+          dayTypes={dayTypes}
         />
       )}
 

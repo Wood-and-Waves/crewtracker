@@ -8,6 +8,7 @@ import TimecardRow from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
 import CopyCrewButton from '@/components/CopyCrewButton'
+import DayTypePicker from '@/components/DayTypePicker'
 import { visiblePunchTypes } from '@/lib/punches'
 import { cn } from '@/lib/cn'
 
@@ -24,6 +25,8 @@ export default function MobileRoomTracker({
   reportHref,
   dayNumber,
   totalDays,
+  workDayId,
+  dayType,
   dateLabel,
   prevDayNumber,
   nextDayNumber,
@@ -56,6 +59,8 @@ export default function MobileRoomTracker({
   reportHref: string
   dayNumber: number
   totalDays: number
+  workDayId: string
+  dayType: string | null
   dateLabel: string
   prevDayNumber: number | null
   nextDayNumber: number | null
@@ -209,9 +214,10 @@ export default function MobileRoomTracker({
           >
             ‹
           </Link>
-          <div className="text-center">
+          <div className="min-w-0 flex-1 text-center">
             <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {dayNumber} of {totalDays}</p>
             <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
+            <DayTypePicker workDayId={workDayId} value={dayType} className="mt-1" />
           </div>
           {nextDayNumber ? (
             <Link

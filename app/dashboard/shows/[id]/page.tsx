@@ -14,6 +14,7 @@ import CopyCrewButton from '@/components/CopyCrewButton'
 import AddDayButton from '@/components/AddDayButton'
 import UnlockShowButton from '@/components/UnlockShowButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
+import DayTypePicker from '@/components/DayTypePicker'
 import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
 import { punchGridCols } from '@/lib/trackerLayout'
@@ -303,11 +304,16 @@ export default async function ShowDetailPage({
             >
               ‹
             </Link>
-            <div className="min-w-[132px] text-center">
+            <div className="min-w-[168px] text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
                 Day {activeDay.day_number} of {workDays.length}
               </p>
               <p className="text-base font-bold tabular-nums text-ink">{dateLabel}</p>
+              <DayTypePicker
+                workDayId={activeDay.id}
+                value={activeDay.day_type ?? null}
+                className="mt-1"
+              />
             </div>
             {nextDay ? (
               <Link
@@ -536,6 +542,8 @@ export default async function ShowDetailPage({
         reportHref={`/dashboard/shows/${id}/reports`}
         dayNumber={activeDay.day_number}
         totalDays={workDays.length}
+        workDayId={activeDay.id}
+        dayType={activeDay.day_type ?? null}
         dateLabel={dateLabel}
         prevDayNumber={prevDay?.day_number ?? null}
         nextDayNumber={nextDay?.day_number ?? null}

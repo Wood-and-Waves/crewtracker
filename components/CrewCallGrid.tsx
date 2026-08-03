@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Button from '@/components/ui/Button'
+import { dayTypeLabel } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount, peakPerDay,
@@ -52,6 +53,7 @@ export default function CrewCallGrid({
   roles,
   onChange,
   onRoomsChange,
+  dayTypes,
   readOnly = false,
 }: {
   rooms: GridRoom[]
@@ -60,6 +62,8 @@ export default function CrewCallGrid({
   roles: string[]
   onChange: (next: CallModel) => void
   onRoomsChange: (next: GridRoom[]) => void
+  /** Day type per DATE, for the column headers. Optional — unset days show none. */
+  dayTypes?: Record<string, string>
   readOnly?: boolean
 }) {
   const [selected, setSelected] = useState<{ roomKey: string; day: number } | null>(null)
@@ -149,9 +153,15 @@ export default function CrewCallGrid({
                 >
                   <div className="text-[9px] uppercase text-muted">{l.weekday}</div>
                   <div className="text-[13px] font-bold text-ink">{l.day}</div>
-                  {i === 0 && <div className="text-[9px] text-accent">load in</div>}
-                  {i === totalDays - 1 && totalDays > 1 && (
-                    <div className="text-[9px] text-accent">load out</div>
+                  {/* The real day type, when one has been set. This replaced
+                      hard-coded "load in" on the first column and "load out" on
+                      the last, which were positional guesses and simply wrong on
+                      any run that opens with travel or ends with two load-out
+                      days. Blank when unset — better than a confident lie. */}
+                  {dayTypeLabel(dayTypes?.[date]) && (
+                    <div className="truncate text-[9px] leading-tight text-accent">
+                      {dayTypeLabel(dayTypes?.[date])}
+                    </div>
                   )}
                 </div>
               )
