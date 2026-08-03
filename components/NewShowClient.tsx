@@ -387,8 +387,16 @@ export default function NewShowClient({
               title="Day types"
               note={`${Object.keys(dayTypes).length} of ${dates.length} set · optional`}
             />
+            {/* Columns on a wide screen, not one long list.
+                This screen is used mainly on a laptop, sometimes an iPad, and
+                a 20-day run stacked one row per day pushed the positions grid
+                to nearly two screens down — you scrolled past twenty dropdowns
+                to reach the thing you came to build. Three columns turns twenty
+                days into seven rows. Each row keeps its own rule, so the ruled-
+                row pattern survives the split. */}
+            <div className="grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
             {dates.map(date => (
-              <div key={date} className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
+              <div key={date} className="flex items-center justify-between gap-3 border-b border-line py-2.5">
                 <span className="shrink-0 whitespace-nowrap text-sm text-ink">
                   {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
                     weekday: 'short', month: 'short', day: 'numeric',
@@ -418,6 +426,7 @@ export default function NewShowClient({
                 </select>
               </div>
             ))}
+            </div>
           </div>
         )}
       </div>
