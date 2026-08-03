@@ -14,6 +14,8 @@ import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
 import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
 import Chip from '@/components/ui/Chip'
+import SectionHead from '@/components/ui/SectionHead'
+import { PANEL, PANEL_X } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
@@ -42,26 +44,9 @@ const CELL_HOURS = 'col-start-2 row-start-1 text-right lg:col-start-3'
 // bordered surface, the same as a room on the tracker. What stays outside on the
 // page background is the page header, the Master Summary and the view tabs:
 // summaries and controls sit above the content, the content is what gets edges.
-const PANEL = 'rounded-card border border-line bg-surface'
-// Horizontal inset for every band inside a panel. It goes on the bands rather
-// than on the panel so their `border-b` still spans the full width — padding is
-// inside the border box, so the hairlines run edge to edge like the tracker's
-// crew rows, instead of stopping 16px short on each side.
-const PANEL_X = 'px-4'
-
-// Small-caps section heading on a hairline rule — the house ruled-section
-// pattern. `note` sits opposite the title on the same rule.
-function SectionHead({ title, note, className }: { title: string; note?: string; className?: string }) {
-  return (
-    // Wraps rather than stacking unconditionally: a short pair (a date and a
-    // crew count) stays on one line with the count hard right, while a long note
-    // drops to its own line instead of squeezing the heading into two.
-    <div className={cn('flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-line pb-2', className)}>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</h2>
-      {note && <p className="text-[11px] text-muted">{note}</p>}
-    </div>
-  )
-}
+// PANEL / PANEL_X / SectionHead moved to lib/panel.ts and components/ui/ when
+// New Show needed the same look — see the header of lib/panel.ts for why the
+// inset belongs on the bands rather than on the panel.
 
 // Column headers for the ruled table. Desktop only: at 375px the rows restack
 // to two columns, and headers over a restacked layout label the wrong things.

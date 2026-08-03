@@ -8,6 +8,9 @@ import { localDateStr } from '@/lib/datetime'
 import { pickRulesetValues, type RulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES, DEFAULT_SHOW_TIMEZONE } from '@/lib/timezones'
 import Button from '@/components/ui/Button'
+import SectionHead from '@/components/ui/SectionHead'
+import { PANEL, PANEL_X } from '@/lib/panel'
+import { cn } from '@/lib/cn'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
 import { plannedPositions, roomDayIndices, type CallModel } from '@/lib/crewCallGrid'
 
@@ -213,7 +216,7 @@ export default function NewShowClient({
   return (
     <div className="p-6 pb-44 md:p-10 lg:pb-32">
       <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
-      <h1 className="mb-6 mt-2 text-2xl font-extrabold tracking-tight md:text-3xl">New show</h1>
+      <h1 className="mb-6 mt-2 text-3xl font-extrabold tracking-tight">New show</h1>
 
       {error && (
         <div className="mb-4 rounded-field border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
@@ -221,52 +224,68 @@ export default function NewShowClient({
         </div>
       )}
 
-      <div className="mb-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
-        <div className="mb-4 rounded-card border border-line bg-surface p-4 lg:mb-0">
-          <p className="mb-3 text-xs uppercase tracking-wide text-muted">Show details</p>
-          <input placeholder="Show name" value={name} onChange={e => setName(e.target.value)} className={inputCls} />
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <input placeholder="Venue (optional)" value={venue} onChange={e => setVenue(e.target.value)} className={inputCls} />
-            <input placeholder="City & State" value={cityState} onChange={e => setCityState(e.target.value)} className={inputCls} />
-          </div>
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <input type="date" aria-label="Start date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
-            <input type="date" aria-label="End date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
-            <select value={timezone} onChange={e => setTimezone(e.target.value)} className={inputCls}>
-              {SHOW_TIMEZONES.map(tz => (
-                <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
-              ))}
-            </select>
+      {/* One panel, two ruled bands — not two cards side by side.
+          Show details and Payroll rules are two sections of ONE form, not
+          repeating units, so they do not each get an edge. They were also wildly
+          different heights (six fields against one select), which is exactly the
+          ragged-grid look being removed everywhere else.
+          The inset is on the bands via PANEL_X, never on the panel, so each
+          band's border-b runs the full width. */}
+      <div className={cn(PANEL, 'mb-6')}>
+        <div className={PANEL_X}>
+          <SectionHead title="Show details" className="pt-4" />
+          <div className="py-4">
+            <input placeholder="Show name" value={name} onChange={e => setName(e.target.value)} className={inputCls} />
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input placeholder="Venue (optional)" value={venue} onChange={e => setVenue(e.target.value)} className={inputCls} />
+              <input placeholder="City & State" value={cityState} onChange={e => setCityState(e.target.value)} className={inputCls} />
+            </div>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input type="date" aria-label="Start date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
+              <input type="date" aria-label="End date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+              <select value={timezone} onChange={e => setTimezone(e.target.value)} className={inputCls}>
+                {SHOW_TIMEZONES.map(tz => (
+                  <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="rounded-card border border-line bg-surface p-4">
-          <p className="mb-3 text-xs uppercase tracking-wide text-muted">Payroll rules</p>
-          <select
-            key={presets.map(p => p.id).join(',')}
-            value={presetId}
-            onChange={e => setPresetId(e.target.value)}
-            className={inputCls}
-          >
-            <option value="" className="bg-surface-2 text-ink">Custom — start from scratch</option>
-            {presets.map(p => (
-              <option key={p.id} value={p.id} className="bg-surface-2 text-ink">
-                {p.name}{p.is_default ? ' (default)' : ''}
-              </option>
-            ))}
-          </select>
-          <p className="mt-2 text-xs text-muted">
-            {chosen
-              ? summarize(chosen)
-              : 'OT after 10h, no double time, no meal penalties, no short turnaround. Set them per-show in Edit Show.'}
-          </p>
+        <div className={PANEL_X}>
+          <SectionHead title="Payroll rules" />
+          <div className="py-4">
+            <select
+              key={presets.map(p => p.id).join(',')}
+              value={presetId}
+              onChange={e => setPresetId(e.target.value)}
+              className={inputCls}
+            >
+              <option value="" className="bg-surface-2 text-ink">Custom — start from scratch</option>
+              {presets.map(p => (
+                <option key={p.id} value={p.id} className="bg-surface-2 text-ink">
+                  {p.name}{p.is_default ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-muted">
+              {chosen
+                ? summarize(chosen)
+                : 'OT after 10h, no double time, no meal penalties, no short turnaround. Set them per-show in Edit Show.'}
+            </p>
+          </div>
         </div>
       </div>
 
       {dates.length === 0 ? (
-        <p className="rounded-card border border-dashed border-line px-4 py-8 text-center text-sm text-muted">
-          Set the start and end dates to add positions.
-        </p>
+        // The empty state is the positions panel, not a stray dashed box on the
+        // page background — same edge as the grid it stands in for.
+        <div className={cn(PANEL, PANEL_X)}>
+          <SectionHead title="Rooms &amp; positions" className="pt-4" />
+          <p className="py-8 text-center text-sm text-muted">
+            Set the start and end dates to add positions.
+          </p>
+        </div>
       ) : (
         <CrewCallGrid
           rooms={rooms}
