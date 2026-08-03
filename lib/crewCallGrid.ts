@@ -89,6 +89,46 @@ export function roomHasAnyCall(call: CallModel, roomKey: string): boolean {
 }
 
 /**
+ * Room names that would silently take positions with them if the show were
+ * created now — returned as room KEYS, so the caller can mark the right inputs.
+ *
+ * Rooms are de-duplicated case-insensitively at create time and blank names are
+ * dropped, which is correct — but doing it silently meant a room whose call you
+ * had just built could vanish entirely, positions and all, with no message. The
+ * fix is to say so BEFORE the write rather than tidy up during it.
+ *
+ * A room only counts as a problem if it actually has positions. An unnamed
+ * empty row is just an unused row and should keep being dropped quietly, which
+ * is what makes "+ Add another room" harmless to press by accident.
+ */
+export function validateRooms(
+  rooms: { key: string; name: string }[],
+  call: CallModel,
+): { blank: string[]; duplicate: string[] } {
+  const blank: string[] = []
+  const duplicate: string[] = []
+  const seen = new Set<string>()
+
+  for (const room of rooms) {
+    const name = room.name.trim().toLowerCase()
+    const matters = roomHasAnyCall(call, room.key)
+    if (!name) {
+      if (matters) blank.push(room.key)
+      continue
+    }
+    // First of a pair wins, matching the de-dupe at create time, so the room
+    // flagged is the one that would actually be discarded.
+    if (seen.has(name)) {
+      if (matters) duplicate.push(room.key)
+      continue
+    }
+    seen.add(name)
+  }
+
+  return { blank, duplicate }
+}
+
+/**
  * Which day indices a room should EXIST on.
  *
  * A room is created only on the days it is called — Breakout A is simply absent

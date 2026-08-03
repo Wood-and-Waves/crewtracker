@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Button from '@/components/ui/Button'
 import { dayTypeLabel } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
@@ -30,10 +30,15 @@ import {
 
 export type GridRoom = { key: string; name: string }
 
-// Tight enough that four days plus the room name fit a 375px phone with only a
-// nudge of horizontal scroll, wide enough for a two-digit count and a weekday.
+// Wide enough for a two-digit count, a weekday, a day-type label and now the
+// role names inside a cell.
+//
+// This was 58, chosen so four days plus the room name fit a 375px phone with
+// only a nudge of horizontal scroll. That constraint was set before the room
+// column became sticky; now that the room name never scrolls away, a little
+// more horizontal scroll costs far less than a cell you cannot read.
 const NAME_COL = 132
-const MIN_DAY_COL = 58
+const MIN_DAY_COL = 68
 
 function dayLabel(date: string) {
   // Bare 'YYYY-MM-DD' + T00:00:00 = local midnight; a date-only string parses as
@@ -54,6 +59,7 @@ export default function CrewCallGrid({
   onChange,
   onRoomsChange,
   dayTypes,
+  invalidRoomKeys,
   readOnly = false,
 }: {
   rooms: GridRoom[]
@@ -64,9 +70,19 @@ export default function CrewCallGrid({
   onRoomsChange: (next: GridRoom[]) => void
   /** Day type per DATE, for the column headers. Optional — unset days show none. */
   dayTypes?: Record<string, string>
+  /** Rooms whose name would cost them their positions at create time. */
+  invalidRoomKeys?: string[]
   readOnly?: boolean
 }) {
   const [selected, setSelected] = useState<{ roomKey: string; day: number } | null>(null)
+  const editorRef = useRef<HTMLDivElement | null>(null)
+
+  // Bring the editor into view when a cell is picked. 'nearest' rather than
+  // 'center': on a desktop where it is already visible, centring would jolt the
+  // page for no reason.
+  useEffect(() => {
+    if (selected) editorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selected])
   const [role, setRole] = useState('')
   const [quantity, setQuantity] = useState(1)
 
@@ -138,7 +154,12 @@ export default function CrewCallGrid({
       <div className="overflow-x-auto rounded-card border border-line bg-surface">
         <div style={{ minWidth }}>
           <div className="grid border-b border-line bg-surface-2" style={{ gridTemplateColumns }}>
-            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            {/* Sticky room column, copied from ScheduleGrid which sits on
+                identical scaffolding. Without it, scrolling right on a long run
+                loses which room you are looking at — the single worst thing
+                about this grid on a phone. The opaque background is NOT
+                optional: without it the day cells scroll visibly underneath. */}
+            <div className="sticky left-0 z-20 border-r border-line bg-surface-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
               Room
             </div>
             {dates.map((date, i) => {
@@ -174,7 +195,7 @@ export default function CrewCallGrid({
               className="grid border-b border-line last:border-b-0"
               style={{ gridTemplateColumns }}
             >
-              <div className="flex items-center gap-1 px-2 py-2">
+              <div className="sticky left-0 z-10 flex items-center gap-1 border-r border-line bg-surface px-2 py-2">
                 <input
                   value={room.name}
                   onChange={e =>
@@ -182,7 +203,13 @@ export default function CrewCallGrid({
                   }
                   placeholder="Room name"
                   disabled={readOnly}
-                  className="min-w-0 flex-1 rounded-field border border-line bg-surface-2 px-2 py-1 text-[13px] text-ink outline-none focus:border-accent disabled:opacity-60"
+                  aria-invalid={invalidRoomKeys?.includes(room.key) || undefined}
+                  className={cn(
+                    'min-w-0 flex-1 rounded-field border bg-surface-2 px-2 py-1 text-[13px] text-ink outline-none focus:border-accent disabled:opacity-60',
+                    // Marks a room whose positions would be discarded at create
+                    // time — blank name, or a duplicate of another room's.
+                    invalidRoomKeys?.includes(room.key) ? 'border-ot' : 'border-line',
+                  )}
                 />
                 {rooms.length > 1 && !readOnly && (
                   <button
@@ -217,7 +244,14 @@ export default function CrewCallGrid({
                     ) : (
                       <>
                         <span className="text-[13px] font-bold text-ink">{cellCount(lines)}</span>
-                        <span className="hidden w-full truncate px-0.5 text-[9px] leading-tight text-muted sm:block">
+                        {/* Roles show at every width now. This used to be
+                            sm:block, so a filled cell on a phone was a bare
+                            number with no way to tell an A1 from a stagehand.
+                            Affordable because the room column is sticky — the
+                            reason day columns were kept narrow was to fit four
+                            days plus the room name on a 375px screen, and that
+                            stopped mattering once the name never scrolls away. */}
+                        <span className="w-full truncate px-0.5 text-[9px] leading-tight text-muted">
                           {lines.map(x => (x.quantity > 1 ? `${x.quantity} ` : '') + x.role).join(', ')}
                         </span>
                       </>
@@ -230,19 +264,13 @@ export default function CrewCallGrid({
         </div>
       </div>
 
-      {!readOnly && (
-        <button
-          type="button"
-          onClick={addRoom}
-          className="mt-2 text-xs font-semibold text-accent hover:underline"
-        >
-          + Add another room
-        </button>
-      )}
-
-      {/* Cell editor, BELOW the grid — never over it. */}
+      {/* Cell editor, BELOW the grid — never over it.
+          It sits ABOVE "+ Add another room" rather than under it: with several
+          rooms on a phone the editor was rendering past the bottom of the
+          viewport, so tapping a cell appeared to do nothing at all. The
+          scrollIntoView below is the belt to that braces. */}
       {selected && !readOnly && (
-        <div className="mt-3 rounded-card border border-accent bg-surface p-3">
+        <div ref={editorRef} className="mt-3 rounded-card border border-accent bg-surface p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-[13px] font-semibold text-ink">
               {selRoom?.name || 'Room'} · {dayLabel(dates[selected.day]).weekday} {dayLabel(dates[selected.day]).day}
@@ -310,6 +338,15 @@ export default function CrewCallGrid({
         </div>
       )}
 
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={addRoom}
+          className="mt-2 text-xs font-semibold text-accent hover:underline"
+        >
+          + Add another room
+        </button>
+      )}
     </div>
   )
 }

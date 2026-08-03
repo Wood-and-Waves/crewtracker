@@ -13,7 +13,7 @@ import { PANEL, PANEL_X } from '@/lib/panel'
 import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, type DayType } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
-import { plannedPositions, roomDayIndices, type CallModel } from '@/lib/crewCallGrid'
+import { plannedPositions, roomDayIndices, validateRooms, type CallModel } from '@/lib/crewCallGrid'
 
 // Creating a show, as a page rather than a dialog.
 //
@@ -90,6 +90,10 @@ export default function NewShowClient({
   const [presetId, setPresetId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Set once the shows row exists. Its presence means a retry must RESUME, not
+  // insert a second show — and it is what lets the page offer a way into the
+  // half-built show rather than stranding it.
+  const [createdShowId, setCreatedShowId] = useState<string | null>(null)
 
   useEffect(() => {
     setPresetId(presets.find(p => p.is_default)?.id ?? '')
@@ -110,36 +114,59 @@ export default function NewShowClient({
     return bits.join(' · ')
   }
 
-  const canCreate = !!name.trim() && !!startDate && !!endDate && dates.length > 0 && !loading
+  // Rooms that would lose their positions at create time. Blocking beats
+  // silently discarding: the way to lose work here was to add a room, build a
+  // three-role call in it, forget to type the name, and press Create.
+  const roomProblems = useMemo(() => validateRooms(rooms, call), [rooms, call])
+  const badRoomKeys = useMemo(
+    () => [...roomProblems.blank, ...roomProblems.duplicate],
+    [roomProblems],
+  )
+
+  const canCreate =
+    !!name.trim() && !!startDate && !!endDate && dates.length > 0 && !loading &&
+    badRoomKeys.length === 0
 
   async function createShow() {
     setError('')
     setLoading(true)
 
-    const { data: show, error: showError } = await supabase
-      .from('shows')
-      .insert({
-        organization_id: organizationId,
-        name,
-        venue: venue || null,
-        city_state: cityState.trim() || null,
-        start_date: startDate,
-        end_date: endDate,
-        timezone_identifier: timezone,
-      })
-      .select()
-      .single()
+    // Creating a show is five round trips and there is no transaction, so a
+    // failure part-way leaves a real show behind. Previously the only button on
+    // screen then inserted a SECOND one. Reuse the show we already made instead:
+    // the retry resumes rather than starting over.
+    let showId: string
 
-    if (showError || !show) {
-      setError(showError?.message || 'Failed to create show')
-      setLoading(false)
-      return
+    if (createdShowId) {
+      showId = createdShowId
+    } else {
+      const { data, error: showError } = await supabase
+        .from('shows')
+        .insert({
+          organization_id: organizationId,
+          name,
+          venue: venue || null,
+          city_state: cityState.trim() || null,
+          start_date: startDate,
+          end_date: endDate,
+          timezone_identifier: timezone,
+        })
+        .select('id')
+        .single()
+
+      if (showError || !data) {
+        setError(showError?.message || 'Failed to create show')
+        setLoading(false)
+        return
+      }
+      showId = data.id
+      setCreatedShowId(data.id)
     }
 
     // day_type is null when nobody picked one. Never invent a default — a made-up
     // day type ends up on the tracker and in a booking request email.
     const workDayRows = dates.map((date, i) => ({
-      show_id: show.id,
+      show_id: showId,
       date,
       day_number: i + 1,
       day_type: dayTypes[date] ?? null,
@@ -149,16 +176,34 @@ export default function NewShowClient({
     // its rules from here, so editing or deleting the preset later can never
     // rewrite hours and pay on a show that already exists.
     const rulesetRow = chosen
-      ? { show_id: show.id, ...pickRulesetValues(chosen) }
-      : { show_id: show.id }
+      ? { show_id: showId, ...pickRulesetValues(chosen) }
+      : { show_id: showId }
 
-    const [rulesetResult, daysResult] = await Promise.all([
-      supabase.from('payroll_rulesets').insert(rulesetRow),
-      supabase.from('work_days').insert(workDayRows).select('id, day_number'),
-    ])
+    // On a RETRY some of this already landed, so read before writing. Blindly
+    // re-inserting would hit the unique (show_id, date) on work_days, and would
+    // silently duplicate the ruleset and every room. Each step below is
+    // therefore "reuse what exists, otherwise create".
+    const resuming = !!createdShowId
+    const [priorDays, priorRuleset] = resuming
+      ? await Promise.all([
+          supabase.from('work_days').select('id, day_number').eq('show_id', showId),
+          supabase.from('payroll_rulesets').select('id').eq('show_id', showId).maybeSingle(),
+        ])
+      : [null, null]
 
-    if (rulesetResult.error) { setError(rulesetResult.error.message); setLoading(false); return }
-    if (daysResult.error) { setError(daysResult.error.message); setLoading(false); return }
+    if (!priorRuleset?.data) {
+      const { error: rulesetError } = await supabase.from('payroll_rulesets').insert(rulesetRow)
+      if (rulesetError) { setError(rulesetError.message); setLoading(false); return }
+    }
+
+    let daysData = priorDays?.data ?? null
+    if (!daysData || daysData.length === 0) {
+      const { data, error: daysError } = await supabase
+        .from('work_days').insert(workDayRows).select('id, day_number')
+      if (daysError) { setError(daysError.message); setLoading(false); return }
+      daysData = data
+    }
+    const daysResult = { data: daysData }
 
     const wanted = dedupeRooms(rooms)
     const finalRooms: GridRoom[] = wanted.length > 0
@@ -187,9 +232,20 @@ export default function NewShowClient({
     })
 
     if (roomRows.length > 0) {
-      const { data: createdRooms, error: roomsError } = await supabase
-        .from('rooms').insert(roomRows).select('id, name, work_day_id')
-      if (roomsError) { setError(roomsError.message); setLoading(false); return }
+      // Same reuse rule: if a previous attempt already made the rooms, read
+      // them back for the position mapping instead of creating a second set.
+      const dayIds = days.map(d => d.id)
+      const prior = resuming && dayIds.length > 0
+        ? await supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', dayIds)
+        : null
+
+      let createdRooms = prior?.data ?? null
+      if (!createdRooms || createdRooms.length === 0) {
+        const { data, error: roomsError } = await supabase
+          .from('rooms').insert(roomRows).select('id, name, work_day_id')
+        if (roomsError) { setError(roomsError.message); setLoading(false); return }
+        createdRooms = data
+      }
 
       // Map a (room, day) back to the row that was just created. Rooms are
       // identified by name within a day, which is exactly what dedupeRooms
@@ -222,7 +278,7 @@ export default function NewShowClient({
       }
     }
 
-    router.push(`/dashboard/shows/${show.id}`)
+    router.push(`/dashboard/shows/${showId}`)
   }
 
   return (
@@ -232,7 +288,39 @@ export default function NewShowClient({
 
       {error && (
         <div className="mb-4 rounded-field border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-          {error}
+          <p>{error}</p>
+          {/* The show exists even though this failed. Offer the way in rather
+              than stranding it — pressing the button again resumes. */}
+          {createdShowId && (
+            <Link
+              href={`/dashboard/shows/${createdShowId}`}
+              className="mt-1 inline-block font-semibold underline"
+            >
+              Open the show anyway
+            </Link>
+          )}
+        </div>
+      )}
+
+      {/* Named before the write, not tidied up during it. These rooms would
+          otherwise be dropped at create time and take their positions with
+          them, silently. */}
+      {badRoomKeys.length > 0 && (
+        <div className="mb-4 rounded-field border border-ot/30 bg-ot/10 px-4 py-3 text-sm text-ot">
+          {roomProblems.blank.length > 0 && (
+            <p>
+              {roomProblems.blank.length === 1 ? 'A room has' : `${roomProblems.blank.length} rooms have`}
+              {' '}positions but no name. Name {roomProblems.blank.length === 1 ? 'it' : 'them'} or
+              {' '}remove {roomProblems.blank.length === 1 ? 'it' : 'them'} — otherwise
+              {' '}{roomProblems.blank.length === 1 ? 'its' : 'their'} positions would be lost.
+            </p>
+          )}
+          {roomProblems.duplicate.length > 0 && (
+            <p>
+              Two rooms share a name. Rooms are matched by name within a day, so the
+              second one and its positions would be discarded.
+            </p>
+          )}
         </div>
       )}
 
@@ -352,6 +440,7 @@ export default function NewShowClient({
           onChange={setCall}
           onRoomsChange={setRooms}
           dayTypes={dayTypes}
+          invalidRoomKeys={badRoomKeys}
         />
       )}
 
@@ -363,7 +452,9 @@ export default function NewShowClient({
           above the tab-bar, since two fixed-bottom elements otherwise collide. */}
       <div className="fixed inset-x-0 bottom-20 z-40 border-t border-line bg-bg px-4 py-3 lg:inset-x-auto lg:bottom-6 lg:left-1/2 lg:w-auto lg:-translate-x-1/2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
         <Button onClick={createShow} disabled={!canCreate} className="w-full lg:w-auto">
-          {loading ? 'Creating…' : 'Create show'}
+          {/* "Try saving again" once the show exists: pressing this no longer
+              creates a second one, and saying "Create show" would imply it did. */}
+          {loading ? 'Saving…' : createdShowId ? 'Try saving again' : 'Create show'}
         </Button>
       </div>
     </div>

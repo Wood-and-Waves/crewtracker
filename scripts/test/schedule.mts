@@ -28,7 +28,7 @@ import {
 } from '../../lib/crewCall.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
-  roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions,
+  roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
   type CallModel,
 } from '../../lib/crewCallGrid.ts'
 
@@ -219,6 +219,35 @@ check('non-contiguous days are listed, never collapsed into a range',
 check('unsorted input still reads in order',
   describeDates([day('2026-07-30'), day('2026-07-28', 'travel'), day('2026-07-29')]),
   'Tue, Jul 28 – Thu, Jul 30 (3 days) · first day travel')
+
+console.log('\nvalidateRooms — rooms that would lose their positions')
+// The whole point is that an EMPTY unnamed room stays harmless while a NAMED-
+// BLANK room holding a call gets flagged, so "+ Add another room" can still be
+// pressed by accident without nagging.
+{
+  const withCall: CallModel = addRole({}, 'r2', 0, 'A1', 2)
+  check('an unnamed room with no positions is not a problem',
+    validateRooms([{ key: 'r1', name: 'Main' }, { key: 'r2', name: '' }], {}),
+    { blank: [], duplicate: [] })
+  check('an unnamed room WITH positions is flagged',
+    validateRooms([{ key: 'r1', name: 'Main' }, { key: 'r2', name: '' }], withCall),
+    { blank: ['r2'], duplicate: [] })
+  check('whitespace is not a name',
+    validateRooms([{ key: 'r2', name: '   ' }], withCall),
+    { blank: ['r2'], duplicate: [] })
+  check('a duplicate name with positions is flagged, and it is the SECOND one',
+    validateRooms([{ key: 'r1', name: 'Main' }, { key: 'r2', name: 'Main' }], withCall),
+    { blank: [], duplicate: ['r2'] })
+  check('duplicate detection is case- and space-insensitive, matching the de-dupe',
+    validateRooms([{ key: 'r1', name: 'Main Stage' }, { key: 'r2', name: '  main stage ' }], withCall),
+    { blank: [], duplicate: ['r2'] })
+  check('a duplicate with NO positions is left alone',
+    validateRooms([{ key: 'r1', name: 'Main' }, { key: 'r2', name: 'Main' }], {}),
+    { blank: [], duplicate: [] })
+  check('a clean set reports nothing',
+    validateRooms([{ key: 'r1', name: 'Main' }, { key: 'r2', name: 'Breakout' }], withCall),
+    { blank: [], duplicate: [] })
+}
 
 console.log('\ndescribeDayLines — day types beside travel')
 // The two columns answer different questions and must stay independent: what
