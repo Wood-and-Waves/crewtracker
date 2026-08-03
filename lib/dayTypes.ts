@@ -40,6 +40,7 @@ export const DAY_TYPES = [
   'load_in_show',
   'rehearsal',
   'show',
+  'show_load_out',
   'load_out_travel',
   'travel',
 ] as const
@@ -52,6 +53,7 @@ export const DAY_TYPE_LABELS: Record<DayType, string> = {
   load_in_show: 'Load-in/Show',
   rehearsal: 'Rehearsal',
   show: 'Show',
+  show_load_out: 'Show/Load-out',
   load_out_travel: 'Load-out/Travel',
   travel: 'Travel',
 }
