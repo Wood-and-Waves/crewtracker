@@ -81,6 +81,72 @@ export function copyDayTo(
   return next
 }
 
+/**
+ * Add the same set of lines to many rooms and many days at once.
+ *
+ * The grid's only bulk action used to be copyDayTo, which works down a single
+ * room. Four rooms with a three-role call therefore cost about forty
+ * interactions. This is the cross-room version: queue the call once, choose
+ * where it lands.
+ *
+ * ADDITIVE, not replacing — it goes through addRole, so a role already in a
+ * cell has its count bumped rather than gaining a second identical line, and a
+ * cell that already holds something else keeps it. copyDayTo stays the
+ * replace-shaped operation.
+ *
+ * BOTH LISTS ARE DE-DUPLICATED, and this is not defensive coding. The existing
+ * "Copy to load in + load out" button passes [0, totalDays - 1], which on a
+ * one-day show is [0, 0]. copyDayTo survives that because it skips the source
+ * day; an additive function would quietly add everything twice.
+ *
+ * Day indices outside the run are ignored, matching plannedPositions.
+ */
+export function addLinesTo(
+  call: CallModel,
+  roomKeys: string[],
+  dayIndices: number[],
+  lines: GridLine[],
+  totalDays?: number,
+): CallModel {
+  const rooms = [...new Set(roomKeys)]
+  const days = [...new Set(dayIndices)].filter(
+    d => Number.isInteger(d) && d >= 0 && (totalDays === undefined || d < totalDays),
+  )
+
+  let next = call
+  for (const roomKey of rooms) {
+    for (const day of days) {
+      for (const line of lines) {
+        if (!line.role || line.quantity < 1) continue
+        next = addRole(next, roomKey, day, line.role, line.quantity)
+      }
+    }
+  }
+  return next
+}
+
+/**
+ * How many positions `addLinesTo` would create — for the button that has to say
+ * what it is about to do before anybody presses it.
+ *
+ * De-duplicates the same way, so the number shown matches what actually lands.
+ */
+export function plannedAddCount(
+  roomKeys: string[],
+  dayIndices: number[],
+  lines: GridLine[],
+  totalDays?: number,
+): number {
+  const rooms = new Set(roomKeys).size
+  const days = [...new Set(dayIndices)].filter(
+    d => Number.isInteger(d) && d >= 0 && (totalDays === undefined || d < totalDays),
+  ).length
+  const perCell = lines.reduce(
+    (n, l) => n + (l.role && l.quantity >= 1 ? l.quantity : 0), 0,
+  )
+  return rooms * days * perCell
+}
+
 /** Whether a room has any positions at all, on any day. */
 export function roomHasAnyCall(call: CallModel, roomKey: string): boolean {
   const room = call[roomKey]

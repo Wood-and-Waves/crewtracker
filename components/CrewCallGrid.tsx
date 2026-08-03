@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import Button from '@/components/ui/Button'
 import { dayTypeLabel } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
+import PositionsBulkAdd from '@/components/PositionsBulkAdd'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount, peakPerDay,
+  addLinesTo,
   type CallModel,
 } from '@/lib/crewCallGrid'
 
@@ -67,7 +69,8 @@ export default function CrewCallGrid({
   call: CallModel
   roles: string[]
   onChange: (next: CallModel) => void
-  onRoomsChange: (next: GridRoom[]) => void
+  /** Accepts an updater so add/remove can be safe against rapid clicks. */
+  onRoomsChange: (next: GridRoom[] | ((prev: GridRoom[]) => GridRoom[])) => void
   /** Day type per DATE, for the column headers. Optional — unset days show none. */
   dayTypes?: Record<string, string>
   /** Rooms whose name would cost them their positions at create time. */
@@ -75,6 +78,7 @@ export default function CrewCallGrid({
   readOnly?: boolean
 }) {
   const [selected, setSelected] = useState<{ roomKey: string; day: number } | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const editorRef = useRef<HTMLDivElement | null>(null)
 
   // Bring the editor into view when a cell is picked. 'nearest' rather than
@@ -92,11 +96,15 @@ export default function CrewCallGrid({
   const perDay = peakPerDay(call, totalDays)
 
   function addRoom() {
-    onRoomsChange([...rooms, { key: crypto.randomUUID(), name: '' }])
+    // Functional update, not [...rooms, x]: the array form reads whatever the
+    // closure captured at render, so two clicks before React re-renders both
+    // append to the SAME starting array and the second silently replaces the
+    // first. Adding three rooms quickly gave you one.
+    onRoomsChange(prev => [...prev, { key: crypto.randomUUID(), name: '' }])
   }
 
   function removeRoom(key: string) {
-    onRoomsChange(rooms.filter(r => r.key !== key))
+    onRoomsChange(prev => prev.filter(r => r.key !== key))
     const next = { ...call }
     delete next[key]
     onChange(next)
@@ -143,12 +151,40 @@ export default function CrewCallGrid({
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs uppercase tracking-wide text-muted">Rooms &amp; positions</span>
-        <span className="text-xs text-muted">
-          {perDay > 0 ? `${perDay} crew on the busiest day` : 'No positions yet'}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted">
+            {perDay > 0 ? `${perDay} crew on the busiest day` : 'No positions yet'}
+          </span>
+          {/* The labelled way in. Until this existed the only way to add a
+              position was to discover that grid cells are clickable. */}
+          {!readOnly && (
+            <Button
+              type="button"
+              size="sm"
+              variant={perDay > 0 ? 'ghost' : 'primary'}
+              onClick={() => { setBulkOpen(v => !v); setSelected(null) }}
+            >
+              {bulkOpen ? 'Close' : '+ Add positions'}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Opens above the grid, so the grid slides down and stays visible as the
+          live preview of what this is about to do. */}
+      {bulkOpen && !readOnly && (
+        <PositionsBulkAdd
+          rooms={rooms}
+          dates={dates}
+          roles={roles}
+          onClose={() => setBulkOpen(false)}
+          onApply={(roomKeys, dayIndices, lines) =>
+            onChange(addLinesTo(call, roomKeys, dayIndices, lines, totalDays))
+          }
+        />
+      )}
 
       {/* Desktop grid */}
       <div className="overflow-x-auto rounded-card border border-line bg-surface">

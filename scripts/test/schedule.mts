@@ -29,6 +29,7 @@ import {
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
+  addLinesTo, plannedAddCount,
   type CallModel,
 } from '../../lib/crewCallGrid.ts'
 
@@ -219,6 +220,48 @@ check('non-contiguous days are listed, never collapsed into a range',
 check('unsorted input still reads in order',
   describeDates([day('2026-07-30'), day('2026-07-28', 'travel'), day('2026-07-29')]),
   'Tue, Jul 28 – Thu, Jul 30 (3 days) · first day travel')
+
+console.log('\naddLinesTo — one call across many rooms and days')
+{
+  const lines = [{ role: 'A1', quantity: 1 }, { role: 'Stagehand', quantity: 2 }]
+  const two = addLinesTo({}, ['main', 'breakout'], [0, 1], lines, 3)
+  check('lands in every room-day combination',
+    cellCount(cellLines(two, 'breakout', 1)), 3)
+  check('every targeted cell gets the same call',
+    cellLines(two, 'main', 0), [{ role: 'A1', quantity: 1 }, { role: 'Stagehand', quantity: 2 }])
+  check('untargeted days are untouched', cellLines(two, 'main', 2), [])
+  check('plannedAddCount matches what lands: 2 rooms x 2 days x 3 people',
+    plannedAddCount(['main', 'breakout'], [0, 1], lines, 3), 12)
+
+  // THE TRAP. "Copy to load in + load out" passes [0, totalDays - 1], which on
+  // a one-day show is [0, 0]. copyDayTo survives it by skipping the source day;
+  // an additive function would silently double everything.
+  check('a repeated day index is counted once, not twice',
+    cellCount(cellLines(addLinesTo({}, ['main'], [0, 0], lines, 1), 'main', 0)), 3)
+  check('plannedAddCount de-duplicates days too',
+    plannedAddCount(['main'], [0, 0], lines, 1), 3)
+  check('a repeated room key is counted once',
+    cellCount(cellLines(addLinesTo({}, ['main', 'main'], [0], lines, 1), 'main', 0)), 3)
+
+  check('days beyond the run are ignored',
+    cellLines(addLinesTo({}, ['main'], [5], lines, 3), 'main', 5), [])
+  check('negative day indices are ignored',
+    cellLines(addLinesTo({}, ['main'], [-1], lines, 3), 'main', -1), [])
+
+  // Additive, inheriting addRole's bump rule rather than re-implementing it.
+  const existing = addRole({}, 'main', 0, 'A1', 1)
+  check('a role already in the cell is bumped, not duplicated',
+    cellLines(addLinesTo(existing, ['main'], [0], [{ role: 'A1', quantity: 2 }], 1), 'main', 0),
+    [{ role: 'A1', quantity: 3 }])
+  check('other roles already in the cell survive',
+    cellCount(cellLines(addLinesTo(existing, ['main'], [0], [{ role: 'V1', quantity: 1 }], 1), 'main', 0)), 2)
+
+  check('no rooms selected is a no-op', addLinesTo({}, [], [0], lines, 1), {})
+  check('no days selected is a no-op', addLinesTo({}, ['main'], [], lines, 1), {})
+  check('no lines is a no-op', addLinesTo({}, ['main'], [0], [], 1), {})
+  check('count is zero when nothing is selected',
+    plannedAddCount([], [], lines, 1), 0)
+}
 
 console.log('\nvalidateRooms — rooms that would lose their positions')
 // The whole point is that an EMPTY unnamed room stays harmless while a NAMED-
