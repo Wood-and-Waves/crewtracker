@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button'
 import { dayTypeLabel } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
 import PositionsBulkAdd from '@/components/PositionsBulkAdd'
+import RolePicker from '@/components/RolePicker'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount, peakPerDay,
   addLinesTo,
@@ -87,8 +88,8 @@ export default function CrewCallGrid({
   useEffect(() => {
     if (selected) editorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [selected])
-  const [role, setRole] = useState('')
-  const [quantity, setQuantity] = useState(1)
+  // The draft role/quantity that used to live here moved into RolePicker,
+  // which owns it — that state is meaningless outside adding one line.
 
   const totalDays = dates.length
   const gridTemplateColumns = `${NAME_COL}px repeat(${totalDays}, minmax(${MIN_DAY_COL}px, 1fr))`
@@ -111,43 +112,8 @@ export default function CrewCallGrid({
     if (selected?.roomKey === key) setSelected(null)
   }
 
-  function addToSelected() {
-    if (!selected || !role) return
-    onChange(addRole(call, selected.roomKey, selected.day, role, quantity))
-    setRole('')
-    setQuantity(1)
-  }
-
   const sel = selected ? cellLines(call, selected.roomKey, selected.day) : []
   const selRoom = selected ? rooms.find(r => r.key === selected.roomKey) : null
-
-  const roleSelect = (onAdd: () => void) => (
-    <div className="flex gap-2">
-      {/* key tied to the options: iPad Safari has a hydration bug that
-          duplicates <option> inside a controlled <select>. */}
-      <select
-        key={roles.join(',')}
-        value={role}
-        onChange={e => setRole(e.target.value)}
-        className="min-w-0 flex-1 rounded-field border border-line bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus:border-accent"
-      >
-        <option value="" className="bg-surface-2 text-ink">Add a role…</option>
-        {roles.map(r => (
-          <option key={r} value={r} className="bg-surface-2 text-ink">{r}</option>
-        ))}
-      </select>
-      <input
-        type="number"
-        min={1}
-        max={20}
-        value={quantity}
-        onChange={e => setQuantity(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-        aria-label="How many"
-        className="w-14 rounded-field border border-line bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus:border-accent"
-      />
-      <Button type="button" size="sm" variant="ghost" onClick={onAdd} disabled={!role}>Add</Button>
-    </div>
-  )
 
   return (
     <div>
@@ -341,7 +307,13 @@ export default function CrewCallGrid({
             </ul>
           )}
 
-          {roleSelect(addToSelected)}
+          {/* The shared picker — the same control CallLinesEditor uses. This
+              was a copy-pasted select/qty/Add trio with its own copy of the
+              1-20 clamp and the iPad-Safari key workaround. */}
+          <RolePicker
+            roles={roles}
+            onAdd={(r, q) => onChange(addRole(call, selected.roomKey, selected.day, r, q))}
+          />
 
           {/* The bulk actions. This is what replaces the scope dropdown. */}
           <div className="mt-2.5 flex flex-wrap gap-1.5">

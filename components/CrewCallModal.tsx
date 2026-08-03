@@ -8,6 +8,7 @@ import Chip from '@/components/ui/Chip'
 import Toggle from '@/components/ui/Toggle'
 import FillPositionPicker from '@/components/FillPositionPicker'
 import CallLinesEditor, { type CallLine } from '@/components/CallLinesEditor'
+import { expandLines } from '@/lib/crewCallGrid'
 
 // The crew call for one room on one day: the positions the show NEEDS.
 //
@@ -141,15 +142,35 @@ export default function CrewCallModal({
     // rows so each is individually open or filled. Every line the person
     // stacked up commits in a single insert — the call is one decision.
     const targets = applyAll ? [roomId, ...laterDays] : [roomId]
-    let order = positions.length
+
+    // sort_order continues from what EACH target room already holds, read from
+    // the database rather than assumed.
+    //
+    // This used to start one counter at this room's position count and reuse it
+    // for the fan-out rooms too, so a later day that already had positions got
+    // the new rows numbered among its existing ones — and .order('sort_order')
+    // then resolved those ties arbitrarily, shuffling a room's call day to day.
+    // StaffRoomModal learned the same lesson twice: re-query, never trust a
+    // count carried over from somewhere else.
+    const { data: existing, error: countError } = await supabase
+      .from('crew_call_positions')
+      .select('room_id, sort_order')
+      .in('room_id', targets)
+    if (countError) { setBusy(false); setError(countError.message); return }
+
+    const nextOrder = new Map<string, number>()
+    for (const row of (existing ?? []) as { room_id: string; sort_order: number }[]) {
+      nextOrder.set(row.room_id, Math.max(nextOrder.get(row.room_id) ?? 0, row.sort_order + 1))
+    }
+
     const rows = targets.flatMap(rid =>
-      newLines.flatMap(line =>
-        Array.from({ length: line.quantity }, () => ({
-          room_id: rid,
-          role: line.role,
-          sort_order: order++,
-        })),
-      ),
+      // expandLines is the shared quantity -> one-row-per-person expansion, the
+      // same one plannedPositions uses for New Show.
+      expandLines(newLines, nextOrder.get(rid) ?? 0).map(p => ({
+        room_id: rid,
+        role: p.role,
+        sort_order: p.sortOrder,
+      })),
     )
 
     const { error: e } = await supabase.from('crew_call_positions').insert(rows)

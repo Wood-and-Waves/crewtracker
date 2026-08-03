@@ -23,9 +23,7 @@ import { todayInZone, showStatus } from '../../lib/showStatus.ts'
 import {
   describeDates, buildBookingRequestText, describeDayLines, hasAnyDayType,
 } from '../../lib/bookingEmail.ts'
-import {
-  summarizeCall, describeCallSize, scopeIncludesDay, daysCoveredBy,
-} from '../../lib/crewCall.ts'
+import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -428,34 +426,18 @@ check('undated rows are ignored', summarizeCall([{ date: '' } as any]).peakPerDa
 check('never leads with the row count', describeCallSize(soup).includes('60'), false)
 
 // ---------------------------------------------------------------------------
-// Day scopes. Dan: "If riggers are only needed on the first and last day, how
-// do I show that as an admin building a show?" Load-in and load-out crews are a
-// standard shape, so the builder has to express it rather than making somebody
-// create the show and then edit two days by hand.
+// Day scopes were tested here and are gone with the code (2026-08-03).
+//
+// Dan's original question — "if riggers are only needed on the first and last
+// day, how do I show that?" — is now answered by ticking those two days in the
+// bulk-add panel rather than choosing 'first-last' from a dropdown.
+//
+// The one thing worth keeping was the one-day-show case: such a show is BOTH
+// the first and the last day, so a naive first-last would book two riggers for
+// one day. That did not get lost; it is the de-duplication assertion in the
+// addLinesTo block above, which passes [0, 0] deliberately.
 // ---------------------------------------------------------------------------
-console.log('\ncall line day scopes')
-const days5 = (scope: any) => [0,1,2,3,4].map(i => scopeIncludesDay(scope, i, 5))
 
-check('every day means every day', days5('all'), [true, true, true, true, true])
-check('first day only', days5('first'), [true, false, false, false, false])
-check('last day only', days5('last'), [false, false, false, false, true])
-check('riggers: first and last, nothing between',
-  days5('first-last'), [true, false, false, false, true])
-check('middle days exclude both ends',
-  days5('middle'), [false, true, true, true, false])
-
-// A one-day show is both the first and the last day. 'first-last' must include
-// it ONCE — a naive OR that double-counted would book two riggers for one day.
-check('a one-day show counts first-last once', daysCoveredBy('first-last', 1), 1)
-check('a one-day show is the first day', scopeIncludesDay('first', 0, 1), true)
-check('a one-day show is the last day', scopeIncludesDay('last', 0, 1), true)
-check('a one-day show has no middle', daysCoveredBy('middle', 1), 0)
-// A two-day show is all ends and no middle, which the UI disables rather than
-// silently adding nothing.
-check('a two-day show has no middle', daysCoveredBy('middle', 2), 0)
-check('a two-day first-last covers both', daysCoveredBy('first-last', 2), 2)
-check('a three-day show has exactly one middle day', daysCoveredBy('middle', 3), 1)
-check('every day covers the whole run', daysCoveredBy('all', 5), 5)
 
 // ---------------------------------------------------------------------------
 // The crew call grid. Rooms down, days across — the shape a call actually has,

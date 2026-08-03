@@ -46,12 +46,43 @@ function withCell(call: CallModel, roomKey: string, day: number, lines: GridLine
 export function addRole(
   call: CallModel, roomKey: string, day: number, role: string, quantity = 1,
 ): CallModel {
-  const lines = cellLines(call, roomKey, day)
+  return withCell(call, roomKey, day, mergeLines(cellLines(call, roomKey, day), role, quantity))
+}
+
+/**
+ * Add a role to a list of lines, bumping an existing entry rather than adding a
+ * second identical one.
+ *
+ * Lives here rather than inside addRole because CallLinesEditor needs the same
+ * rule for a list that is not in a CallModel yet — a call being typed for a room
+ * that does not exist. It was implemented twice, which is one bug away from the
+ * two disagreeing about what "already there" means.
+ */
+export function mergeLines(lines: GridLine[], role: string, quantity = 1): GridLine[] {
   const i = lines.findIndex(l => l.role === role)
-  const next = i >= 0
+  return i >= 0
     ? lines.map((l, j) => (j === i ? { ...l, quantity: l.quantity + quantity } : l))
     : [...lines, { role, quantity }]
-  return withCell(call, roomKey, day, next)
+}
+
+/**
+ * Expand quantities into ONE ROW PER PERSON, which is how positions are stored.
+ *
+ * `startOrder` exists because sort_order has to continue from whatever the
+ * target room already holds — starting at 0 again would interleave the new rows
+ * among the old ones, and `.order('sort_order')` would then resolve the ties
+ * arbitrarily. Callers writing to several rooms must pass each room's own count,
+ * not one running counter shared across them.
+ */
+export function expandLines(
+  lines: GridLine[], startOrder = 0,
+): { role: string; sortOrder: number }[] {
+  const out: { role: string; sortOrder: number }[] = []
+  let order = startOrder
+  for (const line of lines) {
+    for (let i = 0; i < line.quantity; i++) out.push({ role: line.role, sortOrder: order++ })
+  }
+  return out
 }
 
 export function removeRole(call: CallModel, roomKey: string, day: number, role: string): CallModel {
