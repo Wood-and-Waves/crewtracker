@@ -23,15 +23,17 @@ export default function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-[27px] w-[46px] flex-none rounded-pill border transition-colors disabled:opacity-50",
+        // Squared per Showbill — the pill silhouette was part of the bubble
+        // problem. Still unmistakably a switch: track + sliding knob.
+        "relative h-[26px] w-[46px] flex-none rounded-[3px] border transition-colors disabled:opacity-50",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         checked ? "bg-accent border-transparent" : "bg-surface-2 border-line",
       )}
     >
       <span
         className={cn(
-          "absolute top-[2px] h-[21px] w-[21px] rounded-full bg-white shadow-sm transition-[left]",
-          checked ? "left-[21px]" : "left-[2px]",
+          "absolute top-[2px] h-[20px] w-[20px] rounded-[2px] bg-white shadow-sm transition-[left]",
+          checked ? "left-[22px]" : "left-[2px]",
         )}
       />
     </button>

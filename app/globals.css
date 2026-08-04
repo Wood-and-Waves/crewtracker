@@ -1,103 +1,140 @@
 @import "tailwindcss";
 
 /* ============================================================
-   CrewTracker — "Signal" design tokens
+   CrewTracker — "Showbill" design tokens (replaced "Signal" 2026-08-04)
    Change the look here, not in the components.
+
+   Paper-first, ONE identity: light is the flagship — ink on warm
+   paper, Crew Blue for actions, muted day-type tints for data.
+   Dark is a faithful DERIVATIVE of the same identity (the document
+   printed on black), reached via the existing app-wide toggle —
+   never a separate personality per screen. Dan rejected per-screen
+   theme defaults explicitly (2026-08-04).
+
+   Geometry is squared on purpose: "bubble-like, iOS forced to big
+   screen" was the named disease. Radii are 2–3px, not 10–14.
+
    Default follows the OS (prefers-color-scheme); an explicit
    data-theme="light|dark" on <html> overrides it both ways.
    ============================================================ */
 
 :root {
-  /* light — matches the iOS app's light appearance (source-verified) */
-  --bg: #f2f2f7;
+  /* light — the paper document (flagship) */
+  --bg: #f5f4ef;
   --surface: #ffffff;
-  --surface-2: #ebebeb;
-  --surface-3: #e5e5ea;
-  --ink: #000000;
-  --muted: #8e8e93;
-  --line: #c6c6c8;
-  --accent: #007aff;
+  --surface-2: #f0eee7;
+  --surface-3: #e5e2d9;
+  --ink: #17181a;
+  --muted: #6b6a64;
+  --line: #dad7ce;
+  --accent: #2a52a8;          /* Crew Blue */
   --accent-ink: #ffffff;
-  --accent-wash: rgba(0, 122, 255, 0.15);
-  --ot: #ff9500;
-  --staffing: #7a5af0;
-  --preshow: #0d9488;
-  --archived: #a86a7a;
-  --good: #34c759;
-  --danger: #ff3b30;
-  --half-day: #af52de;
+  --accent-wash: rgba(42, 82, 168, 0.12);
+  --ot: #b87400;
+  --staffing: #6d5bd0;
+  --preshow: #0d7a70;
+  --archived: #97687a;
+  --good: #2e8757;
+  --danger: #c63b30;
+  --half-day: #7d5ba6;
 
-  --radius: 14px;
-  --radius-sm: 10px;
-  --radius-pill: 999px;
+  /* Day-type tints — color as information, muted register.
+     Mapping (see lib/dayTypes.ts): show-family days are green
+     (show, load_in_show, show_load_out), pure prep is amber
+     (load_in), rehearsal violet, travel-family slate
+     (travel, travel_load_in, load_out_travel). */
+  --day-travel: #5b7a99;
+  --day-loadin: #c07e2a;
+  --day-rehearsal: #7d5ba6;
+  --day-show: #2e8757;
+
+  --radius: 2px;
+  --radius-sm: 2px;
+  --radius-pill: 3px;
   --font-sys: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  /* --font-oswald is injected on <html> by next/font in app/layout.tsx. */
+  --font-disp: var(--font-oswald), "Avenir Next Condensed", "Arial Narrow", sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --surface-3: #3a3a3c;
-    --ink: #ffffff;
-    --muted: #8e8e93;
-    --line: #38383a;
-    --accent: #0a84ff;
-    --accent-ink: #ffffff;
-    --accent-wash: rgba(10, 132, 255, 0.15);
-    --ot: #ff9f0a;
-  --staffing: #a78bfa;
-  --preshow: #2dd4bf;
-  --archived: #d99aa8;
-    --good: #30d158;
-    --danger: #ff453a;
-    --half-day: #bf5af2;
+    /* dark — the same document, printed on black */
+    --bg: #121317;
+    --surface: #1b1d22;
+    --surface-2: #24262c;
+    --surface-3: #2e3138;
+    --ink: #e8eaee;
+    --muted: #8a939e;
+    --line: #2a2d34;
+    --accent: #4d8bff;
+    --accent-ink: #0b1220;
+    --accent-wash: rgba(77, 139, 255, 0.14);
+    --ot: #e09a2e;
+    --staffing: #8f7fe8;
+    --preshow: #38b2a5;
+    --archived: #c08ca0;
+    --good: #46b07c;
+    --danger: #e06058;
+    --half-day: #a886db;
+    --day-travel: #7396b8;
+    --day-loadin: #d69a45;
+    --day-rehearsal: #9c77c9;
+    --day-show: #4ca578;
   }
 }
 
 /* explicit overrides win over the media query in both directions */
 :root[data-theme="light"] {
-  --bg: #f2f2f7;
+  --bg: #f5f4ef;
   --surface: #ffffff;
-  --surface-2: #ebebeb;
-  --surface-3: #e5e5ea;
-  --ink: #000000;
-  --muted: #8e8e93;
-  --line: #c6c6c8;
-  --accent: #007aff;
+  --surface-2: #f0eee7;
+  --surface-3: #e5e2d9;
+  --ink: #17181a;
+  --muted: #6b6a64;
+  --line: #dad7ce;
+  --accent: #2a52a8;
   --accent-ink: #ffffff;
-  --accent-wash: rgba(0, 122, 255, 0.15);
-  --ot: #ff9500;
-  --staffing: #7a5af0;
-  --preshow: #0d9488;
-  --archived: #a86a7a;
-  --good: #34c759;
-  --danger: #ff3b30;
-  --half-day: #af52de;
+  --accent-wash: rgba(42, 82, 168, 0.12);
+  --ot: #b87400;
+  --staffing: #6d5bd0;
+  --preshow: #0d7a70;
+  --archived: #97687a;
+  --good: #2e8757;
+  --danger: #c63b30;
+  --half-day: #7d5ba6;
+  --day-travel: #5b7a99;
+  --day-loadin: #c07e2a;
+  --day-rehearsal: #7d5ba6;
+  --day-show: #2e8757;
 }
 :root[data-theme="dark"] {
-  --bg: #000000;
-  --surface: #1c1c1e;
-  --surface-2: #2c2c2e;
-  --surface-3: #3a3a3c;
-  --ink: #ffffff;
-  --muted: #8e8e93;
-  --line: #38383a;
-  --accent: #0a84ff;
-  --accent-ink: #ffffff;
-  --accent-wash: rgba(10, 132, 255, 0.15);
-  --ot: #ff9f0a;
-  --staffing: #a78bfa;
-  --preshow: #2dd4bf;
-  --archived: #d99aa8;
-  --good: #30d158;
-  --danger: #ff453a;
-  --half-day: #bf5af2;
+  --bg: #121317;
+  --surface: #1b1d22;
+  --surface-2: #24262c;
+  --surface-3: #2e3138;
+  --ink: #e8eaee;
+  --muted: #8a939e;
+  --line: #2a2d34;
+  --accent: #4d8bff;
+  --accent-ink: #0b1220;
+  --accent-wash: rgba(77, 139, 255, 0.14);
+  --ot: #e09a2e;
+  --staffing: #8f7fe8;
+  --preshow: #38b2a5;
+  --archived: #c08ca0;
+  --good: #46b07c;
+  --danger: #e06058;
+  --half-day: #a886db;
+  --day-travel: #7396b8;
+  --day-loadin: #d69a45;
+  --day-rehearsal: #9c77c9;
+  --day-show: #4ca578;
 }
 
 /* Expose tokens as Tailwind utilities: bg-surface, text-ink, text-accent,
-   text-muted, border-line, rounded-card, etc. `inline` keeps them as
-   var() references so they still switch at runtime under data-theme. */
+   text-muted, border-line, rounded-card, bg-day-show, font-display, etc.
+   `inline` keeps them as var() references so they still switch at runtime
+   under data-theme. */
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -116,12 +153,17 @@
   --color-good: var(--good);
   --color-danger: var(--danger);
   --color-half-day: var(--half-day);
+  --color-day-travel: var(--day-travel);
+  --color-day-loadin: var(--day-loadin);
+  --color-day-rehearsal: var(--day-rehearsal);
+  --color-day-show: var(--day-show);
 
   --radius-card: var(--radius);
   --radius-field: var(--radius-sm);
   --radius-pill: var(--radius-pill);
 
   --font-sans: var(--font-sys);
+  --font-display: var(--font-disp);
 }
 
 html {

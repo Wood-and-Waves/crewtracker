@@ -1,6 +1,18 @@
 import type { Metadata, Viewport } from "next";
+import { Oswald } from "next/font/google";
 import "./globals.css";
 import ThemeScript from "@/components/ThemeScript";
+
+// Showbill's display face: an industrial condensed gothic for mastheads,
+// headings and small-caps labels. next/font downloads it at build time and
+// self-hosts — no runtime CDN request, no layout-shifting swap. Exposed as the
+// --font-oswald variable, which globals.css folds into --font-disp and Tailwind
+// exposes as the `font-display` utility. Body text stays the system stack.
+const oswald = Oswald({
+  subsets: ["latin"],
+  variable: "--font-oswald",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "CrewTracker",
@@ -24,9 +36,13 @@ export const metadata: Metadata = {
 };
 
 // Drives the browser/OS UI colour around the app. Split out from `metadata`
-// because Next requires themeColor in its own export.
+// because Next requires themeColor in its own export. Matches the Showbill
+// grounds: paper in light, near-black in dark.
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f4ef" },
+    { media: "(prefers-color-scheme: dark)", color: "#121317" },
+  ],
 };
 
 export default function RootLayout({
@@ -40,7 +56,7 @@ export default function RootLayout({
   // every page. Without it, every route logs a hydration mismatch — noise that
   // hides the real ones. Scoped to this one element.
   return (
-    <html lang="en" className="h-full" suppressHydrationWarning>
+    <html lang="en" className={`h-full ${oswald.variable}`} suppressHydrationWarning>
       <head>
         {/* Next only emits the standardised `mobile-web-app-capable`. iOS
             versions before manifest support (pre-16.4) honour nothing but

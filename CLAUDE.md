@@ -54,7 +54,35 @@ Dan (the developer) has no professional dev background — so explain the *why* 
   - **`vercel env pull` cannot read the values back.** Every variable on this project is flagged sensitive, so the pulled file contains the literal string `[SENSITIVE]` in place of all five. Don't diff those placeholders against real keys and conclude anything — that produces a confident, wrong answer. Read values from the dashboard, or test behaviour directly.
 - **Preview deployments point at the DEV database** — confirmed 2026-08-03 by opening a preview and seeing the seeded fake crew (Alex Reyes et al). Preview and Production hold entirely separate `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / anon key entries, so **production's service-role key is never in a preview build**, and a branch preview is safe to browse. It also means a preview exercises whatever migrations dev has, which is why the unmerged `scheduling` branch previews correctly while production still lacks 0011–0014. Branch preview URL: `https://crewtracker-git-<branch>-crew-tracker.vercel.app`, behind Vercel's own login.
 
-## Design system — "Signal" (redesigned 2026-07-14/15)
+## Design system — "Showbill" (replacing "Signal", build started 2026-08-04)
+
+**The app is mid-transition from Signal to Showbill**, a full identity redesign Dan chose
+through a mockup-reaction process (2026-08-03/04). Decisions, all locked with Dan and recorded in
+auto-memory (`showbill-identity-decisions.md`):
+
+- **Paper-first, ONE identity.** Light is the flagship: warm paper `#F5F4EF`, ink `#17181A`.
+  Dark is a faithful derivative (same document printed on black, ground `#121317`) reached via
+  the existing app-wide toggle — **never a separate personality per screen**; Dan explicitly
+  rejected the tracker defaulting dark while other pages are light.
+- **Brand: "Crew Blue"** — `--accent` is `#2A52A8` light / `#4D8BFF` dark, evolved from the
+  logo's original blues. The accent is reserved for ACTIONS; day-type tints carry data.
+- **Day-type tint tokens** (`--day-travel/loadin/rehearsal/show`, exposed as `bg-day-*`):
+  show-family days green, load-in amber, rehearsal violet, travel-family slate. Color is
+  information, never decoration.
+- **Squared geometry.** "Bubble-like, iOS forced to big screen" was the named disease. Radii
+  tokens are now 2–3px; buttons are uppercase/bold, ghost buttons wear a 2px ink border;
+  Showbill screens use ink mastheads and color-blocked table headers (see the Showbill synthesis
+  artifact d8ba5dd8 for the reference mock).
+- **Type:** Oswald (via next/font, exposed as the `font-display` utility) for mastheads,
+  headings and small-caps labels; system stack for body; mono tabular for aligned digits.
+- **Logo: Dan is redesigning it himself.** The old mark stays in place until his artwork lands;
+  recolor mapping when it does: `#6699FF→#4D8BFF`, `#3366CC→#2A52A8` (his "Option A"), then
+  regenerate `app/icon.png`, `favicon.ico`, `public/app-icon.png`.
+- Build order: tokens/primitives (done in B1) → screens hero-first (New Show, tracker) → the
+  rest. Everything below this paragraph about layout patterns (ruled sections, panels,
+  containers) still holds — Showbill changes the skin, not those bones.
+
+## The previous system — "Signal" (2026-07-14/15), kept for layout rules that still apply
 
 **2026-07-28 — cards are being retired.** Dan: *"I think I am about done with the 'cards' design. It is just too clunky with the cards of all different sizes."*
 
