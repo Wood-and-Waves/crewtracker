@@ -95,8 +95,12 @@ export default function AppShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
-      {/* Desktop / landscape-iPad: top nav for mouse navigation */}
-      <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-surface px-6 py-3 lg:flex">
+      {/* Desktop / landscape-iPad: top nav for mouse navigation.
+          bg-bg, not bg-surface: the chrome IS the paper. A white strip over the
+          warm ground was the brightest thing on every screen and read as a
+          foreign toolbar rather than the top of the page. Opaque so content
+          scrolling under the sticky bar stays hidden. */}
+      <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-bg px-6 py-3 lg:flex">
         <Link href="/dashboard" className="mr-5 flex items-center gap-2 text-[15px] font-extrabold">
           <span className="text-accent"><Logo /></span>
           CrewTracker
@@ -124,8 +128,11 @@ export default function AppShell({
 
       <main className="flex-1 pb-28 lg:pb-0">{children}</main>
 
-      {/* Portrait iPad / phone: fixed bottom tab-bar, app-style */}
-      <nav className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-0.5 rounded-[26px] border border-line bg-surface-2 p-1.5 shadow-xl lg:hidden">
+      {/* Portrait iPad / phone: fixed bottom tab-bar. A true overlay, so it
+          keeps a box — but the Showbill one: squared, 2px ink edge, hard
+          offset shadow. The 26px pill it used to be was the "iOS forced to
+          big screen" disease in miniature. */}
+      <nav className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-0.5 border-2 border-ink bg-surface p-1.5 shadow-edge lg:hidden">
         {tabItems.map(item => {
           const active = item.match(pathname)
           return (
@@ -133,8 +140,8 @@ export default function AppShell({
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-[20px] px-3 py-2 text-[11px] font-semibold transition-colors sm:px-5',
-                active ? 'text-accent' : 'text-muted',
+                'flex flex-col items-center gap-0.5 rounded-field px-3 py-2 text-[11px] font-semibold transition-colors sm:px-5',
+                active ? 'bg-accent-wash text-accent' : 'text-muted',
               )}
             >
               <Icon name={item.icon} />
