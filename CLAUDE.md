@@ -100,10 +100,13 @@ auto-memory (`showbill-identity-decisions.md`):
   RulesetFields), directory, team, schedule. All native `<select>`s on those screens are
   `components/ui/Select` (the Showbill picker: squared field closed, ink-bordered paper-slip
   panel open, optional swatches, keyboard + typeahead). Day-type tints were re-cut to
-  accent-weight chroma at Dan's request. Still wearing the old skin: **Edit Show and Edit
-  Crew** (the last card screens), the superadmin pages, and assorted confirm dialogs that
-  still use `rounded-card border-line shadow-xl` instead of the `border-2 border-ink
-  shadow-edge` overlay treatment.
+  accent-weight chroma at Dan's request. **The card era is over in the main app**
+  (2026-08-06, later that day): Edit Show, Edit Crew and the team member editor are ruled
+  sections; every dialog and menu wears the paper-slip overlay (`border-2 border-ink
+  shadow-edge`); the top nav is bg-bg (the chrome IS the paper — a white strip over the
+  ground was Dan's "super white" complaint) and the bottom tab bar is a squared, ink-edged
+  slab, not the old 26px pill. Still old-skin: the superadmin pages and the auth/invite
+  splash screens (deliberate centered sheets; convert only if Dan asks).
 
 ## The previous system — "Signal" (2026-07-14/15), kept for layout rules that still apply
 
