@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
+import { RULE_MAJOR } from '@/lib/panel'
+import { cn } from '@/lib/cn'
 import type { RulesetValues } from '@/lib/ruleset'
 
 // The payroll rule form, shared by Edit Show (one ruleset per show) and the
@@ -14,17 +16,27 @@ import type { RulesetValues } from '@/lib/ruleset'
 // Lunch Rule lives in applyRulesetChange (lib/ruleset.ts), which both callers
 // funnel their onChange through.
 
-const inputCls =
-  'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 const numberInputCls =
   'w-20 rounded-field bg-surface-2 border border-line px-2 py-1.5 text-sm text-ink text-right outline-none focus:border-accent'
 
+// Ruled rows: label left, control right, a hairline between rows — the Open
+// Paper form register (rule weight instead of enclosure).
 function FieldRow({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between mb-3 last:mb-0">
+    <div className="flex items-center justify-between border-b border-line py-2.5 last:border-b-0">
       <span className="text-sm text-ink flex items-center gap-1.5">{label}</span>
       {children}
     </div>
+  )
+}
+
+// A rule group's heading: condensed caps over a 3px ink rule, replacing the
+// Card each group used to sit in.
+function GroupHead({ children }: { children: React.ReactNode }) {
+  return (
+    <p className={cn(RULE_MAJOR, 'mb-1 pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink')}>
+      {children}
+    </p>
   )
 }
 
@@ -43,19 +55,21 @@ export default function RulesetFields({
 
   return (
     <>
-      <Card className="p-5 mb-4">
-        <p className="text-xs uppercase tracking-wide text-muted mb-3">Hours &amp; Pay Rates</p>
+      <section className="mb-6">
+        <GroupHead>Hours &amp; Pay Rates</GroupHead>
 
-        <div className="mb-3">
-          <label className="text-sm text-ink block mb-1">Travel Day Pay</label>
-          <select
+        <div className="border-b border-line py-2.5">
+          <label className="text-sm text-ink block mb-1.5">Travel Day Pay</label>
+          <Select
+            ariaLabel="Travel day pay"
+            size="sm"
             value={values.travel_rate}
-            onChange={e => onChange('travel_rate', e.target.value)}
-            className={`${inputCls} py-2`}
-          >
-            <option value="halfDay" className="bg-surface-2 text-ink">Half Day</option>
-            <option value="fullDay" className="bg-surface-2 text-ink">Full Day</option>
-          </select>
+            onChange={v => onChange('travel_rate', v)}
+            options={[
+              { value: 'halfDay', label: 'Half Day' },
+              { value: 'fullDay', label: 'Full Day' },
+            ]}
+          />
         </div>
 
         <FieldRow label="Overtime Starts After">
@@ -89,10 +103,10 @@ export default function RulesetFields({
         )}
 
         <p className="text-xs text-muted mt-3">Crew are paid their full day rate up to the Overtime threshold. Hours beyond that are paid at 1.5×. Double time (2×) is optional and kicks in after its own threshold.</p>
-      </Card>
+      </section>
 
-      <Card className="p-5 mb-4">
-        <p className="text-xs uppercase tracking-wide text-muted mb-3">Continuous Time</p>
+      <section className="mb-6">
+        <GroupHead>Continuous Time</GroupHead>
 
         <FieldRow label="Continuous Time">
           <Toggle
@@ -103,10 +117,10 @@ export default function RulesetFields({
         </FieldRow>
 
         <p className="text-xs text-muted mt-3">Crew are paid from start to wrap with no meal break deductions. OT and DT still apply after their thresholds. Turning this on switches off the Working Lunch Rule below.</p>
-      </Card>
+      </section>
 
-      <Card className="p-5 mb-4">
-        <p className="text-xs uppercase tracking-wide text-muted mb-3">Meal Rules</p>
+      <section className="mb-6">
+        <GroupHead>Meal Rules</GroupHead>
 
         <FieldRow label="Meal Penalties">
           <Toggle checked={values.meal_penalty_enabled} onChange={v => onChange('meal_penalty_enabled', v)} label="Meal Penalties" />
@@ -177,10 +191,10 @@ export default function RulesetFields({
         )}
 
         <p className="text-xs text-muted mt-3">Meal penalties are charged when crew go too long without a break. The working lunch rule controls whether short breaks count as paid work time.</p>
-      </Card>
+      </section>
 
-      <Card className="p-5 mb-4">
-        <p className="text-xs uppercase tracking-wide text-muted mb-3">Turnaround</p>
+      <section className="mb-6">
+        <GroupHead>Turnaround</GroupHead>
 
         <FieldRow
           label={<>Short Turnaround Penalty
@@ -205,11 +219,11 @@ export default function RulesetFields({
         )}
 
         <p className="text-xs text-muted mt-3">A short turnaround (forced call) occurs when a crew member doesn&apos;t get enough rest between shifts. Their entire next day is paid at double time.</p>
-      </Card>
+      </section>
 
       {showSTAInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowSTAInfo(false)}>
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-ink mb-3">Short Turnaround</h2>
             <p className="text-sm text-ink mb-4 whitespace-pre-line">
               Also called a &apos;Forced Call.&apos; If a crew member gets less than the minimum rest between shifts, their entire next day is paid at double time.
@@ -223,7 +237,7 @@ export default function RulesetFields({
 
       {showMealInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowMealInfo(false)}>
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-ink mb-3">Working Lunch Rule</h2>
             <p className="text-sm text-ink mb-4 whitespace-pre-line">
               When enabled, breaks shorter than the minimum length are treated as working lunches — no time is deducted from hours worked.

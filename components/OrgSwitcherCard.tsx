@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import Card from '@/components/ui/Card'
 import { cn } from '@/lib/cn'
 
 // Switching companies, on the Settings page.
@@ -65,9 +64,10 @@ export default function OrgSwitcherCard({
   }
 
   return (
-    <Card className="p-6">
-      <h2 className="text-lg font-bold text-ink">Company</h2>
-      <p className="mt-1 text-sm text-muted">
+    // Open Paper: no card — the section head above (SettingsLayout) already
+    // rules this off; the org buttons are controls and keep their boxes.
+    <div>
+      <p className="text-sm text-muted">
         You work for more than one company. Switching changes which shows, crew and
         permissions you see — everything else stays where it is.
       </p>
@@ -100,6 +100,6 @@ export default function OrgSwitcherCard({
         </p>
       )}
       {error && <p className="mt-3 text-xs text-danger">{error}</p>}
-    </Card>
+    </div>
   )
 }

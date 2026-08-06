@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { applyRulesetChange, pickRulesetValues, type RulesetValues } from '@/lib/ruleset'
 import RulesetFields from '@/components/RulesetFields'
-import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 

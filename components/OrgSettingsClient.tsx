@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
 
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
@@ -50,15 +51,16 @@ export default function OrgSettingsClient({
 
       <div className="mb-4">
         <label className="block text-sm text-muted mb-2">Timecard Rounding</label>
-        <select
-          value={rounding}
-          onChange={e => setRounding(parseInt(e.target.value))}
-          className={inputCls}
-        >
-          <option value={1} className="bg-surface-2 text-ink">Exact minute</option>
-          <option value={15} className="bg-surface-2 text-ink">Nearest 15 minutes</option>
-          <option value={30} className="bg-surface-2 text-ink">Nearest 30 minutes</option>
-        </select>
+        <Select
+          ariaLabel="Timecard rounding"
+          value={String(rounding)}
+          onChange={v => setRounding(parseInt(v))}
+          options={[
+            { value: '1', label: 'Exact minute' },
+            { value: '15', label: 'Nearest 15 minutes' },
+            { value: '30', label: 'Nearest 30 minutes' },
+          ]}
+        />
         <p className="text-xs text-muted mt-1">Rounds worked time up to the next interval before calculating pay.</p>
       </div>
 

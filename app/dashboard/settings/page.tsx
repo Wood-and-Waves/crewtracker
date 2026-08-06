@@ -3,6 +3,8 @@ import { getCurrentUser, getMyOrganizations } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import OrgSwitcherCard from '@/components/OrgSwitcherCard'
 import SettingsLayout, { type SettingsSection } from '@/components/SettingsLayout'
+import { BAND } from '@/lib/panel'
+import { cn } from '@/lib/cn'
 import PersonalSettingsClient from '@/components/PersonalSettingsClient'
 import OrgSettingsClient from '@/components/OrgSettingsClient'
 import AVRolesEditor from '@/components/AVRolesEditor'
@@ -88,17 +90,13 @@ export default async function SettingsPage() {
 
   return (
     <div className="p-6 md:p-10">
-      <h1 className="mb-6 text-3xl font-extrabold tracking-tight">Settings</h1>
-      {/* One bordered surface around the whole screen, the same as the table on
-          Shows, Directory and Team and the grid on Schedule. Settings was the
-          only nav destination whose content sat bare on the page background,
-          which read as an unfinished page rather than a deliberate one.
-          This is not the card retirement coming back: what is going is the
-          ragged grid of differently-sized cards, not a single container that
-          gives a screen its edge. */}
-      <div className="rounded-card border border-line bg-surface p-4 md:p-6">
-        <SettingsLayout sections={sections} />
+      {/* Open Paper masthead; the content sits directly on the paper below.
+          The screen-wide container this page once wore died with the panel
+          doctrine (see CLAUDE.md). */}
+      <div className={cn(BAND, '-mx-6 mb-6 px-6 py-4 md:-mx-10 md:px-10')}>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Settings</h1>
       </div>
+      <SettingsLayout sections={sections} />
     </div>
   )
 }

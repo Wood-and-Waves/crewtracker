@@ -53,11 +53,13 @@ export default function SettingsLayout({ sections }: { sections: SettingsSection
       </nav>
 
       <section className="min-w-0">
-        <h2 className="text-lg font-bold text-ink">{active.label}</h2>
-        {active.description && (
-          <p className="mb-4 mt-0.5 text-sm text-muted">{active.description}</p>
-        )}
-        <div className={active.description ? '' : 'mt-4'}>{active.node}</div>
+        <div className="border-b-[3px] border-ink pb-2">
+          <h2 className="font-display text-lg font-bold uppercase tracking-wide text-ink">{active.label}</h2>
+          {active.description && (
+            <p className="mt-0.5 text-sm text-muted">{active.description}</p>
+          )}
+        </div>
+        <div className="mt-4">{active.node}</div>
       </section>
     </div>
   )
