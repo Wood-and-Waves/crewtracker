@@ -1,22 +1,33 @@
-// The two class strings the ruled-section layout is built from.
+// The Open Paper layout vocabulary — and the grave of the panel.
 //
-// A screen's content sits inside a PANEL — one bordered surface. Where a screen
-// repeats a unit (a room on the tracker, a work day in By Day, a person in By
-// Crew) each unit gets its own panel; where it is one form or one table, there
-// is one panel. What stays outside on the page background is the page header,
-// any whole-screen summary, and the view controls.
+// Dan, reviewing the Showbill B1 preview (2026-08-06): "I got hung up in the
+// boldness of marquee and completely missed that it lives inside cards … No
+// boxes is sooooooo much better." The paper IS the page: content sits directly
+// on the ground, and boundaries come from these devices, never from enclosure:
 //
-// PANEL_X is the horizontal inset for a band inside a panel. It goes on the
-// BANDS, never on the panel itself: padding sits inside the border box, so a
-// band's `border-b` still spans the panel's full width and the hairlines run
-// edge to edge. Pad the panel instead and every rule stops 16px short on both
-// sides, which is the tell that someone has done it the other way round.
+//   BAND       — a solid masthead strip (a room on the tracker, a screen's
+//                title block). On light it is an ink slab; on dark it is a
+//                lifted strip under a bright rule. The 2px border-ink bottom
+//                edge is part of the device: invisible against the light slab,
+//                the lift itself on dark. A band is a STRONGER boundary than
+//                any 1px frame was.
+//   RULE_MAJOR — 3px ink, closing a section or a table.
+//   hairlines  — `border-line`, for rows WITHIN a unit. Weight means something;
+//                uniform hairlines everywhere was July's monotony bug.
+//   whitespace — units are separated by space + the next band.
 //
-// Plain module with no 'use client' on purpose. Both Server Components (the
-// reports page) and Client Components (New Show) import these. Exporting a
-// non-component value from a 'use client' file for a Server Component to import
-// silently serialises into a broken reference — that is the PUNCH_GRID_COLS
-// incident in CLAUDE.md, which collapsed the tracker's layout with no error.
+// What legitimately keeps a box: form fields (a printed form's fill-in boxes)
+// and true overlays (dropdown menus, dialogs). Nothing else.
+//
+// Plain module, no 'use client' — see the PUNCH_GRID_COLS incident in CLAUDE.md.
 
+export const BAND = 'bg-band text-band-ink border-b-2 border-ink'
+export const RULE_MAJOR = 'border-b-[3px] border-ink'
+
+/**
+ * DEPRECATED — the enclosure era. Still imported by screens that have not had
+ * their Open Paper pass yet (reports, settings, tracker panels). Do not add new
+ * uses; each remaining one dies in its screen's pass.
+ */
 export const PANEL = 'rounded-card border border-line bg-surface'
 export const PANEL_X = 'px-4'

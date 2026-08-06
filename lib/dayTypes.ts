@@ -63,6 +63,37 @@ export function isDayType(value: unknown): value is DayType {
 }
 
 /**
+ * Which tint family a day type belongs to, matching the --day-* tokens in
+ * globals.css: show-family days are green (the show happens), pure prep is
+ * amber, rehearsal violet, travel-family slate. A Record over DayType so
+ * adding a ninth day type without classifying it is a compile error, not a
+ * quietly untinted column.
+ */
+export type DayTint = 'travel' | 'loadin' | 'rehearsal' | 'show'
+
+export const DAY_TYPE_TINT: Record<DayType, DayTint> = {
+  travel_load_in: 'travel',
+  load_in: 'loadin',
+  load_in_show: 'show',
+  rehearsal: 'rehearsal',
+  show: 'show',
+  show_load_out: 'show',
+  load_out_travel: 'travel',
+  travel: 'travel',
+}
+
+/** Tailwind background class for a stored value, or null when unset/unknown. */
+export function dayTypeBgClass(value: string | null | undefined): string | null {
+  if (!isDayType(value)) return null
+  return {
+    travel: 'bg-day-travel',
+    loadin: 'bg-day-loadin',
+    rehearsal: 'bg-day-rehearsal',
+    show: 'bg-day-show',
+  }[DAY_TYPE_TINT[value]]
+}
+
+/**
  * The label to show, or null when there is nothing to say.
  *
  * Null covers both "nobody has set one yet" and "the database holds a value this

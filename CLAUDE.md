@@ -78,9 +78,26 @@ auto-memory (`showbill-identity-decisions.md`):
 - **Logo: Dan is redesigning it himself.** The old mark stays in place until his artwork lands;
   recolor mapping when it does: `#6699FF→#4D8BFF`, `#3366CC→#2A52A8` (his "Option A"), then
   regenerate `app/icon.png`, `favicon.ico`, `public/app-icon.png`.
-- Build order: tokens/primitives (done in B1) → screens hero-first (New Show, tracker) → the
-  rest. Everything below this paragraph about layout patterns (ruled sections, panels,
-  containers) still holds — Showbill changes the skin, not those bones.
+- **Open Paper (2026-08-06, approved from a mockup before any code touched it).** Reviewing
+  the B1 preview, Dan: *"I got hung up in the boldness of marquee and completely missed that
+  it lives inside cards … No boxes is sooooooo much better."* Content sits directly on the
+  paper ground; containers and panels are gone. Boundaries come from four devices, defined in
+  `lib/panel.ts` and `components/ui/NumberedHead.tsx`:
+  - **BAND** — a solid masthead strip (`bg-band text-band-ink border-b-2 border-ink`): a
+    screen's title block, a room on the tracker. Ink slab on light, lifted strip on dark
+    (`--band`/`--band-ink` tokens).
+  - **RULE_MAJOR** — 3px ink rule closing a section or a table. `NumberedHead` renders it
+    with a blue Oswald numeral where a screen's sections are a genuine sequence (New Show 1–4).
+  - **Hairlines** (`border-line`) for rows *within* a unit. Weight must mean something —
+    uniform hairlines everywhere was July's monotony bug.
+  - **Whitespace** — units are separated by space plus the next band, never by an edge.
+  What legitimately keeps a box: form fields (a printed form's fill-in boxes) and true
+  overlays — dropdowns, dialogs, and in-place editors. Nothing else. `PANEL` in lib/panel.ts
+  is deprecated: screens still importing it are *awaiting their Open Paper pass*, not
+  examples to follow, and each import dies in its screen's conversion.
+- Build order: tokens/primitives (B1, done) → New Show (B2, done — the Open Paper showcase)
+  → tracker (B3) → shows list, reports, settings, directory, team, schedule. Each pass lands
+  alone on the `scheduling` preview and waits for Dan's reaction before the next starts.
 
 ## The previous system — "Signal" (2026-07-14/15), kept for layout rules that still apply
 
@@ -88,15 +105,9 @@ auto-memory (`showbill-identity-decisions.md`):
 
 Read that literally: what is being killed is **several boxes side by side that are never the same height** — a grid of cards, each with its own edge, raggedly bottomed against its neighbour. It is the *plural* that was clunky, not the border. The replacement inside a screen is **ruled sections**: small-caps headings, hairline rules, content at full width, rows label-left / control-right with a `border-b border-line` between them.
 
-**One container per screen stays — it is the house pattern, not a leftover.** Every top-nav destination (Shows, Schedule, Directory, Team, Settings) puts its content inside a single `rounded-card border border-line bg-surface`, and that container is what gives a page its edge. **Do not strip these off in the name of the card retirement.** An earlier version of this section said "nothing in a box" and that the wrapper-around-a-whole-screen use was the thing going — that was wrong, and it described no screen that ever shipped. Settings was the one page missing its container and read as unfinished beside the other four; it was brought into line 2026-07-29, along with its `<h1>`, which was `text-2xl font-bold` where the others are `text-3xl font-extrabold tracking-tight`.
+**Container doctrine — SUPERSEDED 2026-08-06 by Open Paper (see the Showbill section above).** This paragraph is on its third revision, each at Dan's explicit direction, and the history is kept so it doesn't read as churn: **July** killed the *grid of ragged cards*; **2026-07-29** blessed one container per screen plus per-unit panels (each tracker room boxed, each Reports day/person boxed — because a room boundary is a live error surface); **2026-08-06** removed enclosure entirely — the paper is the page, and the room boundary is now a masthead BAND, a *stronger* edge than any 1px frame was. Do not "bring a screen into line" with containers or panels: a screen still wearing them is awaiting its Open Paper pass, not the standard. Two practical notes that survive the transition: the horizontal inset goes on the rows/bands **inside** a unit, never on a wrapper, so rules run edge to edge; and the tracker room block must never get `overflow-hidden`, because `RoomActionsMenu` opens a dropdown out of it and clipping would cut the menu off. Summaries and view controls (the tracker's stat strip, Reports' Master Summary, tabs) still sit above the content they govern.
 
-**Where a screen repeats a unit, each unit is its own panel.** A screen with one table boxes the table; a screen with N tables boxes each one, because the alternative — a single container swallowing all of them — weakens exactly the boundary that matters. The tracker does this per **room** (a room has its own name, ⋮ menu and batch bar, and punching someone into the wrong room is a live error), and Reports does it per **work day** in By Day and per **person** in By Crew. Both were brought into line 2026-07-29.
-
-This does not reintroduce what Dan disliked, because these units stack one per row at full width — nothing sits beside anything, so nothing can be ragged. Two practical notes from doing it: the horizontal inset goes on the **bands inside** the panel, never on the panel itself, so each band's `border-b` still runs edge to edge instead of stopping short on both sides; and the room panel deliberately has **no `overflow-hidden`**, because `RoomActionsMenu` opens a dropdown out of it and clipping would cut the menu off.
-
-What stays outside on the page background is the page header, any whole-screen summary (the tracker's stat strip, Reports' Master Summary) and the view controls (tabs, the All Rooms batch bar) — summaries and controls sit above the content; the content is what gets edges.
-
-Converted so far: the **shows list** (a real table), **New Show** (a full page), the **tracker** (header strip instead of a left rail, one line per crew member), **Settings** (a left nav, one section at a time), and **Reports** (Master Summary as an inline stat strip, By Day and By Crew as one shared ruled table). Still on cards: the admin screens (Team, Edit Crew, Edit Show). `components/ui/Card` still exists and is still correct for a genuinely raised surface *inside* a section — what it must not become again is a grid of them.
+Converted in the Signal era (historical record): the **shows list** (a real table), **New Show** (a full page), the **tracker** (header strip instead of a left rail, one line per crew member), **Settings** (a left nav, one section at a time), and **Reports** (Master Summary as an inline stat strip, By Day and By Crew as one shared ruled table). Still on cards: the admin screens (Team, Edit Crew, Edit Show). `components/ui/Card` still exists but under Open Paper it is legacy — don't reach for it in new work; boxes belong to form fields and true overlays only.
 
 **No fixed-position dialogs for editing.** An editor that covers the thing you are editing is the pattern being removed. Cell editors, pickers and the payroll-preset editor all open **in place, below** what they belong to. `fixed inset-0` overlays remain fine for genuine confirmations.
 

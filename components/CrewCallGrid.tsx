@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Button from '@/components/ui/Button'
-import { dayTypeLabel } from '@/lib/dayTypes'
+import { dayTypeLabel, dayTypeBgClass } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
 import PositionsBulkAdd from '@/components/PositionsBulkAdd'
 import RolePicker from '@/components/RolePicker'
+import NumberedHead from '@/components/ui/NumberedHead'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount, peakPerDay,
   addLinesTo,
@@ -63,6 +64,7 @@ export default function CrewCallGrid({
   onRoomsChange,
   dayTypes,
   invalidRoomKeys,
+  sectionNumber,
   readOnly = false,
 }: {
   rooms: GridRoom[]
@@ -76,6 +78,8 @@ export default function CrewCallGrid({
   dayTypes?: Record<string, string>
   /** Rooms whose name would cost them their positions at create time. */
   invalidRoomKeys?: string[]
+  /** Open Paper section number for the grid's NumberedHead ("4" on New Show). */
+  sectionNumber?: string
   readOnly?: boolean
 }) {
   const [selected, setSelected] = useState<{ roomKey: string; day: number } | null>(null)
@@ -117,26 +121,25 @@ export default function CrewCallGrid({
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs uppercase tracking-wide text-muted">Rooms &amp; positions</span>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted">
-            {perDay > 0 ? `${perDay} crew on the busiest day` : 'No positions yet'}
-          </span>
-          {/* The labelled way in. Until this existed the only way to add a
-              position was to discover that grid cells are clickable. */}
-          {!readOnly && (
-            <Button
-              type="button"
-              size="sm"
-              variant={perDay > 0 ? 'ghost' : 'primary'}
-              onClick={() => { setBulkOpen(v => !v); setSelected(null) }}
-            >
-              {bulkOpen ? 'Close' : '+ Add positions'}
-            </Button>
-          )}
-        </div>
-      </div>
+      <NumberedHead
+        n={sectionNumber}
+        title="Rooms & Positions"
+        note={perDay > 0 ? `${perDay} crew on the busiest day` : 'No positions yet'}
+        className="mb-4"
+      >
+        {/* The labelled way in. Until this existed the only way to add a
+            position was to discover that grid cells are clickable. */}
+        {!readOnly && (
+          <Button
+            type="button"
+            size="sm"
+            variant={perDay > 0 ? 'ghost' : 'primary'}
+            onClick={() => { setBulkOpen(v => !v); setSelected(null) }}
+          >
+            {bulkOpen ? 'Close' : '+ Add positions'}
+          </Button>
+        )}
+      </NumberedHead>
 
       {/* Opens above the grid, so the grid slides down and stays visible as the
           live preview of what this is about to do. */}
@@ -152,37 +155,42 @@ export default function CrewCallGrid({
         />
       )}
 
-      {/* Desktop grid */}
-      <div className="overflow-x-auto rounded-card border border-line bg-surface">
+      {/* Desktop grid — open paper: no wrapper box. The color-blocked header
+          row anchors the table; a 3px ink rule closes it (on the last room
+          row); hairlines carry the rows between. */}
+      <div className="overflow-x-auto">
         <div style={{ minWidth }}>
-          <div className="grid border-b border-line bg-surface-2" style={{ gridTemplateColumns }}>
+          <div className="grid" style={{ gridTemplateColumns }}>
             {/* Sticky room column, copied from ScheduleGrid which sits on
                 identical scaffolding. Without it, scrolling right on a long run
-                loses which room you are looking at — the single worst thing
-                about this grid on a phone. The opaque background is NOT
-                optional: without it the day cells scroll visibly underneath. */}
-            <div className="sticky left-0 z-20 border-r border-line bg-surface-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                loses which room you are looking at. The opaque background is
+                NOT optional: without it the day cells scroll visibly
+                underneath — and here it is the band itself. */}
+            <div className="sticky left-0 z-20 bg-band px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-band-ink">
               Room
             </div>
             {dates.map((date, i) => {
               const l = dayLabel(date)
+              const tint = dayTypeBgClass(dayTypes?.[date])
               return (
                 <div
                   key={date}
                   className={cn(
-                    'border-l border-line px-1 py-1.5 text-center',
-                    l.isWeekend && 'bg-bg',
+                    'px-1 py-1.5 text-center',
+                    // The column wears its day's color — the same tint chosen in
+                    // Day Types above. Untyped days stay quiet; weekends get a
+                    // wash only when untyped, since the tint outranks it.
+                    tint ?? (l.isWeekend ? 'bg-surface-2/60' : 'bg-surface-2'),
+                    tint && 'text-white',
                   )}
                 >
-                  <div className="text-[9px] uppercase text-muted">{l.weekday}</div>
-                  <div className="text-[13px] font-bold text-ink">{l.day}</div>
+                  <div className={cn('text-[9px] uppercase', tint ? 'text-white/80' : 'text-muted')}>{l.weekday}</div>
+                  <div className={cn('text-[13px] font-bold', tint ? 'text-white' : 'text-ink')}>{l.day}</div>
                   {/* The real day type, when one has been set. This replaced
-                      hard-coded "load in" on the first column and "load out" on
-                      the last, which were positional guesses and simply wrong on
-                      any run that opens with travel or ends with two load-out
-                      days. Blank when unset — better than a confident lie. */}
+                      hard-coded "load in"/"load out" positional guesses. Blank
+                      when unset — better than a confident lie. */}
                   {dayTypeLabel(dayTypes?.[date]) && (
-                    <div className="truncate text-[9px] leading-tight text-accent">
+                    <div className={cn('truncate font-display text-[9px] uppercase leading-tight', tint ? 'text-white' : 'text-accent')}>
                       {dayTypeLabel(dayTypes?.[date])}
                     </div>
                   )}
@@ -194,10 +202,10 @@ export default function CrewCallGrid({
           {rooms.map(room => (
             <div
               key={room.key}
-              className="grid border-b border-line last:border-b-0"
+              className="grid border-b border-line last:border-b-[3px] last:border-ink"
               style={{ gridTemplateColumns }}
             >
-              <div className="sticky left-0 z-10 flex items-center gap-1 border-r border-line bg-surface px-2 py-2">
+              <div className="sticky left-0 z-10 flex items-center gap-1 border-r border-line bg-bg px-2 py-2">
                 <input
                   value={room.name}
                   onChange={e =>
@@ -237,7 +245,7 @@ export default function CrewCallGrid({
                     onClick={() => setSelected({ roomKey: room.key, day })}
                     className={cn(
                       'flex min-h-[54px] flex-col items-center justify-center gap-0.5 border-l border-line px-1 py-1.5 transition-colors',
-                      l.isWeekend && 'bg-bg',
+                      l.isWeekend && 'bg-surface-2/40',
                       isSelected ? 'bg-accent-wash ring-1 ring-inset ring-accent' : 'hover:bg-surface-2',
                     )}
                   >

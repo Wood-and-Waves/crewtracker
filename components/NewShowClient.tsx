@@ -8,9 +8,9 @@ import { localDateStr } from '@/lib/datetime'
 import { pickRulesetValues, type RulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES, DEFAULT_SHOW_TIMEZONE } from '@/lib/timezones'
 import Button from '@/components/ui/Button'
-import SectionHead from '@/components/ui/SectionHead'
-import { PANEL, PANEL_X } from '@/lib/panel'
-import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, type DayType } from '@/lib/dayTypes'
+import NumberedHead from '@/components/ui/NumberedHead'
+import { BAND } from '@/lib/panel'
+import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, dayTypeBgClass, type DayType } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
 import { plannedPositions, roomDayIndices, validateRooms, type CallModel } from '@/lib/crewCallGrid'
@@ -284,7 +284,14 @@ export default function NewShowClient({
   return (
     <div className="p-6 pb-44 md:p-10 lg:pb-32">
       <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
-      <h1 className="mb-6 mt-2 text-3xl font-extrabold tracking-tight">New show</h1>
+
+      {/* Open Paper masthead — a full-bleed ink band, not a heading floating on
+          the page. Negative margins push it through the page padding so the
+          slab runs edge to edge; the band token pair flips it to a lifted
+          strip on the dark theme. */}
+      <div className={cn(BAND, '-mx-6 md:-mx-10 mb-8 mt-3 px-6 py-5 md:px-10')}>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">New Show</h1>
+      </div>
 
       {error && (
         <div className="mb-4 rounded-field border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
@@ -324,17 +331,12 @@ export default function NewShowClient({
         </div>
       )}
 
-      {/* One panel, two ruled bands — not two cards side by side.
-          Show details and Payroll rules are two sections of ONE form, not
-          repeating units, so they do not each get an edge. They were also wildly
-          different heights (six fields against one select), which is exactly the
-          ragged-grid look being removed everywhere else.
-          The inset is on the bands via PANEL_X, never on the panel, so each
-          band's border-b runs the full width. */}
-      <div className={cn(PANEL, 'mb-6')}>
-        <div className={PANEL_X}>
-          <SectionHead title="Show details" className="pt-4" />
-          <div className="py-4">
+      {/* Open Paper: numbered sections directly on the ground. The numbering is
+          honest — creating a show IS a sequence — and the 3px rules carry the
+          structure that enclosure used to fake. Nothing here has a wrapper. */}
+      <section className="mb-9">
+        <NumberedHead n="1" title="Show Details" className="mb-4" />
+        <div>
             <input placeholder="Show name" value={name} onChange={e => setName(e.target.value)} className={inputCls} />
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
               <input placeholder="Venue (optional)" value={venue} onChange={e => setVenue(e.target.value)} className={inputCls} />
@@ -349,97 +351,89 @@ export default function NewShowClient({
                 ))}
               </select>
             </div>
-          </div>
         </div>
+      </section>
 
-        <div className={PANEL_X}>
-          <SectionHead title="Payroll rules" />
-          <div className="py-4">
-            <select
-              key={presets.map(p => p.id).join(',')}
-              value={presetId}
-              onChange={e => setPresetId(e.target.value)}
-              className={inputCls}
-            >
-              <option value="" className="bg-surface-2 text-ink">Custom — start from scratch</option>
-              {presets.map(p => (
-                <option key={p.id} value={p.id} className="bg-surface-2 text-ink">
-                  {p.name}{p.is_default ? ' (default)' : ''}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs text-muted">
-              {chosen
-                ? summarize(chosen)
-                : 'OT after 10h, no double time, no meal penalties, no short turnaround. Set them per-show in Edit Show.'}
-            </p>
-          </div>
-        </div>
+      <section className="mb-9">
+        <NumberedHead n="2" title="Payroll Rules" className="mb-4" />
+        <select
+          key={presets.map(p => p.id).join(',')}
+          value={presetId}
+          onChange={e => setPresetId(e.target.value)}
+          className={inputCls}
+        >
+          <option value="" className="bg-surface-2 text-ink">Custom — start from scratch</option>
+          {presets.map(p => (
+            <option key={p.id} value={p.id} className="bg-surface-2 text-ink">
+              {p.name}{p.is_default ? ' (default)' : ''}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 text-xs text-muted">
+          {chosen
+            ? summarize(chosen)
+            : 'OT after 10h, no double time, no meal penalties, no short turnaround. Set them per-show in Edit Show.'}
+        </p>
+      </section>
 
-        {/* One ruled row per day rather than a column in the positions grid:
-            this scales to a 20-day run by simply being taller, where the grid's
-            58px day columns have no room for a label. Every day starts unset —
-            a guessed day type would show on the tracker and in a crew member's
-            booking request as though somebody had decided it. */}
-        {dates.length > 0 && (
-          <div className={PANEL_X}>
-            <SectionHead
-              title="Day types"
-              note={`${Object.keys(dayTypes).length} of ${dates.length} set · optional`}
-            />
-            {/* Columns on a wide screen, not one long list.
-                This screen is used mainly on a laptop, sometimes an iPad, and
-                a 20-day run stacked one row per day pushed the positions grid
-                to nearly two screens down — you scrolled past twenty dropdowns
-                to reach the thing you came to build. Three columns turns twenty
-                days into seven rows. Each row keeps its own rule, so the ruled-
-                row pattern survives the split. */}
-            <div className="grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
+      {/* Day types as tiles: the tint bar on each is the day's color the moment
+          it's chosen — the same color that will head its grid column below and
+          follow the day onto the tracker. Columns keep a 20-day run from
+          burying the positions grid (this screen is a laptop screen). */}
+      {dates.length > 0 && (
+        <section className="mb-9">
+          <NumberedHead
+            n="3"
+            title="Day Types"
+            note={`${Object.keys(dayTypes).length} of ${dates.length} set · optional`}
+            className="mb-4"
+          />
+          <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
             {dates.map(date => (
-              <div key={date} className="flex items-center justify-between gap-3 border-b border-line py-2.5">
-                <span className="shrink-0 whitespace-nowrap text-sm text-ink">
-                  {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-                    weekday: 'short', month: 'short', day: 'numeric',
-                  })}
-                </span>
-                <select
-                  aria-label={`Day type for ${date}`}
-                  value={dayTypes[date] ?? ''}
-                  onChange={e => setDayTypes(prev => {
-                    const next = { ...prev }
-                    if (isDayType(e.target.value)) next[date] = e.target.value
-                    else delete next[date]
-                    return next
-                  })}
-                  // Not inputCls: that carries w-full, which wins over any
-                  // w-auto here (Tailwind precedence is stylesheet order, not
-                  // the order classes appear in the attribute) and stretches the
-                  // select across the whole row.
-                  className="w-[200px] shrink-0 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
-                >
-                  <option value="" className="bg-surface-2 text-ink">—</option>
-                  {DAY_TYPES.map(t => (
-                    <option key={t} value={t} className="bg-surface-2 text-ink">
-                      {DAY_TYPE_LABELS[t]}
-                    </option>
-                  ))}
-                </select>
+              <div key={date}>
+                <div className={cn('h-1.5 w-full', dayTypeBgClass(dayTypes[date]) ?? 'bg-line')} />
+                <div className="mt-1.5 flex items-center justify-between gap-3">
+                  <span className="shrink-0 whitespace-nowrap font-mono text-xs font-semibold uppercase text-muted">
+                    {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+                      weekday: 'short', month: 'short', day: 'numeric',
+                    })}
+                  </span>
+                  <select
+                    aria-label={`Day type for ${date}`}
+                    value={dayTypes[date] ?? ''}
+                    onChange={e => setDayTypes(prev => {
+                      const next = { ...prev }
+                      if (isDayType(e.target.value)) next[date] = e.target.value
+                      else delete next[date]
+                      return next
+                    })}
+                    // Not inputCls: that carries w-full, which wins over any
+                    // w-auto here (Tailwind precedence is stylesheet order, not
+                    // the order classes appear in the attribute).
+                    className="w-[190px] shrink-0 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
+                  >
+                    <option value="" className="bg-surface-2 text-ink">—</option>
+                    {DAY_TYPES.map(t => (
+                      <option key={t} value={t} className="bg-surface-2 text-ink">
+                        {DAY_TYPE_LABELS[t]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             ))}
-            </div>
           </div>
-        )}
-      </div>
+        </section>
+      )}
 
       {dates.length === 0 ? (
-        // The empty state is the positions panel, not a stray dashed box on the
-        // page background — same edge as the grid it stands in for.
-        <div className={cn(PANEL, PANEL_X)}>
-          <SectionHead title="Rooms &amp; positions" className="pt-4" />
-          <p className="py-8 text-center text-sm text-muted">
+        <section>
+          {/* Day Types hides until dates exist, so this is honestly section 3 here. */}
+          <NumberedHead n="3" title="Rooms & Positions" className="mb-4" />
+          <p className="py-6 text-sm text-muted">
             Set the start and end dates to add positions.
           </p>
-        </div>
+        </section>
       ) : (
         <CrewCallGrid
           rooms={rooms}
@@ -450,6 +444,7 @@ export default function NewShowClient({
           onRoomsChange={setRooms}
           dayTypes={dayTypes}
           invalidRoomKeys={badRoomKeys}
+          sectionNumber="4"
         />
       )}
 

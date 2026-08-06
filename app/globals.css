@@ -38,6 +38,14 @@
   --danger: #c63b30;
   --half-day: #7d5ba6;
 
+  /* Masthead band — the Open Paper boundary device (Dan approved 2026-08-06:
+     "No boxes is sooooooo much better"). Light: a solid ink slab. Dark: a
+     lifted strip under a bright rule — same skeleton, printed on black. The
+     band always carries a 2px border-ink bottom rule; on light it vanishes
+     into the slab, on dark it is the lift. */
+  --band: #17181a;
+  --band-ink: #f5f4ef;
+
   /* Day-type tints — color as information, muted register.
      Mapping (see lib/dayTypes.ts): show-family days are green
      (show, load_in_show, show_load_out), pure prep is amber
@@ -76,6 +84,8 @@
     --good: #46b07c;
     --danger: #e06058;
     --half-day: #a886db;
+    --band: #24262c;
+    --band-ink: #e8eaee;
     --day-travel: #7396b8;
     --day-loadin: #d69a45;
     --day-rehearsal: #9c77c9;
@@ -102,6 +112,8 @@
   --good: #2e8757;
   --danger: #c63b30;
   --half-day: #7d5ba6;
+  --band: #17181a;
+  --band-ink: #f5f4ef;
   --day-travel: #5b7a99;
   --day-loadin: #c07e2a;
   --day-rehearsal: #7d5ba6;
@@ -125,6 +137,8 @@
   --good: #46b07c;
   --danger: #e06058;
   --half-day: #a886db;
+  --band: #24262c;
+  --band-ink: #e8eaee;
   --day-travel: #7396b8;
   --day-loadin: #d69a45;
   --day-rehearsal: #9c77c9;
@@ -153,6 +167,8 @@
   --color-good: var(--good);
   --color-danger: var(--danger);
   --color-half-day: var(--half-day);
+  --color-band: var(--band);
+  --color-band-ink: var(--band-ink);
   --color-day-travel: var(--day-travel);
   --color-day-loadin: var(--day-loadin);
   --color-day-rehearsal: var(--day-rehearsal);
