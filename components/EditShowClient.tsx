@@ -8,8 +8,8 @@ import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES } from '@/lib/timezones'
 import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
-import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
 
 const inputCls =
@@ -201,22 +201,22 @@ export default function EditShowClient({
           {saving ? 'Saving...' : 'Save'}
         </Button>
       </div>
-      <h1 className="text-2xl font-extrabold tracking-tight mt-2 mb-6">Edit Show Details</h1>
+      <h1 className="mt-2 mb-6 font-display text-2xl font-bold uppercase tracking-wide">Edit Show Details</h1>
 
       {saveError && (
-        <div className="rounded-field bg-danger/10 border border-danger/30 px-4 py-3 text-sm text-danger mb-4">
+        <div className="mb-4 border-l-[3px] border-danger py-1 pl-3 text-sm text-danger">
           Save failed: {saveError}
         </div>
       )}
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Show Name (Required)</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Show Name (Required)</p>
           <input value={name} onChange={e => setName(e.target.value)} className={inputCls} />
-        </Card>
+        </section>
 
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Show Dates</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Show Dates</p>
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted">
               {new Date(show.start_date + 'T00:00:00').toLocaleDateString()} – {new Date(show.end_date + 'T00:00:00').toLocaleDateString()}
@@ -227,25 +227,22 @@ export default function EditShowClient({
             />
           </div>
           <p className="text-xs text-muted mt-2">Adding a day happens immediately — it isn&apos;t part of the Save button above.</p>
-        </Card>
+        </section>
 
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-1">Show Timezone</p>
-          <select
-            key={timezone}
+        <section className="mb-6">
+          <p className="mb-1 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Show Timezone</p>
+          <Select
+            ariaLabel="Show timezone"
+            className="mt-2"
             value={timezone}
-            onChange={e => setTimezone(e.target.value)}
-            className={`${inputCls} mt-2`}
-          >
-            {SHOW_TIMEZONES.map(tz => (
-              <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
-            ))}
-          </select>
+            onChange={setTimezone}
+            options={SHOW_TIMEZONES}
+          />
           <p className="text-xs text-muted mt-2">Punch times, the day picker, and reports all use this timezone — useful when you&apos;re prepping a show that&apos;s in a different timezone than you are.</p>
-        </Card>
+        </section>
 
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Admin &amp; Billing (Optional)</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Admin &amp; Billing (Optional)</p>
           <input
             placeholder="Client / Production Company"
             value={clientCompany}
@@ -258,10 +255,10 @@ export default function EditShowClient({
             onChange={e => setJobNumber(e.target.value)}
             className={inputCls}
           />
-        </Card>
+        </section>
 
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Location &amp; Venue (Optional)</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Location &amp; Venue (Optional)</p>
           <input
             placeholder="Venue Name (e.g. McCormick Place)"
             value={venue}
@@ -274,10 +271,10 @@ export default function EditShowClient({
             onChange={e => setCityState(e.target.value)}
             className={inputCls}
           />
-        </Card>
+        </section>
 
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">General Notes</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">General Notes</p>
           <textarea
             placeholder="Logistics, parking info, etc..."
             value={showNotes}
@@ -285,7 +282,7 @@ export default function EditShowClient({
             rows={4}
             className={inputCls}
           />
-        </Card>
+        </section>
       </div>
 
       {/* Whether this show tracks money is a pay decision, so it needs
@@ -293,13 +290,13 @@ export default function EditShowClient({
           control you can't use is noise, and the setting's existence isn't
           something a PM needs to know about. */}
       {canEditRates && (
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Rates &amp; Payroll Calculation</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Rates &amp; Payroll Calculation</p>
           <FieldRow label="Show Dollar Amounts">
             <Toggle checked={showFinancials} onChange={setShowFinancials} label="Show Dollar Amounts" />
           </FieldRow>
           <p className="text-xs text-muted mt-2">Turn this on to enter crew day rates and show dollar totals in reports.</p>
-        </Card>
+        </section>
       )}
 
       {/* Two separate gates: the SHOW must track money at all, AND this user
@@ -308,8 +305,8 @@ export default function EditShowClient({
           could click one to change it — including a PM with
           can_view_pay_rates and can_edit_pay_rates both false. */}
       {showFinancials && canViewRates && (
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Crew &amp; Rates</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Crew &amp; Rates</p>
           {crewRateEntries.length === 0 ? (
             <p className="text-sm text-muted">No crew assigned yet.</p>
           ) : (
@@ -343,7 +340,7 @@ export default function EditShowClient({
           {canEditRates && (
             <p className="text-xs text-muted mt-3">Tap a rate to update it — this saves immediately, separate from the Save button above. Changes apply to all of that person&apos;s timecards on this show for that role.</p>
           )}
-        </Card>
+        </section>
       )}
 
       {rs && (
@@ -359,8 +356,8 @@ export default function EditShowClient({
           )}
 
           {canManageRulesets && organizationId && (
-            <Card className="p-5 mb-4">
-              <p className="text-xs uppercase tracking-wide text-muted mb-3">Reuse These Rules</p>
+            <section className="mb-6">
+              <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Reuse These Rules</p>
               {presetSaved ? (
                 <p className="text-sm text-good">Saved as &ldquo;{presetSaved}&rdquo; — it&apos;s now available when creating a show.</p>
               ) : (
@@ -371,14 +368,14 @@ export default function EditShowClient({
                   <p className="text-xs text-muted mt-2">Captures the rules above as a named template you can pick when creating a future show. Saving a preset never changes this or any other existing show.</p>
                 </>
               )}
-            </Card>
+            </section>
           )}
         </>
       )}
 
       {presetOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-1">Save as Preset</h2>
             <p className="text-sm text-muted mb-4">Name this rule set — e.g. a client or contract it applies to.</p>
             <input
@@ -404,7 +401,7 @@ export default function EditShowClient({
 
       {rateEntry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-1">Edit Day Rate</h2>
             <p className="text-sm text-muted mb-4">New day rate for {rateEntry.name} ({rateEntry.role})</p>
             <input
@@ -426,7 +423,7 @@ export default function EditShowClient({
       {/* Floating save affordance for this long form. Sits clear of the
           app's fixed bottom tab-bar (<1024px) instead of overlapping it. */}
       <div className="fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-40">
-        <Button onClick={handleSave} disabled={saving || !name.trim()} className="rounded-pill px-8 py-3 shadow-xl">
+        <Button onClick={handleSave} disabled={saving || !name.trim()} className="px-8 py-3 shadow-edge">
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
