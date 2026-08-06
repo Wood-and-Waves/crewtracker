@@ -50,15 +50,16 @@
      paper slip, crisp edge, no blur — glassy soft shadows are the disease. */
   --edge-shadow: rgba(23, 24, 26, 0.18);
 
-  /* Day-type tints — color as information, muted register.
-     Mapping (see lib/dayTypes.ts): show-family days are green
-     (show, load_in_show, show_load_out), pure prep is amber
-     (load_in), rehearsal violet, travel-family slate
-     (travel, travel_load_in, load_out_travel). */
-  --day-travel: #5b7a99;
-  --day-loadin: #c07e2a;
-  --day-rehearsal: #7d5ba6;
-  --day-show: #2e8757;
+  /* Day-type tints — color as information. Same weight class as the accent:
+     Dan's 2026-08-06 note was that the first, dustier register read washed-out
+     beside the Crew Blue buttons. Hues and meaning are unchanged (see
+     lib/dayTypes.ts): show-family days are green (show, load_in_show,
+     show_load_out), pure prep is amber (load_in), rehearsal violet,
+     travel-family steel blue (travel, travel_load_in, load_out_travel). */
+  --day-travel: #3073a6;
+  --day-loadin: #c67110;
+  --day-rehearsal: #6e3cb1;
+  --day-show: #1e8f57;
 
   --radius: 2px;
   --radius-sm: 2px;
@@ -91,10 +92,10 @@
     --band: #24262c;
     --band-ink: #e8eaee;
     --edge-shadow: rgba(0, 0, 0, 0.55);
-    --day-travel: #7396b8;
-    --day-loadin: #d69a45;
-    --day-rehearsal: #9c77c9;
-    --day-show: #4ca578;
+    --day-travel: #5ca1d6;
+    --day-loadin: #ee962b;
+    --day-rehearsal: #9e6ce0;
+    --day-show: #3cb478;
   }
 }
 
@@ -120,10 +121,10 @@
   --band: #17181a;
   --band-ink: #f5f4ef;
   --edge-shadow: rgba(23, 24, 26, 0.18);
-  --day-travel: #5b7a99;
-  --day-loadin: #c07e2a;
-  --day-rehearsal: #7d5ba6;
-  --day-show: #2e8757;
+  --day-travel: #3073a6;
+  --day-loadin: #c67110;
+  --day-rehearsal: #6e3cb1;
+  --day-show: #1e8f57;
 }
 :root[data-theme="dark"] {
   --bg: #121317;
@@ -146,10 +147,10 @@
   --band: #24262c;
   --band-ink: #e8eaee;
   --edge-shadow: rgba(0, 0, 0, 0.55);
-  --day-travel: #7396b8;
-  --day-loadin: #d69a45;
-  --day-rehearsal: #9c77c9;
-  --day-show: #4ca578;
+  --day-travel: #5ca1d6;
+  --day-loadin: #ee962b;
+  --day-rehearsal: #9e6ce0;
+  --day-show: #3cb478;
 }
 
 /* Expose tokens as Tailwind utilities: bg-surface, text-ink, text-accent,
