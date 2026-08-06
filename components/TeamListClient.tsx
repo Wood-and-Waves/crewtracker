@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import InviteTeammateModal from '@/components/InviteTeammateModal'
 import PendingInvitesList, { type PendingInvite } from '@/components/PendingInvitesList'
 import Chip from '@/components/ui/Chip'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 
 type Member = {
@@ -30,8 +31,9 @@ export default function TeamListClient({
 
   return (
     <div className="p-6 md:p-10">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-extrabold tracking-tight">Team</h1>
+      {/* Open Paper masthead with the screen's one action on it. */}
+      <div className={cn(BAND, '-mx-6 mb-6 flex flex-wrap items-center justify-between gap-3 px-6 py-4 md:-mx-10 md:px-10')}>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Team</h1>
         <Button size="sm" onClick={() => setInviting(true)}>+ Invite Teammate</Button>
       </div>
 
@@ -39,9 +41,9 @@ export default function TeamListClient({
         <p className="text-muted">No team members yet.</p>
       ) : (
         <>
-          {/* Desktop: data table */}
-          <div className="hidden overflow-hidden rounded-card border border-line bg-surface lg:block">
-            <div className="grid grid-cols-[1.6fr_1.8fr_1fr] gap-3 border-b border-line px-5 py-2.5 text-[10.5px] font-bold uppercase tracking-wide text-muted">
+          {/* Desktop: data table, open on the paper. */}
+          <div className="hidden lg:block">
+            <div className={cn(BAND, 'grid grid-cols-[1.6fr_1.8fr_1fr] gap-3 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em]')}>
               <div>Name</div><div>Email</div><div>Role</div>
             </div>
             {members.map(m => (
@@ -49,7 +51,7 @@ export default function TeamListClient({
                 key={m.id}
                 onClick={() => router.push(`/dashboard/team/${m.id}`)}
                 className={cn(
-                  'grid cursor-pointer grid-cols-[1.6fr_1.8fr_1fr] items-center gap-3 border-b border-line px-5 py-3 last:border-b-0 hover:bg-surface-2',
+                  'grid cursor-pointer grid-cols-[1.6fr_1.8fr_1fr] items-center gap-3 border-b border-line px-5 py-3 last:border-b-[3px] last:border-ink hover:bg-surface-2',
                   m.deactivated_at && 'opacity-50',
                 )}
               >
@@ -63,8 +65,8 @@ export default function TeamListClient({
             ))}
           </div>
 
-          {/* Mobile: tappable cards */}
-          <div className="divide-y divide-line rounded-card border border-line bg-surface lg:hidden">
+          {/* Mobile: the same rows restacked, open on the paper. */}
+          <div className={cn('divide-y divide-line border-t border-line lg:hidden', RULE_MAJOR)}>
             {members.map(m => (
               <button
                 key={m.id}

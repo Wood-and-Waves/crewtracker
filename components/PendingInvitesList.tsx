@@ -4,9 +4,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { presetFor, ROLES, type Role } from '@/lib/permissions'
-import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Chip from '@/components/ui/Chip'
+import Select from '@/components/ui/Select'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
+import { cn } from '@/lib/cn'
 
 // Pending invitations, manageable by the organization's own admin.
 //
@@ -131,20 +133,22 @@ export default function PendingInvitesList({ invites }: { invites: PendingInvite
   }
 
   return (
-    <Card className="mt-8 p-6">
-      <h2 className="text-lg font-bold text-ink">Pending invitations</h2>
-      <p className="mt-1 text-sm text-muted">
+    <section className="mt-10">
+      <div className={cn(BAND, 'px-4 py-2')}>
+        <h2 className="font-display text-base font-bold uppercase tracking-wide">Pending invitations</h2>
+      </div>
+      <p className="mt-2 px-4 text-sm text-muted">
         These people have been invited but haven&rsquo;t joined yet. They were emailed a link
         when the invite was created — resend it, or copy the link and send it yourself.
       </p>
 
-      <div className="mt-4 flex flex-col gap-3">
+      <div className={cn('mt-3', RULE_MAJOR)}>
         {invites.map(inv => {
           const left = daysLeft(inv.expires_at)
           return (
             <div
               key={inv.id}
-              className="flex flex-col gap-3 rounded-field border border-line bg-surface-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-3 border-b border-line px-4 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-ink">
@@ -152,20 +156,15 @@ export default function PendingInvitesList({ invites }: { invites: PendingInvite
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <Chip tone={left ? 'neutral' : 'danger'}>{left ?? 'Expired'}</Chip>
-                  <select
+                  <Select
+                    ariaLabel={`Role for ${inv.email || 'this invite'}`}
+                    size="sm"
+                    className="w-44"
                     value={(inv.base_role as Role) ?? 'pm'}
-                    onChange={e => changeRole(inv, e.target.value as Role)}
+                    onChange={v => changeRole(inv, v as Role)}
                     disabled={busy === inv.id}
-                    // Safari renders <option> invisibly against a dark background
-                    // without explicit classes — see CLAUDE.md.
-                    className="rounded-field border border-line bg-surface-2 px-2 py-1 text-xs text-ink outline-none focus:border-accent"
-                  >
-                    {ROLES.map(r => (
-                      <option key={r.value} value={r.value} className="bg-surface-2 text-ink">
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={ROLES.map(r => ({ value: r.value, label: r.label }))}
+                  />
                 </div>
               </div>
 
@@ -188,6 +187,6 @@ export default function PendingInvitesList({ invites }: { invites: PendingInvite
       </div>
 
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-    </Card>
+    </section>
   )
 }
