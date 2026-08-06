@@ -216,7 +216,9 @@ scripts/
     migrations/      — numbered changes applied by db:migrate. Append only; never edit one that ran.
                        0011 schedule indexes · 0012 crew_call_positions + booking_status
                        0013 scheduler_id/call_approved_at · 0014 booking_invites
-                       ALL APPLIED TO DEV ONLY — production has none of them yet.
+                       0015 work_days.day_type + its UPDATE grant AND policy (both halves or the
+                       silent-success bug returns) · 0016 eighth day type (show_load_out)
+                       ALL APPLIED TO DEV ONLY — production is at 0010 and has none of them.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
@@ -306,6 +308,30 @@ This list drifted badly once and sent a session off to re-implement finished wor
 - **Per-crew timesheet Text/Share/Copy** — `SendHoursButton.tsx`.
 - **Named payroll presets, Continuous Time, Pay As Half Day UI, room rename/delete, per-crew removal, show archiving, batch travel-day toggle, reset punches, Copy Crew, Add Day from the tracker** — all shipped.
 - The whole Settings page: 24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, AV Roles editor, payroll presets, Final Report recipients.
+
+## Shipping `scheduling` to production — the gated cutover (NOT DONE YET)
+
+The entire scheduling feature, the design work, and Showbill live on the unmerged
+`scheduling` branch. Production's database is at migration 0010. When the day comes, this is
+the procedure, **in this order, as its own focused session** — each step exists because of a
+specific failure mode:
+
+1. **Fresh backup first**: `npm run db:dump`, and keep a copy off this machine (backups/ is
+   gitignored and lives only on this Mac). Last verified backup: 2026-08-03, all row counts
+   confirmed against production.
+2. **`npm run db:migrate -- --status --prod`** to see the pending list (expect 0011–0016), then
+   **`npm run db:migrate -- --prod`**. Note: 0012 performs a real WRITE to existing data — it
+   backfills `booking_status='confirmed'` onto every existing timecard (correct: those people
+   actually worked). Migrations are forward-only; the backup is the undo.
+3. **Immediately after: `npm run db:grants`, and commit the regenerated `scripts/sql/grants.sql`.**
+   Order is critical — db:grants reads PRODUCTION, so running it before step 2 writes a
+   grants.sql *missing* 0012's four column grants and 0015's day_type UPDATE grant, silently.
+   The checked-in grants.sql is ALREADY missing 0012's grants for exactly this reason (known
+   drift, documented in 0015's header). Skipping this step means the next database rebuild
+   loses those grants and every booking_status query returns 42501.
+4. **Only then merge `scheduling` → `main`** (this is the step that deploys crewtracker.app)
+   and verify the live site — including one booking-status smoke test, since production will be
+   exercising 0012 for the first time (the preview only ever proved it against dev).
 
 ## Past incidents worth remembering
 
