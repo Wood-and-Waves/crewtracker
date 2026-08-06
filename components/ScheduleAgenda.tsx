@@ -58,8 +58,10 @@ export default function ScheduleAgenda({
         const h = sectionHeader(date)
         return (
           <section key={date}>
-            <div className="mb-2 flex items-baseline gap-2 px-1">
-              <h2 className={cn('text-sm font-bold', h.isWeekend ? 'text-muted' : 'text-ink')}>
+            {/* Open Paper: each date's header rules off its shows — condensed
+                caps on a 3px ink rule, hairlines between the shows below. */}
+            <div className="mb-1 flex items-baseline gap-2 border-b-[3px] border-ink px-1 pb-1.5">
+              <h2 className={cn('font-display text-sm font-bold uppercase tracking-wide', h.isWeekend ? 'text-muted' : 'text-ink')}>
                 {h.weekday}
               </h2>
               <span className="text-xs text-muted">{h.rest}</span>
@@ -70,7 +72,7 @@ export default function ScheduleAgenda({
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="divide-y divide-line">
               {running.map(show => {
                 const crew = cells.get(`${show.id}|${date}`) ?? []
                 const cover = coverageFor(show, date, crew)
@@ -78,7 +80,7 @@ export default function ScheduleAgenda({
                   <Link
                     key={show.id}
                     href={`/dashboard/shows/${show.id}?day=${show.dayNumbers[date]}`}
-                    className="block rounded-card border border-line bg-surface px-4 py-3 transition-colors active:bg-surface-2"
+                    className="block px-1 py-3 transition-colors active:bg-surface-2"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

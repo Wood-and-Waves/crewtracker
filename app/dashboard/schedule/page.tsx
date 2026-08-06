@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import Card from '@/components/ui/Card'
+import { BAND } from '@/lib/panel'
 import ScheduleGrid from '@/components/ScheduleGrid'
 import ScheduleAgenda from '@/components/ScheduleAgenda'
 import { fetchBookings, fetchScheduleShows, resolveWindow } from '@/lib/schedule'
@@ -38,12 +38,12 @@ export default async function SchedulePage({
   if (!user.organizationId) {
     return (
       <div className="flex min-h-[70vh] items-center justify-center p-8">
-        <Card className="w-full max-w-md p-8 text-center">
+        <div className="w-full max-w-md p-8 text-center">
           <h1 className="mb-2 text-2xl font-bold text-ink">Almost there</h1>
           <p className="text-sm text-muted">
             Your account isn&apos;t linked to an organization yet.
           </p>
-        </Card>
+        </div>
       </div>
     )
   }
@@ -71,9 +71,12 @@ export default async function SchedulePage({
 
   return (
     <div className="p-4 md:p-10">
+      {/* Open Paper masthead. The window controls stay below it, on the paper —
+          they are view controls sitting above the content they govern. */}
+      <div className={cn(BAND, '-mx-4 mb-5 px-4 py-4 md:-mx-10 md:px-10')}>
+        <h1 className="font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">Schedule</h1>
+      </div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">Schedule</h1>
-
         <div className="flex flex-wrap items-center gap-2">
           {/* Window length. Not a dropdown: three fixed choices are faster to hit
               and make the current one visible without opening anything. */}
@@ -118,13 +121,11 @@ export default async function SchedulePage({
       </div>
 
       {shows.length === 0 ? (
-        <Card className="p-8 text-center">
-          <p className="text-sm text-muted">
-            No shows running between{' '}
-            {new Date(win.start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} and{' '}
-            {new Date(win.end + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.
-          </p>
-        </Card>
+        <p className="py-10 text-center text-sm text-muted">
+          No shows running between{' '}
+          {new Date(win.start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} and{' '}
+          {new Date(win.end + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.
+        </p>
       ) : (
         <>
           <div className="hidden lg:block">

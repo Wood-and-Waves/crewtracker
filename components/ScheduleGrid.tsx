@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import { todayInZone } from '@/lib/showStatus'
 import { byShowAndDate, coverageFor, type ScheduleBooking, type ScheduleShow } from '@/lib/schedule'
@@ -82,17 +83,19 @@ export default function ScheduleGrid({
   const todayDates = new Set(shows.map(s => todayInZone(s.timezone)))
 
   return (
-    <div className="overflow-x-auto rounded-card border border-line bg-surface">
+    // Open Paper: no box around the grid — the ink month band opens it and a
+    // 3px rule closes it (on the last show row).
+    <div className="overflow-x-auto">
       <div style={{ minWidth }}>
-        {/* Month band. Without it a window spanning a boundary reads as one
-            long month, and "28, 29, 30, 31, 1, 2" is genuinely ambiguous. */}
-        <div className="grid border-b border-line bg-surface-2" style={{ gridTemplateColumns }}>
-          <div className="sticky left-0 z-20 border-r border-line bg-surface-2" />
+        {/* Month band, now a real BAND. Without it a window spanning a boundary
+            reads as one long month, and "28, 29, 30, 31, 1, 2" is ambiguous. */}
+        <div className={cn(BAND, 'grid')} style={{ gridTemplateColumns }}>
+          <div className="sticky left-0 z-20 bg-band" />
           {monthGroups(dates).map((g, i) => (
             <div
               key={`${g.label}-${i}`}
               style={{ gridColumn: `span ${g.span}` }}
-              className="border-r border-line px-2 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-muted last:border-r-0"
+              className="px-2 py-1.5 font-display text-[10px] font-semibold uppercase tracking-wider text-band-ink"
             >
               {g.label}
             </div>
@@ -112,7 +115,7 @@ export default function ScheduleGrid({
                 key={date}
                 className={cn(
                   'border-r border-line px-1 pb-1.5 text-center last:border-r-0',
-                  p.isWeekend && 'bg-bg',
+                  p.isWeekend && 'bg-surface-3/60',
                 )}
               >
                 <div className="text-[9px] font-medium uppercase text-muted">{p.weekday}</div>
@@ -129,18 +132,18 @@ export default function ScheduleGrid({
           })}
         </div>
 
-        {/* One row per show */}
+        {/* One row per show; the last row's 3px ink rule closes the grid. */}
         {shows.map(show => {
           const today = todayInZone(show.timezone)
           return (
             <div
               key={show.id}
-              className="grid border-b border-line last:border-b-0"
+              className="grid border-b border-line last:border-b-[3px] last:border-ink"
               style={{ gridTemplateColumns }}
             >
               <Link
                 href={`/dashboard/shows/${show.id}`}
-                className="sticky left-0 z-10 border-r border-line bg-surface px-3 py-2 transition-colors hover:bg-surface-2"
+                className="sticky left-0 z-10 border-r border-line bg-bg px-3 py-2 transition-colors hover:bg-surface-2"
               >
                 <div className="truncate text-[13px] font-semibold leading-tight text-ink">
                   {show.name}
@@ -166,7 +169,7 @@ export default function ScheduleGrid({
                       key={date}
                       className={cn(
                         'border-r border-line last:border-r-0',
-                        p.isWeekend && 'bg-bg',
+                        p.isWeekend && 'bg-surface-2/60',
                         isToday && 'bg-accent-wash/30',
                       )}
                     />
@@ -191,7 +194,7 @@ export default function ScheduleGrid({
                     title={`${show.name} — day ${dayNumber}\n${detail}`}
                     className={cn(
                       'flex items-center justify-center gap-1 border-r border-line py-2.5 transition-colors last:border-r-0 hover:bg-accent-wash',
-                      p.isWeekend && 'bg-bg',
+                      p.isWeekend && 'bg-surface-2/60',
                       isToday && 'bg-accent-wash/40',
                     )}
                   >
