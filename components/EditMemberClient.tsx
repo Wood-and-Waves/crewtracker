@@ -97,7 +97,7 @@ export default function EditMemberClient({
         ← Back to Team
       </button>
 
-      <h1 className="mb-1 text-2xl font-bold text-ink">{member.full_name || 'Team member'}</h1>
+      <h1 className="mb-1 font-display text-2xl font-bold uppercase tracking-wide text-ink">{member.full_name || 'Team member'}</h1>
       <p className="mb-6 text-sm text-muted">{member.email || '—'}</p>
 
       <div className="max-w-lg">

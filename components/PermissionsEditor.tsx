@@ -68,22 +68,23 @@ export default function PermissionsEditor({
         </p>
       </div>
 
-      {/* Advanced toggles */}
-      <div className="rounded-card border border-line">
+      {/* Advanced toggles — Open Paper disclosure: a ruled head instead of a
+          box, hairline rows inside, 3px rule closing the open state. */}
+      <div>
         <button
           type="button"
           onClick={() => setAdvancedOpen(o => !o)}
-          className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-ink"
+          className="flex w-full items-center justify-between border-b-[3px] border-ink pb-1.5 text-left font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink"
         >
           Advanced permissions
           <span className="text-muted">{advancedOpen ? '−' : '+'}</span>
         </button>
         {advancedOpen && (
-          <div className="border-t border-line px-4 py-3">
+          <div className="border-b-[3px] border-ink">
             {VISIBLE_PERMISSIONS.map(({ key, label }) => {
               const locked = lockedKeys.includes(key)
               return (
-                <div key={key} className="flex items-center justify-between py-2">
+                <div key={key} className="flex items-center justify-between border-b border-line py-2.5 last:border-b-0">
                   <span className="text-sm text-ink">
                     {label}
                     {locked && <span className="ml-2 text-xs text-muted">(locked)</span>}

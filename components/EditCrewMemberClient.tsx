@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
-import Card from '@/components/ui/Card'
+import Select from '@/components/ui/Select'
 import { formatPhone } from '@/lib/phone'
 import { removeCrewMemberKeepHistory } from '@/lib/crew'
 
@@ -117,21 +117,21 @@ export default function EditCrewMemberClient({
   return (
     <div className="p-6 md:p-10 max-w-2xl">
       <Link href="/dashboard/directory" className="text-sm text-muted hover:text-ink">← Back to Directory</Link>
-      <h1 className="text-2xl font-bold mt-2 mb-6">Edit Profile</h1>
+      <h1 className="mt-2 mb-6 font-display text-2xl font-bold uppercase tracking-wide">Edit Profile</h1>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Crew Info</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Crew Info</p>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
             onBlur={() => saveField('full_name', name)}
             className={inputCls}
           />
-        </Card>
+        </section>
 
-        <Card className="p-5 mb-4">
-          <p className="text-xs uppercase tracking-wide text-muted mb-3">Contact Info (Optional)</p>
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Contact Info (Optional)</p>
           {(phone.trim() || email.trim()) && (
             <button
               onClick={saveToContacts}
@@ -159,11 +159,11 @@ export default function EditCrewMemberClient({
             onBlur={() => saveField('email', email)}
             className={inputCls}
           />
-        </Card>
+        </section>
       </div>
 
-      <Card className="p-5">
-        <p className="text-xs uppercase tracking-wide text-muted mb-3">
+      <section>
+        <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">
           {canViewRates ? 'Saved Roles & Rates' : 'Saved Roles'}
         </p>
         <div className="flex flex-col gap-2 mb-4">
@@ -197,7 +197,7 @@ export default function EditCrewMemberClient({
           + Add Another Role...
         </button>
         <p className="text-xs text-muted mt-2">Tap a role to edit its day rate, or use the ✕ to remove it.</p>
-      </Card>
+      </section>
 
       <div className="mt-6">
         <Button variant="danger" onClick={deleteCrewMember}>Delete Crew Member</Button>
@@ -205,7 +205,7 @@ export default function EditCrewMemberClient({
 
       {editingCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-1">Edit Day Rate</h2>
             <p className="text-sm text-muted mb-4">Enter a new day rate for {editingCard.role}.</p>
             <input
@@ -224,18 +224,15 @@ export default function EditCrewMemberClient({
 
       {showAddRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-4">New Role</h2>
-            <select
-              key={availableRoles.map(r => r.id).join(',')}
+            <Select
+              ariaLabel="Role"
+              className="mb-3"
               value={newRoleName}
-              onChange={e => setNewRoleName(e.target.value)}
-              className={`${inputCls} mb-3`}
-            >
-              {availableRoles.map(r => (
-                <option key={r.id} value={r.name} className="bg-surface-2 text-ink">{r.name}</option>
-              ))}
-            </select>
+              onChange={setNewRoleName}
+              options={availableRoles.map(r => ({ value: r.name, label: r.name }))}
+            />
             {/* Adding a role is directory work; setting its rate is a pay
                 decision. Without can_edit_pay_rates the role is still addable,
                 it just starts at zero for someone who can to fill in. */}
