@@ -92,12 +92,18 @@ auto-memory (`showbill-identity-decisions.md`):
     uniform hairlines everywhere was July's monotony bug.
   - **Whitespace** — units are separated by space plus the next band, never by an edge.
   What legitimately keeps a box: form fields (a printed form's fill-in boxes) and true
-  overlays — dropdowns, dialogs, and in-place editors. Nothing else. `PANEL` in lib/panel.ts
-  is deprecated: screens still importing it are *awaiting their Open Paper pass*, not
-  examples to follow, and each import dies in its screen's conversion.
-- Build order: tokens/primitives (B1, done) → New Show (B2, done — the Open Paper showcase)
-  → tracker (B3) → shows list, reports, settings, directory, team, schedule. Each pass lands
-  alone on the `scheduling` preview and waits for Dan's reaction before the next starts.
+  overlays — dropdowns, dialogs, and in-place editors. Nothing else. `PANEL` is deleted
+  from lib/panel.ts — nothing imports it anymore.
+- **Build status (2026-08-06): every main screen has had its Open Paper pass** — tokens/
+  primitives (B1), New Show (B2), tracker (B3, incl. the lit-next-key punch treatment and
+  room masthead bands on both layouts), then shows list, reports, settings (incl.
+  RulesetFields), directory, team, schedule. All native `<select>`s on those screens are
+  `components/ui/Select` (the Showbill picker: squared field closed, ink-bordered paper-slip
+  panel open, optional swatches, keyboard + typeahead). Day-type tints were re-cut to
+  accent-weight chroma at Dan's request. Still wearing the old skin: **Edit Show and Edit
+  Crew** (the last card screens), the superadmin pages, and assorted confirm dialogs that
+  still use `rounded-card border-line shadow-xl` instead of the `border-2 border-ink
+  shadow-edge` overlay treatment.
 
 ## The previous system — "Signal" (2026-07-14/15), kept for layout rules that still apply
 

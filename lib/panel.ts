@@ -24,10 +24,6 @@
 export const BAND = 'bg-band text-band-ink border-b-2 border-ink'
 export const RULE_MAJOR = 'border-b-[3px] border-ink'
 
-/**
- * DEPRECATED — the enclosure era. Still imported by screens that have not had
- * their Open Paper pass yet (reports, settings, tracker panels). Do not add new
- * uses; each remaining one dies in its screen's pass.
- */
-export const PANEL = 'rounded-card border border-line bg-surface'
-export const PANEL_X = 'px-4'
+// PANEL and PANEL_X (the enclosure era) are gone — the last importer died when
+// Reports got its Open Paper pass. If you are looking for a box to put content
+// in: don't. Fields and true overlays only.
