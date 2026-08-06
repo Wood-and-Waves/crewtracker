@@ -74,7 +74,7 @@ export default function BatchTimeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-sm rounded-card bg-surface border border-line shadow-xl flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-sm border-2 border-ink bg-surface shadow-edge flex flex-col max-h-[85vh]">
         <div className="p-6 pb-4">
           <h2 className="text-lg font-bold text-ink mb-1">{PUNCH_LABELS[type]} All</h2>
           <p className="text-xs text-muted mb-4">

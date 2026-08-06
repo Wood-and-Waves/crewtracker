@@ -221,7 +221,7 @@ export default function RoomActionsMenu({
 
       {mode === 'editCrew' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md max-h-[85vh] flex flex-col rounded-card bg-surface border border-line shadow-xl">
+          <div className="w-full max-w-md max-h-[85vh] flex flex-col border-2 border-ink bg-surface shadow-edge">
             <div className="p-5 pb-3 border-b border-line">
               <h2 className="text-lg font-bold text-ink">Edit Crew — {roomName}</h2>
               {canViewRates && canEditRates && (

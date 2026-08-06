@@ -86,7 +86,7 @@ export default function AddDayButton({
 
       {asking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-1">Add Next Day?</h2>
             <p className="text-xs text-muted mb-5">
               The new day gets the same rooms. You can bring the crew roster across too.

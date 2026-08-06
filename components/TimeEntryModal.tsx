@@ -114,7 +114,7 @@ export default function TimeEntryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+      <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
         <h2 className="text-lg font-bold text-ink mb-4">{PUNCH_LABELS[type]}</h2>
 
         {showTravelToggle && (

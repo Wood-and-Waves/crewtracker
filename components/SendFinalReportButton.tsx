@@ -66,7 +66,7 @@ export default function SendFinalReportButton({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-card bg-surface border border-line p-6 shadow-xl">
+      <div className="w-full max-w-md max-h-[85vh] overflow-y-auto border-2 border-ink bg-surface p-6 shadow-edge">
         {sentTo !== null ? (
           <>
             <h2 className="text-lg font-bold text-ink mb-2">Final report sent</h2>

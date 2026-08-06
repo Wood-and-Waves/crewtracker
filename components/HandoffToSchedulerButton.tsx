@@ -108,7 +108,7 @@ export default function HandoffToSchedulerButton({
       )
     }
     return (
-      <div className="rounded-card border border-line bg-surface px-3 py-2">
+      <div className="border-2 border-ink bg-surface px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-muted">Crewing</span>
           <Chip tone="good">Handed off</Chip>

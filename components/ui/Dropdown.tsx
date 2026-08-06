@@ -38,7 +38,7 @@ export default function Dropdown({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-1 min-w-full rounded-field border border-line bg-surface shadow-xl overflow-hidden">
+        <div className="absolute right-0 z-20 mt-1 min-w-full rounded-field border border-line bg-surface shadow-edge overflow-hidden">
           {options.map(option => (
             <button
               key={option.value}

@@ -105,7 +105,7 @@ export default function AccountMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-60 rounded-card border border-line bg-surface p-2 shadow-xl"
+          className="absolute right-0 z-50 mt-2 w-60 border-2 border-ink bg-surface p-2 shadow-edge"
         >
           <div className="border-b border-line px-3 py-2">
             {userName && <p className="truncate text-sm font-semibold text-ink">{userName}</p>}

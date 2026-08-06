@@ -201,7 +201,7 @@ export default function BatchPunchBar({
 
       {overlay.kind === 'override' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-1">{PUNCH_LABELS[overlay.type]} All</h2>
             <p className="text-xs text-muted mb-5">
               Everyone eligible already has this punch. Update or clear the existing times.
@@ -226,7 +226,7 @@ export default function BatchPunchBar({
 
       {overlay.kind === 'warning' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-1">{PUNCH_LABELS[overlay.type]} All</h2>
             <p className="text-sm text-muted mb-5">This action isn&apos;t available yet.</p>
             <Button className="w-full py-3" onClick={() => setOverlay({ kind: 'none' })}>Got it</Button>
@@ -236,7 +236,7 @@ export default function BatchPunchBar({
 
       {overlay.kind === 'summary' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl max-h-[85vh] overflow-y-auto">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge max-h-[85vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-ink mb-4">{PUNCH_LABELS[overlay.type]}</h2>
             {overlay.plan.applied.length === 0 && overlay.plan.skipped.every(s => s.reason !== 'Cleared') && (
               <p className="text-sm text-muted mb-4">No crew were updated.</p>

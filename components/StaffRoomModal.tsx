@@ -384,7 +384,7 @@ export default function StaffRoomModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-card bg-surface border border-line shadow-xl">
+      <div className="w-full max-w-lg max-h-[85vh] flex flex-col border-2 border-ink bg-surface shadow-edge">
         <div className="p-6 pb-4 border-b border-line">
           <h2 className="text-lg font-bold text-ink">Staff {roomName}</h2>
         </div>
@@ -547,7 +547,7 @@ export default function StaffRoomModal({
 
         {pendingCrossRoom && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-card bg-black/60 p-4">
-            <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+            <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
               <h3 className="text-lg font-bold text-ink mb-2">Already staffed elsewhere</h3>
               <p className="text-sm text-muted mb-5">
                 {pendingCrossRoom.join(', ')} {pendingCrossRoom.length === 1 ? 'is' : 'are'} already in another room today. Add to {roomName} as well?
