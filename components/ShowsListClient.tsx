@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import Chip from '@/components/ui/Chip'
 import ArchiveShowButton from '@/components/ArchiveShowButton'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import type { ShowStatus } from '@/lib/showStatus'
 
@@ -156,9 +157,10 @@ export default function ShowsListClient({
           if (active) setAsc(v => !v)
           else { setSort(key); setAsc(key === 'name') }
         }}
+        // Lives on the ink header band, so its states speak band-ink.
         className={cn(
-          'flex items-center gap-1 text-left text-[10.5px] font-bold uppercase tracking-wide transition-colors',
-          active ? 'text-ink' : 'text-muted hover:text-ink',
+          'flex items-center gap-1 text-left font-display text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors',
+          active ? 'text-band-ink' : 'text-band-ink/60 hover:text-band-ink',
           className,
         )}
       >
@@ -186,9 +188,10 @@ export default function ShowsListClient({
         </p>
       ) : (
         <>
-          {/* Desktop: a real ruled table */}
-          <div className="hidden overflow-hidden rounded-card border border-line bg-surface lg:block">
-            <div className={cn('grid gap-3 border-b border-line px-5 py-2.5', COLS)}>
+          {/* Desktop: a real ruled table, open on the paper — a color-blocked
+              ink header strip, hairline rows, and a 3px ink rule to close. */}
+          <div className="hidden lg:block">
+            <div className={cn(BAND, 'grid gap-3 px-5 py-2.5', COLS)}>
               {header('name', 'Show')}
               {header('dates', 'Dates')}
               {header('status', 'Status')}
@@ -200,7 +203,8 @@ export default function ShowsListClient({
               <div
                 key={row.id}
                 className={cn(
-                  'group grid items-center gap-3 border-b border-line px-5 py-3 transition-colors last:border-b-0 hover:bg-surface-2',
+                  'group grid items-center gap-3 border-b border-line px-5 py-3 transition-colors hover:bg-surface-2',
+                  'last:border-b-[3px] last:border-ink',
                   COLS,
                 )}
               >
@@ -233,8 +237,9 @@ export default function ShowsListClient({
 
           {/* Below 1024px: the same rows, restacked. No column headers — a
               five-column grid at 375px is unreadable however hard it is
-              squeezed, so the app restructures rather than shrinking. */}
-          <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface lg:hidden">
+              squeezed, so the app restructures rather than shrinking. Open on
+              the paper: hairline rows between a top hairline and a 3px close. */}
+          <div className={cn('divide-y divide-line border-t border-line lg:hidden', RULE_MAJOR)}>
             {shown.map(row => (
               <div key={row.id} className="px-4 py-3">
                 <Link href={`/dashboard/shows/${row.id}`} className="block">

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import ShowsListClient, { type ShowRow } from '@/components/ShowsListClient'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import { showStatus, SHOW_STATUS_META } from '@/lib/showStatus'
 import { summarizeCall } from '@/lib/crewCall'
@@ -169,8 +170,10 @@ export default async function DashboardPage({
 
   return (
     <div className="p-6 md:p-10">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-extrabold tracking-tight">Shows</h1>
+      {/* Open Paper masthead: the screen's title block is a full-bleed ink
+          band, and the screen's one primary action sits on it. */}
+      <div className={cn(BAND, '-mx-6 mb-6 flex items-center justify-between gap-4 px-6 py-4 md:-mx-10 md:px-10')}>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Shows</h1>
         {user.can('can_create_shows') && (
           <Link href="/dashboard/shows/new">
             <Button>+ New Show</Button>
