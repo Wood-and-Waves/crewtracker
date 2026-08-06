@@ -52,11 +52,12 @@ Dan (the developer) has no professional dev background — so explain the *why* 
 - **Dev browser sign-in**: `app/api/dev/login/route.ts` mints a session so a browser can be signed in for UI verification. Three independent gates — `NODE_ENV` must be development (Vercel builds everything, preview included, as production), the Supabase project must not be production, and `DEV_LOGIN_SECRET` from `.env.local` must match. Every rejection is a bare 404.
 - **Vercel CLI**: installed globally (2026-08-03) and signed in as `dan-2811`; the repo is linked to `crew-tracker/crewtracker`. `vercel inspect crewtracker-lime.vercel.app` / `vercel ls crewtracker` check deployment status after a push instead of guessing whether a deploy succeeded. `vercel link` appends a managed `VERCEL_OIDC_TOKEN` to `.env.local` — that is normal, and it leaves the existing keys alone.
   - **`vercel env pull` cannot read the values back.** Every variable on this project is flagged sensitive, so the pulled file contains the literal string `[SENSITIVE]` in place of all five. Don't diff those placeholders against real keys and conclude anything — that produces a confident, wrong answer. Read values from the dashboard, or test behaviour directly.
-- **Preview deployments point at the DEV database** — confirmed 2026-08-03 by opening a preview and seeing the seeded fake crew (Alex Reyes et al). Preview and Production hold entirely separate `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / anon key entries, so **production's service-role key is never in a preview build**, and a branch preview is safe to browse. It also means a preview exercises whatever migrations dev has, which is why the unmerged `scheduling` branch previews correctly while production still lacks 0011–0014. Branch preview URL: `https://crewtracker-git-<branch>-crew-tracker.vercel.app`, behind Vercel's own login.
+- **Preview deployments point at the DEV database** — confirmed 2026-08-03 by opening a preview and seeing the seeded fake crew (Alex Reyes et al). Preview and Production hold entirely separate `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / anon key entries, so **production's service-role key is never in a preview build**, and a branch preview is safe to browse. It also means a preview exercises whatever migrations dev has — write and verify a migration on dev, and the preview proves it, before `--prod` ever runs. Branch preview URL: `https://crewtracker-git-<branch>-crew-tracker.vercel.app`, behind Vercel's own login.
 
 ## Design system — "Showbill" (replacing "Signal", build started 2026-08-04)
 
-**The app is mid-transition from Signal to Showbill**, a full identity redesign Dan chose
+**The app wears Showbill everywhere** (transition from Signal completed 2026-08-06, in
+production since the same day's cutover) — a full identity redesign Dan chose
 through a mockup-reaction process (2026-08-03/04). Decisions, all locked with Dan and recorded in
 auto-memory (`showbill-identity-decisions.md`):
 
@@ -126,7 +127,7 @@ The app was fully redesigned from the original pure-black/zinc/iOS-blue look to 
 
 **Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
 
-**Reusable primitives** in `components/ui/`: `Button` (variants: primary/ghost/danger), `Card`, `Chip` (tones: neutral/live/ot/good/danger — semantic status color, kept separate from the brand accent), `Toggle` (on/off switch, replaces native checkboxes everywhere), `ThemeToggle`, `Dropdown`, `AccountMenu`. Compose new UI from these rather than writing raw styled `<button>`/`<div>` markup.
+**Reusable primitives** in `components/ui/`: `Button` (variants: primary/ghost/danger), `Chip` (tones: neutral/live/ot/good/danger — semantic status color, kept separate from the brand accent), `Toggle` (squared on/off switch, replaces native checkboxes everywhere), `Select` (the Showbill picker — replaces native `<select>` everywhere; zero native selects remain in the app), `NumberedHead` (numbered section head on a 3px rule), `ThemeToggle`, `AccountMenu`, and legacy `Card` (splash/onboarding/superadmin only — never new work). The old `Dropdown` primitive is deleted; `Select` is its replacement. Compose new UI from these rather than writing raw styled `<button>`/`<div>` markup.
 
 **One deliberate exception to the token rule:** `lib/reportPdf.tsx` uses literal hex colors. `@react-pdf/renderer` renders outside the browser, so CSS variables don't exist there, and a PDF is a fixed document with no light/dark mode to respond to. Don't "fix" it into tokens.
 
@@ -139,7 +140,7 @@ The app was fully redesigned from the original pure-black/zinc/iOS-blue look to 
 
 **The tracker console's punch table** (`TimecardRow.tsx` + the room block in `shows/[id]/page.tsx`) is a genuine ruled grid on desktop (`lg:grid-cols-[...]`, shared between the header row and every crew row via `lib/trackerLayout.ts`), collapsing to labeled per-field cards on mobile. This replaced free-floating pill buttons after Dan's first-round feedback that times weren't visually separated.
 
-**Known Safari gotcha:** native `<select>` elements need explicit `className="bg-surface-2 text-ink"` (token equivalents of the old zinc classes) on every `<option>`, or text is invisible against the dark background in Safari. iPad Safari also has a hydration bug that can duplicate `<option>` elements in a controlled `<select>` — fix is a `key` prop on the `<select>` tied to a stable identifier of the options list (e.g. `key={options.map(o => o.id).join(',')}`) so React remounts instead of patching in place. Apply this pattern to any new dropdown.
+**Known Safari gotcha (now historical — zero native `<select>` elements remain; `components/ui/Select` replaced them all 2026-08-06, which sidesteps both bugs by construction).** Kept in case a native select is ever reintroduced: `<option>` needs explicit `className="bg-surface-2 text-ink"` or its text is invisible against a dark background in Safari, and iPad Safari has a hydration bug that duplicates `<option>` elements in a controlled `<select>` — fix is a `key` prop on the `<select>` tied to a stable identifier of the options list so React remounts instead of patching in place. Prefer just using `Select`.
 
 **Logo:** `components/Logo.tsx` now renders the **real** CrewTracker mark (dropped in 2026-07-15) — two fixed blue tones (`#6699FF` / `#3366CC`), not `currentColor`, so it's already designed to sit on both light and dark backgrounds as-is rather than needing theme-aware recoloring. It has no intrinsic width/height (the source SVG has no `width`/`height` attrs, just a `viewBox`), so the component defaults to `w-7 h-7` internally and every call site should pass `className` to override when a different size is needed (login/invite use `w-12 h-12`) — **don't render `<Logo />` bare**, it'll fall back to the browser's oversized default if the default class is ever removed. `app/icon.png` and `app/favicon.ico` are also the real assets now (Next's file-based icon convention — no manual `<link>` tags needed). A duplicate lives at `public/app-icon.png` purely so the marketing page can reference it via a normal `<img>`/`next/image` src, since `app/icon.png` isn't reliably a stable public URL.
 
@@ -154,7 +155,7 @@ app/
   auth/reset-password/page.tsx — sets a new password after a recovery-link redirect
   dashboard/
     layout.tsx                 — wraps dashboard pages in AppShell
-    page.tsx                   — shows dashboard (list + New Show modal); onboarding fallback if no org
+    page.tsx                   — the shows list (masthead band + open table); onboarding fallback if no org
     directory/page.tsx         — Crew Directory list
     directory/[crewId]/page.tsx — Edit Crew Member
     team/page.tsx              — org member list (admin)
@@ -180,8 +181,7 @@ components/
   AppShell.tsx                 — responsive top-nav (>=1024px) / fixed bottom tab-bar (<1024px)
   Logo.tsx                      — the real CrewTracker mark (see Design system above); never render it bare
   ThemeScript.tsx               — inline pre-paint script, applies saved light/dark theme with no flash
-  ui/                           — Signal primitives: Button, Card, Chip, Toggle, ThemeToggle, Dropdown, AccountMenu
-  NewShowModal.tsx              — create show: rooms field, timezone, payroll preset; auto-generates work_days
+  ui/                           — Showbill primitives: Button, Chip, Toggle, Select, NumberedHead, ThemeToggle, AccountMenu, legacy Card
   AddRoomModal.tsx               — add room to a work day (optionally all remaining days); blocks duplicate room names on the same day
   RoomActionsMenu.tsx            — rename/delete a room, plus an "Edit crew" panel (per-crew remove, role dropdown, day-rate edit)
   StaffRoomModal.tsx             — bulk staff crew into a room ("apply to all remaining days" defaults checked); role dropdown from av_roles, rate picker
@@ -238,7 +238,8 @@ scripts/
                        0013 scheduler_id/call_approved_at · 0014 booking_invites
                        0015 work_days.day_type + its UPDATE grant AND policy (both halves or the
                        silent-success bug returns) · 0016 eighth day type (show_load_out)
-                       ALL APPLIED TO DEV ONLY — production is at 0010 and has none of them.
+                       Applied to BOTH databases — production caught up from 0010 to 0016
+                       during the 2026-08-06 cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
@@ -295,8 +296,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 - **Per-organization branding of outward-facing email and pages (white-label).** Raised by Dan 2026-07-28 after seeing the handoff and crew-request emails: a production company sending a booking request to its own crew will want it to look like *their* company, not CrewTracker. Affects every outward surface — `lib/inviteEmail.ts`, `lib/callHandoffEmail.ts`, `lib/bookingEmail.ts`, the Final Report PDF, and the public `/book/[token]` page. Deferred, not designed. Two things make it more than a logo swap: the sender domain (Resend needs a verified domain per sender, so `noreply@contact.crewtracker.app` cannot simply become the customer's address without them proving ownership), and the fact that a crew member working for three companies should see three different-looking asks. Build the surfaces so the org name and mark are already data rather than constants, and this stays a change of values rather than a rewrite.
 
-- **The admin screens still use cards** (Team, Edit Crew, Edit Show) — the last of the card retirement (see Design system). Reports was converted 2026-07-28.
-- **Tracker leftovers** — the per-crew card wrapper on mobile. The **room** wrapper is no longer a leftover: as of 2026-07-29 desktop boxes each room too (`rounded-card border border-line bg-surface` on the room block in `shows/[id]/page.tsx`), which is what mobile had been doing all along — desktop was the half that disagreed. Deliberately no `overflow-hidden` on that box, because `RoomActionsMenu` opens a dropdown out of it. Also still open: booking status is not shown *beside the role* on a crew row. The column is now fetched (`booking_status` is in `TIMECARD_SELECT` as of 2026-08-02), so this is just display work — reuse the chip renderer in `CrewCallModal.tsx` rather than writing a second label/tone mapping.
+- ~~The admin screens still use cards.~~ **DONE 2026-08-06** — Team, Edit Crew, Edit Show and the team member editor all went Open Paper; see the Showbill build status above. `Card` survives only in the no-org onboarding splashes, the public `/book/[token]` page, `ShowAccessEditor`, and superadmin.
+- **Booking status is not shown beside the role on a tracker crew row.** The column is fetched (`booking_status` is in `TIMECARD_SELECT` as of 2026-08-02), so this is pure display work — reuse the chip renderer in `CrewCallModal.tsx` rather than writing a second label/tone mapping.
 
 - **Declined bookings are filtered on read, in one place.** A declined person keeps their `timecards` row on purpose (migration 0012: it records that we asked and they said no) and does not hold their position. Nothing taught the *read* side that, so until 2026-08-02 a decliner rendered as ordinary staffed crew on the tracker, in reports, and in the emailed Final Report — while the same position also showed as Open. `lib/timecardFields.ts` now owns the rule via `fetchLiveTimecards()` and `liveBookings()`, applied in SQL (`.neq`) so a caller who forgets to select the column can't silently compare `undefined`. **Some queries must still see declined rows** and say so in a comment: `lib/crew.ts` (a write that nulls the FK before delete), the duplicate-staffing guards in `StaffRoomModal`/`CopyCrewButton` (`timecards_room_crew_uniq` has no `booking_status` predicate, so a declined row still occupies the slot), the booking API routes that set the status, and `lib/bookingInvite.ts` (the page a person declines *on*). `lib/payroll.ts` must never read `booking_status` — filter the input set, never the calculator.
 - **Historical shows have no positions**, so the shows list reports them as booked-without-positions. Whether to backfill positions from existing timecards is an open data decision, not a display one.
@@ -311,7 +312,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 ### Already built — do not rebuild these
 
-- **Scheduling (2026-07-28).** The whole workflow, on branch `scheduling` and **not yet merged to main — none of it is in production**:
+- **Scheduling (2026-07-28; in production since the 2026-08-06 cutover).** The whole workflow:
   - `/dashboard/schedule` — company-wide calendar, rooms×days grid on desktop, agenda on mobile. `lib/schedule.ts` holds the cross-show query.
   - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
   - **Handoff to a scheduler** — `shows.scheduler_id` / `call_approved_at`, approved from the show page, emails the scheduler. Requires at least one position.
@@ -329,29 +330,37 @@ This list drifted badly once and sent a session off to re-implement finished wor
 - **Named payroll presets, Continuous Time, Pay As Half Day UI, room rename/delete, per-crew removal, show archiving, batch travel-day toggle, reset punches, Copy Crew, Add Day from the tracker** — all shipped.
 - The whole Settings page: 24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, AV Roles editor, payroll presets, Final Report recipients.
 
-## Shipping `scheduling` to production — the gated cutover (NOT DONE YET)
+## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
 
-The entire scheduling feature, the design work, and Showbill live on the unmerged
-`scheduling` branch. Production's database is at migration 0010. When the day comes, this is
-the procedure, **in this order, as its own focused session** — each step exists because of a
-specific failure mode:
+**The 2026-08-06 cutover shipped everything**: migrations 0011–0016 applied to production
+(verified: all 161 existing timecards backfilled to `booking_status='confirmed'`, zero nulls;
+day_type column, crew_call_positions and booking_invites present; 16 rows in
+schema_migrations), grants.sql regenerated from production — which closed the known drift, it
+now carries booking_invites, crew_call_positions and the 0012/0015 column grants — and
+`scheduling` merged to `main`, deploying the scheduling feature and the full Showbill/Open
+Paper redesign to crewtracker.app. Backup taken first: `backups/crewtracker-2026-08-06*.sql`
+(Dropbox-synced off this machine).
 
-1. **Fresh backup first**: `npm run db:dump`, and keep a copy off this machine (backups/ is
-   gitignored and lives only on this Mac). Last verified backup: 2026-08-03, all row counts
-   confirmed against production.
-2. **`npm run db:migrate -- --status --prod`** to see the pending list (expect 0011–0016), then
-   **`npm run db:migrate -- --prod`**. Note: 0012 performs a real WRITE to existing data — it
-   backfills `booking_status='confirmed'` onto every existing timecard (correct: those people
-   actually worked). Migrations are forward-only; the backup is the undo.
+**The procedure below is reusable for every future migration.** In this order — each step
+exists because of a specific failure mode:
+
+1. **Fresh backup first**: `npm run db:dump`. backups/ is gitignored but Dropbox-syncs.
+2. **`npm run db:migrate -- --status --prod`** to see the pending list, then
+   **`npm run db:migrate -- --prod`**. Write and verify on dev first, always; the branch
+   preview exercises dev, so a feature working on preview is the proof. Migrations are
+   forward-only; the backup is the undo. If a migration writes to existing rows, say so in
+   its header and verify the write with a read-only check afterwards.
 3. **Immediately after: `npm run db:grants`, and commit the regenerated `scripts/sql/grants.sql`.**
-   Order is critical — db:grants reads PRODUCTION, so running it before step 2 writes a
-   grants.sql *missing* 0012's four column grants and 0015's day_type UPDATE grant, silently.
-   The checked-in grants.sql is ALREADY missing 0012's grants for exactly this reason (known
-   drift, documented in 0015's header). Skipping this step means the next database rebuild
-   loses those grants and every booking_status query returns 42501.
-4. **Only then merge `scheduling` → `main`** (this is the step that deploys crewtracker.app)
-   and verify the live site — including one booking-status smoke test, since production will be
-   exercising 0012 for the first time (the preview only ever proved it against dev).
+   Order is critical — db:grants reads PRODUCTION, so running it before step 2 silently writes
+   a grants.sql missing whatever the migration granted. Skipping it means the next database
+   rebuild loses those grants and the affected queries return 42501.
+4. **Only then merge/push to `main`** (the step that deploys crewtracker.app) and verify the
+   live site — including a smoke test of whatever the new migrations enable, since production
+   exercises them for the first time only after this deploy.
+
+**Working rhythm after the cutover**: day-to-day work continues on the `scheduling` branch
+(pushes there build a preview against dev); merging `scheduling` → `main` is the deliberate
+act that ships to customers, and any pending migrations go through the steps above FIRST.
 
 ## Past incidents worth remembering
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
 import Chip from '@/components/ui/Chip'
+import Select from '@/components/ui/Select'
 
 // Approving the crew call and handing the show to a scheduler.
 //
@@ -149,19 +150,16 @@ export default function HandoffToSchedulerButton({
               it&rsquo;s ready to staff.
             </p>
 
-            <select
-              key={members.map(m => m.id).join(',')}
+            <Select
+              ariaLabel="Scheduler"
+              size="sm"
               value={schedulerId}
-              onChange={e => setSchedulerId(e.target.value)}
-              className="w-full rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-            >
-              <option value="" className="bg-surface-2 text-ink">Choose a scheduler…</option>
-              {members.map(m => (
-                <option key={m.id} value={m.id} className="bg-surface-2 text-ink">
-                  {m.name}{m.email ? '' : ' (no email)'}
-                </option>
-              ))}
-            </select>
+              onChange={setSchedulerId}
+              options={[
+                { value: '', label: 'Choose a scheduler…' },
+                ...members.map(m => ({ value: m.id, label: `${m.name}${m.email ? '' : ' (no email)'}` })),
+              ]}
+            />
 
             {error && <p className="mt-3 text-xs text-danger">{error}</p>}
             {warning && <p className="mt-3 text-xs text-ot">{warning}</p>}

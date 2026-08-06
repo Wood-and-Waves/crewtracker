@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
 import Chip from '@/components/ui/Chip'
+import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
 import FillPositionPicker from '@/components/FillPositionPicker'
 import CallLinesEditor, { type CallLine } from '@/components/CallLinesEditor'
@@ -358,17 +359,19 @@ export default function CrewCallModal({
                         </>
                       )}
                       {p.filledBy && p.timecardId && !locked && (
-                        <select
+                        <Select
+                          ariaLabel={`What kind of day this is for ${p.filledBy}`}
+                          size="sm"
+                          className="w-32"
                           value={p.travel}
-                          onChange={e => setTravel(p.timecardId!, e.target.value as any)}
+                          onChange={v => setTravel(p.timecardId!, v as any)}
                           disabled={busy}
-                          aria-label={`What kind of day this is for ${p.filledBy}`}
-                          className="rounded-field border border-line bg-surface-2 px-1.5 py-1 text-[11px] text-ink outline-none focus:border-accent"
-                        >
-                          <option value="work" className="bg-surface-2 text-ink">Work</option>
-                          <option value="travel" className="bg-surface-2 text-ink">Travel</option>
-                          <option value="travel+work" className="bg-surface-2 text-ink">Travel + work</option>
-                        </select>
+                          options={[
+                            { value: 'work', label: 'Work' },
+                            { value: 'travel', label: 'Travel' },
+                            { value: 'travel+work', label: 'Travel + work' },
+                          ]}
+                        />
                       )}
                       {!locked && (
                         <button
