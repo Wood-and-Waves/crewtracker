@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
 
 // Pick a role and a quantity, press Add. That is the whole component.
 //
@@ -36,20 +37,18 @@ export default function RolePicker({
 
   return (
     <div className="flex gap-2">
-      {/* key tied to the options: iPad Safari has a hydration bug that
-          duplicates <option> inside a controlled <select>. */}
-      <select
-        key={roles.join(',')}
+      <Select
+        ariaLabel="Role"
+        size="sm"
+        className="min-w-0 flex-1"
         value={role}
-        onChange={e => setRole(e.target.value)}
+        onChange={setRole}
         disabled={disabled}
-        className="min-w-0 flex-1 rounded-field border border-line bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus:border-accent disabled:opacity-60"
-      >
-        <option value="" className="bg-surface-2 text-ink">Add a role…</option>
-        {roles.map(r => (
-          <option key={r} value={r} className="bg-surface-2 text-ink">{r}</option>
-        ))}
-      </select>
+        options={[
+          { value: '', label: 'Add a role…' },
+          ...roles.map(r => ({ value: r, label: r })),
+        ]}
+      />
       <input
         type="number"
         min={1}

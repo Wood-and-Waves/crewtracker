@@ -46,6 +46,10 @@
   --band: #17181a;
   --band-ink: #f5f4ef;
 
+  /* Hard offset shadow for true overlays (Select panels, menus): a lifted
+     paper slip, crisp edge, no blur — glassy soft shadows are the disease. */
+  --edge-shadow: rgba(23, 24, 26, 0.18);
+
   /* Day-type tints — color as information, muted register.
      Mapping (see lib/dayTypes.ts): show-family days are green
      (show, load_in_show, show_load_out), pure prep is amber
@@ -86,6 +90,7 @@
     --half-day: #a886db;
     --band: #24262c;
     --band-ink: #e8eaee;
+    --edge-shadow: rgba(0, 0, 0, 0.55);
     --day-travel: #7396b8;
     --day-loadin: #d69a45;
     --day-rehearsal: #9c77c9;
@@ -114,6 +119,7 @@
   --half-day: #7d5ba6;
   --band: #17181a;
   --band-ink: #f5f4ef;
+  --edge-shadow: rgba(23, 24, 26, 0.18);
   --day-travel: #5b7a99;
   --day-loadin: #c07e2a;
   --day-rehearsal: #7d5ba6;
@@ -139,6 +145,7 @@
   --half-day: #a886db;
   --band: #24262c;
   --band-ink: #e8eaee;
+  --edge-shadow: rgba(0, 0, 0, 0.55);
   --day-travel: #7396b8;
   --day-loadin: #d69a45;
   --day-rehearsal: #9c77c9;
@@ -177,6 +184,9 @@
   --radius-card: var(--radius);
   --radius-field: var(--radius-sm);
   --radius-pill: var(--radius-pill);
+
+  /* shadow-edge: the hard offset shadow overlays wear. */
+  --shadow-edge: 3px 3px 0 0 var(--edge-shadow);
 
   --font-sans: var(--font-sys);
   --font-display: var(--font-disp);

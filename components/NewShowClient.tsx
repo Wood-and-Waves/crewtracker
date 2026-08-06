@@ -9,6 +9,7 @@ import { pickRulesetValues, type RulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES, DEFAULT_SHOW_TIMEZONE } from '@/lib/timezones'
 import Button from '@/components/ui/Button'
 import NumberedHead from '@/components/ui/NumberedHead'
+import Select from '@/components/ui/Select'
 import { BAND } from '@/lib/panel'
 import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, dayTypeBgClass, type DayType } from '@/lib/dayTypes'
 import { cn } from '@/lib/cn'
@@ -345,30 +346,27 @@ export default function NewShowClient({
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <input type="date" aria-label="Start date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
               <input type="date" aria-label="End date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
-              <select value={timezone} onChange={e => setTimezone(e.target.value)} className={inputCls}>
-                {SHOW_TIMEZONES.map(tz => (
-                  <option key={tz.value} value={tz.value} className="bg-surface-2 text-ink">{tz.label}</option>
-                ))}
-              </select>
+              <Select
+                ariaLabel="Timezone"
+                value={timezone}
+                onChange={setTimezone}
+                options={SHOW_TIMEZONES}
+              />
             </div>
         </div>
       </section>
 
       <section className="mb-9">
         <NumberedHead n="2" title="Payroll Rules" className="mb-4" />
-        <select
-          key={presets.map(p => p.id).join(',')}
+        <Select
+          ariaLabel="Payroll preset"
           value={presetId}
-          onChange={e => setPresetId(e.target.value)}
-          className={inputCls}
-        >
-          <option value="" className="bg-surface-2 text-ink">Custom — start from scratch</option>
-          {presets.map(p => (
-            <option key={p.id} value={p.id} className="bg-surface-2 text-ink">
-              {p.name}{p.is_default ? ' (default)' : ''}
-            </option>
-          ))}
-        </select>
+          onChange={setPresetId}
+          options={[
+            { value: '', label: 'Custom — start from scratch' },
+            ...presets.map(p => ({ value: p.id, label: `${p.name}${p.is_default ? ' (default)' : ''}` })),
+          ]}
+        />
         <p className="mt-2 text-xs text-muted">
           {chosen
             ? summarize(chosen)
@@ -398,27 +396,26 @@ export default function NewShowClient({
                       weekday: 'short', month: 'short', day: 'numeric',
                     })}
                   </span>
-                  <select
-                    aria-label={`Day type for ${date}`}
+                  <Select
+                    ariaLabel={`Day type for ${date}`}
+                    size="sm"
+                    className="w-[190px] shrink-0"
                     value={dayTypes[date] ?? ''}
-                    onChange={e => setDayTypes(prev => {
+                    onChange={v => setDayTypes(prev => {
                       const next = { ...prev }
-                      if (isDayType(e.target.value)) next[date] = e.target.value
+                      if (isDayType(v)) next[date] = v
                       else delete next[date]
                       return next
                     })}
-                    // Not inputCls: that carries w-full, which wins over any
-                    // w-auto here (Tailwind precedence is stylesheet order, not
-                    // the order classes appear in the attribute).
-                    className="w-[190px] shrink-0 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
-                  >
-                    <option value="" className="bg-surface-2 text-ink">—</option>
-                    {DAY_TYPES.map(t => (
-                      <option key={t} value={t} className="bg-surface-2 text-ink">
-                        {DAY_TYPE_LABELS[t]}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: '', label: '—' },
+                      ...DAY_TYPES.map(t => ({
+                        value: t,
+                        label: DAY_TYPE_LABELS[t],
+                        swatchClass: dayTypeBgClass(t),
+                      })),
+                    ]}
+                  />
                 </div>
               </div>
             ))}
