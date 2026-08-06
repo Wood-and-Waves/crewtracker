@@ -15,7 +15,7 @@ import SendHoursButton from '@/components/SendHoursButton'
 import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
 import Chip from '@/components/ui/Chip'
 import SectionHead from '@/components/ui/SectionHead'
-import { PANEL, PANEL_X } from '@/lib/panel'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
@@ -40,13 +40,11 @@ const CELL_LABEL = 'col-start-1 row-start-1 min-w-0'
 const CELL_BREAKDOWN = 'col-start-1 row-start-2 min-w-0 lg:col-start-2 lg:row-start-1'
 const CELL_HOURS = 'col-start-2 row-start-1 text-right lg:col-start-3'
 
-// Each repeating unit — a work day in By Day, a person in By Crew — is its own
-// bordered surface, the same as a room on the tracker. What stays outside on the
-// page background is the page header, the Master Summary and the view tabs:
-// summaries and controls sit above the content, the content is what gets edges.
-// PANEL / PANEL_X / SectionHead moved to lib/panel.ts and components/ui/ when
-// New Show needed the same look — see the header of lib/panel.ts for why the
-// inset belongs on the bands rather than on the panel.
+// Open Paper: each repeating unit — a work day in By Day, a person in By Crew —
+// is a masthead BAND closing with a 3px ink rule, the same treatment as a room
+// on the tracker. The Master Summary and the view tabs stay above the content
+// they govern. The horizontal inset (px-4) sits on the rows inside a unit,
+// never on a wrapper, so rules run edge to edge.
 
 // Column headers for the ruled table. Desktop only: at 375px the rows restack
 // to two columns, and headers over a restacked layout label the wrong things.
@@ -307,7 +305,7 @@ export default async function ShowReportPage({
       <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{show.name} — Report</h1>
+          <h1 className="font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">{show.name} — Report</h1>
           {/* Date range, matching iOS's "Show Info" section. Date-only columns
               need the T00:00:00 suffix or they render a day early. */}
           <p className="text-sm text-muted mt-1">
@@ -445,18 +443,20 @@ export default async function ShowReportPage({
             if (dayTimecards.length === 0) return null
 
             return (
-              <section key={wd.id} className={PANEL}>
-                <SectionHead
-                  title={dayLabel(wd.date)}
-                  note={`${dayTimecards.length} crew`}
-                  className={cn(PANEL_X, 'pt-3')}
-                />
-                <ColumnHeads label="Crew" className={PANEL_X} />
+              <section key={wd.id}>
+                <div className={cn(BAND, 'flex flex-wrap items-baseline justify-between gap-x-3 px-4 py-2')}>
+                  <h2 className="font-display text-base font-bold uppercase tracking-wide">{dayLabel(wd.date)}</h2>
+                  <span className="font-mono text-[10.5px] font-semibold uppercase tracking-wide text-band-ink/70">
+                    {dayTimecards.length} crew
+                  </span>
+                </div>
+                <ColumnHeads label="Crew" className="px-4" />
 
+                <div className={RULE_MAJOR}>
                 {dayTimecards.map(tc => {
                   if (tc.is_travel_day) {
                     return (
-                      <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                      <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
                         <div className={CELL_LABEL}>
                           <p className="truncate text-sm text-ink">{tc.crew_member_name}</p>
                           <p className="truncate text-xs text-muted">{tc.role}</p>
@@ -472,7 +472,7 @@ export default async function ShowReportPage({
                   }
                   const b = breakdownString(tc)
                   return (
-                    <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                    <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
                       <div className={cn(CELL_LABEL, 'flex items-center gap-1.5')}>
                         <div className="min-w-0">
                           <p className="truncate text-sm text-ink">{tc.crew_member_name}</p>
@@ -497,6 +497,7 @@ export default async function ShowReportPage({
                     </div>
                   )
                 })}
+                </div>
               </section>
             )
           })}
@@ -529,11 +530,11 @@ export default async function ShowReportPage({
               return (
                 // Keyed on name AND role — the grouping is by `name|role`, so one
                 // person billed in two roles would otherwise collide.
-                <section key={`${crew.name}|${crew.role}`} className={PANEL}>
-                  <div className={cn('flex items-start justify-between gap-3 border-b border-line pt-3 pb-2', PANEL_X)}>
+                <section key={`${crew.name}|${crew.role}`}>
+                  <div className={cn(BAND, 'flex items-center justify-between gap-3 px-4 py-2')}>
                     <div className="min-w-0">
-                      <h2 className="truncate text-base font-bold text-ink">{crew.name}</h2>
-                      <p className="truncate text-xs text-muted">{crew.role}</p>
+                      <h2 className="truncate font-display text-base font-bold uppercase tracking-wide">{crew.name}</h2>
+                      <p className="truncate text-xs text-band-ink/70">{crew.role}</p>
                     </div>
                     {user.can('can_send_reports') && (() => {
                       const ts = timesheetFor(crew)
@@ -548,13 +549,12 @@ export default async function ShowReportPage({
                     })()}
                   </div>
 
-                  <ColumnHeads label="Day" className={PANEL_X} />
+                  <ColumnHeads label="Day" className="px-4" />
 
-                  {/* Rows are direct children of the panel, not wrapped in a
-                      div: `last:border-b-0` on a row must NOT fire here, because
-                      the totals strip follows and the last day still needs a
-                      rule separating it from the totals. Unwrapped, the totals
-                      strip is the real last child, so no row matches. */}
+                  {/* Rows in their own container closed by the 3px rule, so the
+                      totals strip sits after the table closes — the shape of a
+                      printed invoice: table, rule, totals. */}
+                  <div className={RULE_MAJOR}>
                   {crew.entries
                       .slice()
                       .sort((a: any, b: any) => {
@@ -576,7 +576,7 @@ export default async function ShowReportPage({
 
                         if (tc.is_travel_day) {
                           return (
-                            <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                            <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
                               <div className={CELL_LABEL}>
                                 <span className="truncate text-sm text-ink">{wd ? dayLabel(wd.date) : ''}</span>
                               </div>
@@ -593,7 +593,7 @@ export default async function ShowReportPage({
                         crewTotal += b.dayTotal
 
                         return (
-                          <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line py-3 last:border-b-0', PANEL_X, REPORT_COLS)}>
+                          <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
                             <div className={cn(CELL_LABEL, 'flex items-center gap-1')}>
                               <span className="truncate text-sm text-ink">{wd ? dayLabel(wd.date) : ''}</span>
                               {b.shortTurn && <span className="text-xs text-ot">⚠️</span>}
@@ -612,13 +612,13 @@ export default async function ShowReportPage({
                           </div>
                         )
                       })}
+                  </div>
 
-                  {/* Totals as an inline strip on a rule, the same shape as the
-                      Master Summary above — every total on this page reads the
-                      same way rather than each block inventing its own.
-                      No bottom rule: this closes the panel, and a hairline one
-                      pixel above the panel's own border reads as a double line. */}
-                  <div className={cn('flex flex-wrap items-center gap-x-8 gap-y-2 py-3', PANEL_X)}>
+                  {/* Totals as an inline strip after the closing rule, the same
+                      shape as the Master Summary above — every total on this
+                      page reads the same way rather than each block inventing
+                      its own. */}
+                  <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Total show hours</p>
                       <p className="text-base font-bold tabular-nums text-ink">{fmt(crewTotal)}</p>
