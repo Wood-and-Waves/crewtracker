@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/cn'
 import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
 
 type CrewMember = { id: string; full_name: string }
 type RateCard = { crew_member_id: string; role: string; day_rate: number }
@@ -460,20 +461,18 @@ export default function StaffRoomModal({
                           </div>
                         )}
                         <div className="flex gap-2">
-                          <select
-                            key={roleOptions.join(',')}
+                          <Select
+                            ariaLabel={`Role for ${member.full_name}`}
+                            size="sm"
+                            className="min-w-0 flex-1"
                             value={sel.other ? OTHER : sel.role}
-                            onChange={e => chooseRole(member.id, e.target.value)}
-                            className={`${inputCls} flex-1 text-xs`}
-                          >
-                            {!sel.role && !sel.other && (
-                              <option value="" className="bg-surface-2 text-ink">Select a role…</option>
-                            )}
-                            {roleOptions.map(r => (
-                              <option key={r} value={r} className="bg-surface-2 text-ink">{r}</option>
-                            ))}
-                            <option value={OTHER} className="bg-surface-2 text-ink">Other…</option>
-                          </select>
+                            onChange={v => chooseRole(member.id, v)}
+                            options={[
+                              ...(!sel.role && !sel.other ? [{ value: '', label: 'Select a role…' }] : []),
+                              ...roleOptions.map(r => ({ value: r, label: r })),
+                              { value: OTHER, label: 'Other…' },
+                            ]}
+                          />
                           {/* Hidden entirely without can_edit_pay_rates — the
                               database drops any rate such a caller sends, so the
                               field would do nothing. Staffing still works; the

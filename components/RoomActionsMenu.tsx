@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
 import CrewCallModal from '@/components/CrewCallModal'
+import { cn } from '@/lib/cn'
 
 type RoomCrew = { id: string; crewMemberId: string | null; name: string; role: string; dayRate: number }
 
@@ -16,6 +18,7 @@ export default function RoomActionsMenu({
   canViewRates = false,
   canEditRates = false,
   locked = false,
+  onBand = false,
 }: {
   roomId: string
   roomName: string
@@ -25,6 +28,9 @@ export default function RoomActionsMenu({
   canEditRates?: boolean
   /** Show is finalized: crew edits write timecards, which are refused. */
   locked?: boolean
+  /** Trigger sits on a masthead BAND: swap the muted-on-paper trigger colors
+   *  for band-ink so ⋮ stays visible on the ink strip. */
+  onBand?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -133,14 +139,19 @@ export default function RoomActionsMenu({
       />
       <button
         onClick={() => setMenuOpen(v => !v)}
-        className="rounded-field px-2 py-1 text-muted hover:bg-surface-2 hover:text-ink"
+        className={cn(
+          'rounded-field px-2 py-1',
+          onBand
+            ? 'text-band-ink/70 hover:bg-band-ink/10 hover:text-band-ink'
+            : 'text-muted hover:bg-surface-2 hover:text-ink',
+        )}
         aria-label="Room actions"
       >
         ⋮
       </button>
 
       {menuOpen && (
-        <div className="absolute right-0 z-20 mt-1 w-64 rounded-card bg-surface border border-line p-3 shadow-xl">
+        <div className="absolute right-0 z-20 mt-1 w-64 border-2 border-ink bg-surface p-3 shadow-edge">
           {mode === 'menu' && (
             <div className="flex flex-col gap-1">
               <button
@@ -244,22 +255,21 @@ export default function RoomActionsMenu({
                       </button>
                     </div>
                     <div className="mt-2 flex gap-2">
-                      <select
-                        key={roleOptions.join(',')}
+                      {/* An explicit "No role" option: someone staffed without a
+                          role has role === '', and that real state must stay
+                          visible and selectable rather than silently displaying
+                          the first role in the list. */}
+                      <Select
+                        ariaLabel={`Role for ${tc.name}`}
+                        size="sm"
+                        className="min-w-0 flex-1"
                         value={tc.role}
-                        onChange={e => updateRole(tc, e.target.value)}
-                        className="flex-1 rounded-field bg-surface-3 border border-line px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-                      >
-                        {/* Someone staffed without a role has role === '', which
-                            matches no <option> — so the browser displayed the
-                            first one instead and a blank role read as
-                            "Production Manager". An explicit empty option makes
-                            the real state visible and selectable. */}
-                        {!tc.role && <option value="" className="bg-surface-2 text-ink">No role</option>}
-                        {roleOptions.map(r => (
-                          <option key={r} value={r} className="bg-surface-2 text-ink">{r}</option>
-                        ))}
-                      </select>
+                        onChange={v => updateRole(tc, v)}
+                        options={[
+                          ...(tc.role ? [] : [{ value: '', label: 'No role' }]),
+                          ...roleOptions.map(r => ({ value: r, label: r })),
+                        ]}
+                      />
                       {canViewRates && (
                         canEditRates ? (
                           <input

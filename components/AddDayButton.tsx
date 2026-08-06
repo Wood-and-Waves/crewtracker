@@ -74,7 +74,7 @@ export default function AddDayButton({
           disabled={busy}
           aria-label="Add another day"
           title="Add another day to this show"
-          className="rounded-full bg-accent text-accent-ink h-9 w-9 flex items-center justify-center shrink-0 text-lg leading-none disabled:opacity-50"
+          className="rounded-field bg-accent text-accent-ink h-9 w-9 flex items-center justify-center shrink-0 text-lg leading-none disabled:opacity-50"
         >
           +
         </button>

@@ -164,15 +164,18 @@ export default function BatchPunchBar({
               disabled={busy || locked}
               title={locked ? 'Times are locked — the final report has been sent.' : undefined}
               className={cn(
-                'w-full rounded-[5px] border px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50',
-                // `active` marks the punch this bar would apply next, in accent.
-                // On a locked show that highlight has to go: opacity-50 alone
+                'w-full rounded-field border px-3 py-2 text-xs uppercase transition-colors disabled:opacity-50',
+                // `active` marks the punch this bar would apply next. The room's
+                // lit key is solid accent (TimecardRow); the batch echo of it is
+                // the ghost register — accent ink and edge, wash fill — so the
+                // one-person action and the everyone action never look identical.
+                // On a locked show the highlight has to go: opacity-50 alone
                 // leaves an accent button still reading as the thing to press,
                 // which is precisely the "looks live, then fails" behaviour this
                 // work exists to remove.
                 active && !locked
-                  ? 'bg-accent/30 border-transparent text-accent font-semibold'
-                  : 'bg-surface-3 border-line text-muted',
+                  ? 'border-2 border-accent bg-accent-wash font-bold text-accent'
+                  : 'border-line bg-surface-2 font-medium text-muted',
                 !locked && 'hover:border-accent hover:text-accent',
               )}
             >

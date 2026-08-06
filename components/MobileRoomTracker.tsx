@@ -10,6 +10,7 @@ import RoomActionsMenu from '@/components/RoomActionsMenu'
 import CopyCrewButton from '@/components/CopyCrewButton'
 import DayTypePicker from '@/components/DayTypePicker'
 import { visiblePunchTypes } from '@/lib/punches'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 
 type CopySource = { roomId: string; count: number; dayNumber: number } | null
@@ -162,7 +163,7 @@ export default function MobileRoomTracker({
         <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
         <div className="flex items-start justify-between gap-3 mt-2">
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold tracking-tight truncate">{showName}</h1>
+            <h1 className="truncate font-display text-xl font-bold uppercase tracking-wide">{showName}</h1>
             {showMeta && <p className="text-sm text-muted truncate">{showMeta}</p>}
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -208,7 +209,7 @@ export default function MobileRoomTracker({
             href={prevDayNumber ? `?day=${prevDayNumber}` : '#'}
             aria-label="Previous day"
             className={cn(
-              'rounded-full h-9 w-9 flex items-center justify-center shrink-0',
+              'rounded-field h-9 w-9 flex items-center justify-center shrink-0',
               !prevDayNumber ? 'pointer-events-none bg-surface-2 text-muted opacity-30' : 'bg-accent text-accent-ink',
             )}
           >
@@ -223,13 +224,13 @@ export default function MobileRoomTracker({
             <Link
               href={`?day=${nextDayNumber}`}
               aria-label="Next day"
-              className="rounded-full h-9 w-9 flex items-center justify-center shrink-0 bg-accent text-accent-ink"
+              className="rounded-field h-9 w-9 flex items-center justify-center shrink-0 bg-accent text-accent-ink"
             >
               ›
             </Link>
           ) : (
             addDayControl ?? (
-              <span className="rounded-full h-9 w-9 flex items-center justify-center shrink-0 bg-surface-2 text-muted opacity-30">›</span>
+              <span className="rounded-field h-9 w-9 flex items-center justify-center shrink-0 bg-surface-2 text-muted opacity-30">›</span>
             )
           )}
         </div>
@@ -268,25 +269,27 @@ export default function MobileRoomTracker({
       </div>
 
       {showAll ? (
-        <div className="space-y-4">
+        <div className="space-y-8">
+          {/* Page-level control above the content it governs — no box. */}
           {dayCrew.length > 0 && (
-            <div className="rounded-card border border-line bg-surface">
-              <BatchPunchBar timecards={dayCrew} dayDate={dayDate} timezone={timezone} locked={locked} />
-            </div>
+            <BatchPunchBar timecards={dayCrew} dayDate={dayDate} timezone={timezone} locked={locked} />
           )}
           {rooms.map(room => {
             const crew = roomCrew[room.id] || []
             return (
-              <div key={room.id} className="rounded-card border border-line bg-surface">
-                <div className="flex items-center justify-between p-4 border-b border-line">
-                  <h2 className="text-lg font-bold text-ink">{room.name}</h2>
-                  <RoomActionsMenu locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+              // Open Paper: the room boundary is a masthead BAND closing with a
+              // 3px ink rule, exactly matching the desktop treatment — the two
+              // halves of this screen must never disagree again.
+              <section key={room.id}>
+                <div className={cn(BAND, 'flex items-center justify-between px-4 py-2')}>
+                  <h2 className="font-display text-lg font-bold uppercase tracking-wide">{room.name}</h2>
+                  <RoomActionsMenu onBand locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
                 </div>
-                <div>
+                <div className={RULE_MAJOR}>
                   {crew.length === 0 && emptyRoster(room.id)}
                   {rowsFor(crew)}
                 </div>
-              </div>
+              </section>
             )
           })}
         </div>
@@ -294,17 +297,17 @@ export default function MobileRoomTracker({
         (() => {
           const crew = roomCrew[activeRoom!.id] || []
           return (
-            <div className="rounded-card border border-line bg-surface">
-              <div className="flex items-center justify-between p-4 border-b border-line">
-                <h2 className="text-lg font-bold text-ink">{activeRoom!.name}</h2>
-                <RoomActionsMenu locked={locked} roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+            <section>
+              <div className={cn(BAND, 'flex items-center justify-between px-4 py-2')}>
+                <h2 className="font-display text-lg font-bold uppercase tracking-wide">{activeRoom!.name}</h2>
+                <RoomActionsMenu onBand locked={locked} roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
               {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} locked={locked} />}
-              <div>
+              <div className={RULE_MAJOR}>
                 {crew.length === 0 && emptyRoster(activeRoom!.id)}
                 {rowsFor(crew)}
               </div>
-            </div>
+            </section>
           )
         })()
       )}

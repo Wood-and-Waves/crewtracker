@@ -20,6 +20,7 @@ import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll
 import { punchGridCols } from '@/lib/trackerLayout'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 
 export default async function ShowDetailPage({
@@ -289,7 +290,7 @@ export default async function ShowDetailPage({
 
         <div className="mt-2 flex items-start justify-between gap-6">
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-extrabold tracking-tight">{show.name}</h1>
+            <h1 className="truncate font-display text-2xl font-bold uppercase tracking-wide">{show.name}</h1>
             {showMeta && <p className="mt-1 truncate text-sm text-muted">{showMeta}</p>}
           </div>
 
@@ -298,7 +299,7 @@ export default async function ShowDetailPage({
               href={prevDay ? `?day=${prevDay.day_number}` : '#'}
               aria-label="Previous day"
               className={cn(
-                'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2',
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-line bg-surface-2',
                 !prevDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
               )}
             >
@@ -319,7 +320,7 @@ export default async function ShowDetailPage({
               <Link
                 href={`?day=${nextDay.day_number}`}
                 aria-label="Next day"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 hover:border-accent hover:text-accent"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-line bg-surface-2 hover:border-accent hover:text-accent"
               >
                 ›
               </Link>
@@ -330,7 +331,9 @@ export default async function ShowDetailPage({
         </div>
 
         {show.finalized_at && (
-          <div className="mt-3 rounded-field border border-line bg-surface-2 px-3 py-2">
+          // Open Paper: a warning is a rule in the margin, not a box — the
+          // danger-colored 3px left rule is the strongest non-band edge here.
+          <div className="mt-3 border-l-[3px] border-danger py-1 pl-3">
             <p className="text-sm font-semibold text-ink">Times locked</p>
             <p className="mt-1 text-xs text-muted">
               The final report was sent{' '}
@@ -400,7 +403,7 @@ export default async function ShowDetailPage({
           the layout depends on punch state.
           The desktop/mobile distinction still holds — this is the ruled grid,
           mobile renders labelled cards. */}
-      <div className="hidden lg:grid min-w-0 grid-cols-1 gap-4">
+      <div className="hidden lg:grid min-w-0 grid-cols-1 gap-9">
         {/* Punch everyone on the day at once, across every room — the same thing
             mobile offers in its "All Rooms" view. Only worth showing with more
             than one room: with a single room it would duplicate that room's own
@@ -427,18 +430,17 @@ export default async function ShowDetailPage({
         {roomsList.map(room => {
           const crew = roomTimecards[room.id] || []
           return (
-            // Each room is its own bordered surface, matching what
-            // MobileRoomTracker already did — the two halves of this screen
-            // disagreed, and desktop was the odd one out. A room is a real unit
-            // (its own name, ⋮ menu and batch bar), and punching someone into
-            // the wrong room is a live error, so the boundary is worth an edge.
-            // No `overflow-hidden` to clip the corners the way the shows table
-            // does: RoomActionsMenu opens a dropdown out of this box, and
-            // clipping would cut it off.
-            <div key={room.id} className="min-w-0 rounded-card border border-line bg-surface">
-              <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                <h2 className="text-lg font-bold text-ink">{room.name}</h2>
-                <RoomActionsMenu locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+            // Open Paper: the room's boundary is a masthead BAND, not a box —
+            // a room is a real unit (its own name, ⋮ menu and batch bar), and
+            // punching someone into the wrong room is a live error, so it gets
+            // the strongest boundary the system has. The unit closes with a 3px
+            // ink rule; rooms are separated by whitespace and the next band.
+            // No `overflow-hidden` anywhere on this block: RoomActionsMenu
+            // opens a dropdown out of it, and clipping would cut the menu off.
+            <section key={room.id} className="min-w-0">
+              <div className={cn(BAND, 'flex items-center justify-between px-4 py-2')}>
+                <h2 className="font-display text-lg font-bold uppercase tracking-wide">{room.name}</h2>
+                <RoomActionsMenu onBand locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
 
               {crew.length > 0 && (
@@ -457,7 +459,7 @@ export default async function ShowDetailPage({
                   to head; hidden on mobile where TimecardRow renders labeled
                   cards instead. Must stay in sync with TimecardRow's grid. */}
               {crew.length > 0 && (
-                <div className={cn('hidden lg:grid gap-3 px-4 pt-3 pb-1', punchGridCols(dayPunchTypes.length))}>
+                <div className={cn('hidden lg:grid gap-3 border-b border-line px-4 pt-3 pb-1', punchGridCols(dayPunchTypes.length))}>
                   <div className="text-[10px] font-bold uppercase tracking-wide text-muted">Crew</div>
                   {dayPunchTypes.map(type => (
                     <div key={type} className="text-[10px] font-bold uppercase tracking-wide text-muted text-center">
@@ -470,7 +472,9 @@ export default async function ShowDetailPage({
                 </div>
               )}
 
-              <div>
+              {/* The unit closes with a 3px ink rule — the Open Paper edge that
+                  replaced the panel border. */}
+              <div className={RULE_MAJOR}>
                 {crew.length === 0 && (
                   <>
                     <p className="text-sm text-muted p-4 pb-2">No crew staffed yet.</p>
@@ -515,7 +519,7 @@ export default async function ShowDetailPage({
                 ))}
               </div>
 
-              <div className="p-4 pt-3">
+              <div className="pt-3">
                 <StaffRoomModal
                   locked={locked}
                   organizationId={organizationId}
@@ -527,7 +531,7 @@ export default async function ShowDetailPage({
                   canEditRates={canEditRates}
                 />
               </div>
-            </div>
+            </section>
           )
         })}
       </div>

@@ -148,24 +148,33 @@ export default function TimecardRow({
     // Locked wins over chronology: a finalized show refuses every punch write,
     // so offering a live-looking button that fails is worse than showing it off.
     const disabled = locked || isDisabled(type)
+    // ONE solid key per row — the guided next step. Wrap is usually also legal
+    // the moment a shift starts, but two solid keys is a fork, not guidance:
+    // the true next gets the solid accent, any other legal punch waits in the
+    // ghost register.
+    const isNext = !done && !disabled && type === next
+    const isAvailable = !done && !disabled && type !== next
     return (
       <button
         onClick={() => setEditingType(type)}
         disabled={disabled}
         title={locked ? LOCKED_NOTE : undefined}
         className={cn(
-          'rounded-[5px] h-12 px-2 py-1 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
+          'rounded-field h-12 px-2 py-1 font-medium transition-colors text-center tabular-nums whitespace-nowrap',
           'flex flex-col items-center justify-center gap-0.5 lg:gap-0',
           // Mobile keeps every punch as a filled button — Dan rejected
           // collapsing them, and a thumb needs the target. Desktop drops the
-          // chrome: a done punch is just its time, and only the NEXT action
-          // stays a button, which is what puts a crew member on one line.
-          'lg:h-auto lg:rounded-pill lg:px-2 lg:py-1.5',
+          // chrome: a done punch is just its stamped time, and only the NEXT
+          // action stays a button, which is what puts a crew member on one line.
+          'lg:h-auto lg:px-2 lg:py-1.5',
           done && 'bg-surface-2 text-ink hover:opacity-90 lg:bg-transparent lg:text-ink lg:hover:bg-surface-2',
-          // One treatment at both widths. Desktop briefly used solid accent and
-          // it shouted next to the boxless times — the tinted fill mobile
-          // already used reads as "this one" without dominating the row.
-          !done && !disabled && 'bg-accent/25 text-ink font-bold hover:opacity-90 lg:font-semibold',
+          // The lit next key — the Showbill tracker principle: the operator is
+          // guided to the next right step. One solid Crew Blue key per row;
+          // done steps stamp quiet, later steps recede. (An earlier accent
+          // solid was rejected in the enclosure era for shouting inside a boxed
+          // row — on open paper the row is quiet ink and the key IS the point.)
+          isNext && 'bg-accent text-accent-ink font-bold hover:opacity-90',
+          isAvailable && 'border-2 border-accent/45 bg-transparent text-accent font-semibold hover:border-accent',
           disabled && 'bg-surface-3 text-muted cursor-not-allowed lg:bg-transparent',
         )}
       >
@@ -174,19 +183,22 @@ export default function TimecardRow({
             <span className="lg:hidden block text-[10px] uppercase tracking-wide text-muted leading-none">
               {PUNCH_LABELS[type]}
             </span>
-            <span className="block text-xl leading-none font-bold lg:text-xs lg:font-medium lg:leading-normal">
+            <span className="block font-mono text-xl leading-none font-bold lg:text-xs lg:font-medium lg:leading-normal">
               {formatPunchTime(done.punched_at, timezone, use24Hour)}
             </span>
           </>
         ) : (
           <>
-            <span className="block text-lg leading-none font-bold lg:hidden">
+            <span className="block text-lg leading-none font-bold uppercase lg:hidden">
               {PUNCH_LABELS[type]}
             </span>
             {/* An em dash rather than a greyed label: a punch that cannot be
                 taken yet is not an offer, and six dim labels read as six
                 broken buttons. */}
-            <span className="hidden lg:block text-xs font-medium leading-normal">
+            <span className={cn(
+              'hidden lg:block text-xs leading-normal',
+              isNext ? 'font-bold uppercase' : isAvailable ? 'font-semibold uppercase' : 'font-medium',
+            )}>
               {disabled ? '—' : PUNCH_LABELS[type]}
             </span>
           </>

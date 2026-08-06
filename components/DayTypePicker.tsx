@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, type DayType } from '@/lib/dayTypes'
-import { cn } from '@/lib/cn'
+import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, dayTypeBgClass, type DayType } from '@/lib/dayTypes'
+import Select from '@/components/ui/Select'
 
 // What this day of the show is — travel, load-in, rehearsal, show, load-out.
 //
@@ -61,24 +61,21 @@ export default function DayTypePicker({
 
   return (
     <div className={className}>
-      <select
-        aria-label="Day type"
+      <Select
+        ariaLabel="Day type"
+        size="sm"
         value={isDayType(value) ? value : ''}
         disabled={saving}
-        onChange={e => save(e.target.value)}
-        className={cn(
-          'w-full rounded-field border border-line bg-surface-2 px-2 py-1 text-xs text-ink',
-          'outline-none focus:border-accent disabled:opacity-50',
-          error && 'border-danger',
-        )}
-      >
-        <option value="" className="bg-surface-2 text-ink">Set day type…</option>
-        {DAY_TYPES.map(t => (
-          <option key={t} value={t} className="bg-surface-2 text-ink">
-            {DAY_TYPE_LABELS[t]}
-          </option>
-        ))}
-      </select>
+        onChange={save}
+        options={[
+          { value: '', label: 'Set day type…' },
+          ...DAY_TYPES.map(t => ({
+            value: t,
+            label: DAY_TYPE_LABELS[t],
+            swatchClass: dayTypeBgClass(t),
+          })),
+        ]}
+      />
       {error && <p className="mt-1 text-[11px] text-danger">{error}</p>}
     </div>
   )
