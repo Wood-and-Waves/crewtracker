@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
-import Dropdown from '@/components/ui/Dropdown'
+import Select from '@/components/ui/Select'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
+import { cn } from '@/lib/cn'
 import { formatPhone } from '@/lib/phone'
 import { removeCrewMemberKeepHistory } from '@/lib/crew'
 
@@ -57,7 +59,7 @@ function ContactCircle({ href, label, children }: { href: string; label: string;
       href={href}
       aria-label={label}
       onClick={e => e.stopPropagation()}
-      className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-ink transition-opacity hover:opacity-80"
+      className="flex h-9 w-9 items-center justify-center rounded-field bg-accent text-accent-ink transition-opacity hover:opacity-80"
     >
       {children}
     </a>
@@ -259,8 +261,10 @@ export default function CrewDirectoryClient({
 
   return (
     <div className="p-6 md:p-10">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-3xl font-extrabold tracking-tight">Crew Directory</h1>
+      {/* Open Paper masthead: title block as a full-bleed ink band, the
+          screen's actions riding on it. */}
+      <div className={cn(BAND, '-mx-6 mb-6 flex flex-wrap items-center justify-between gap-3 px-6 py-4 md:-mx-10 md:px-10')}>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Crew Directory</h1>
         <div className="flex flex-wrap items-center gap-2">
           {crew.length > 0 && (
             <Button variant="ghost" size="sm" onClick={exportCSV}>Export CSV</Button>
@@ -279,7 +283,9 @@ export default function CrewDirectoryClient({
             placeholder="Search crew by name or role…"
             className={`${inputCls} max-w-sm`}
           />
-          <Dropdown
+          <Select
+            ariaLabel="Sort directory"
+            className="w-48"
             value={sort}
             onChange={v => setSort(v as SortOption)}
             options={[
@@ -297,15 +303,16 @@ export default function CrewDirectoryClient({
         <p className="text-muted">No crew match &ldquo;{query}&rdquo;.</p>
       ) : (
         <>
-          {/* Desktop: dense data table */}
-          <div className="hidden lg:block rounded-card border border-line bg-surface overflow-hidden">
-            <div className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 px-5 py-2.5 border-b border-line text-[10.5px] font-bold uppercase tracking-wide text-muted">
+          {/* Desktop: dense data table, open on the paper — ink header band,
+              hairline rows, 3px close. */}
+          <div className="hidden lg:block">
+            <div className={cn(BAND, 'grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em]')}>
               <div>Name</div><div>Role</div><div>Phone</div><div>Email</div><div className="text-right">Actions</div>
             </div>
             {sorted.map(person => (
               <div
                 key={person.id}
-                className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 items-center px-5 py-3 border-b border-line last:border-b-0 hover:bg-surface-2 cursor-pointer"
+                className="grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 items-center px-5 py-3 border-b border-line last:border-b-[3px] last:border-ink hover:bg-surface-2 cursor-pointer"
                 onClick={() => router.push(`/dashboard/directory/${person.id}`)}
               >
                 <div className="font-semibold text-ink truncate">{formatForDisplay(person.full_name, sort)}</div>
@@ -320,7 +327,7 @@ export default function CrewDirectoryClient({
                     </>
                   )}
                   {person.email && <ContactCircle href={`mailto:${person.email}`} label="Email"><MailIcon /></ContactCircle>}
-                  <button onClick={() => deleteCrew(person.id)} className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-surface-3 hover:text-danger" title="Delete" aria-label="Delete">
+                  <button onClick={() => deleteCrew(person.id)} className="flex h-9 w-9 items-center justify-center rounded-field text-muted hover:bg-surface-3 hover:text-danger" title="Delete" aria-label="Delete">
                     <svg {...svgProps}><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
                   </button>
                 </div>
@@ -328,8 +335,8 @@ export default function CrewDirectoryClient({
             ))}
           </div>
 
-          {/* Portrait iPad / phone: tappable list */}
-          <div className="lg:hidden rounded-card bg-surface border border-line divide-y divide-line">
+          {/* Portrait iPad / phone: tappable list, open on the paper. */}
+          <div className={cn('lg:hidden divide-y divide-line border-t border-line', RULE_MAJOR)}>
             {sorted.map(person => (
               <div
                 key={person.id}
@@ -360,7 +367,7 @@ export default function CrewDirectoryClient({
 
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="text-lg font-bold text-ink mb-4">Add Person</h2>
             <input
               placeholder="Name"
@@ -379,7 +386,7 @@ export default function CrewDirectoryClient({
 
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-card bg-surface border border-line p-6 shadow-xl">
+          <div className="w-full max-w-md border-2 border-ink bg-surface p-6 shadow-edge">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-ink">Import Roster</h2>
               <button onClick={() => { setShowImport(false); setImportStatus('') }} className="text-muted hover:text-ink">Close</button>
