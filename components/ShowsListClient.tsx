@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import Chip from '@/components/ui/Chip'
 import ArchiveShowButton from '@/components/ArchiveShowButton'
-import { BAND, RULE_MAJOR } from '@/lib/panel'
+import { RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import type { ShowStatus } from '@/lib/showStatus'
 
@@ -157,10 +157,9 @@ export default function ShowsListClient({
           if (active) setAsc(v => !v)
           else { setSort(key); setAsc(key === 'name') }
         }}
-        // Lives on the ink header band, so its states speak band-ink.
         className={cn(
           'flex items-center gap-1 text-left font-display text-[11px] font-semibold uppercase tracking-[0.1em] transition-colors',
-          active ? 'text-band-ink' : 'text-band-ink/60 hover:text-band-ink',
+          active ? 'text-ink' : 'text-muted hover:text-ink',
           className,
         )}
       >
@@ -188,10 +187,12 @@ export default function ShowsListClient({
         </p>
       ) : (
         <>
-          {/* Desktop: a real ruled table, open on the paper — a color-blocked
-              ink header strip, hairline rows, and a 3px ink rule to close. */}
+          {/* Desktop: a real ruled table, open on the paper. The column header
+              is a LIGHT strip closed by a 2px ink rule, not a second ink slab —
+              one solid band per screen (the page masthead) is the rule. Two of
+              them stacked made this screen top-heavy (Dan, 2026-08-07). */}
           <div className="hidden lg:block">
-            <div className={cn(BAND, 'grid gap-3 px-5 py-2.5', COLS)}>
+            <div className={cn('grid gap-3 border-b-2 border-ink bg-surface-2 px-5 py-2.5', COLS)}>
               {header('name', 'Show')}
               {header('dates', 'Dates')}
               {header('status', 'Status')}

@@ -19,14 +19,20 @@
    ============================================================ */
 
 :root {
-  /* light — the paper document (flagship) */
-  --bg: #f5f4ef;
-  --surface: #ffffff;
-  --surface-2: #f0eee7;
-  --surface-3: #e5e2d9;
-  --ink: #17181a;
-  --muted: #6b6a64;
-  --line: #dad7ce;
+  /* light — the paper document (flagship).
+     Warmed 2026-08-07 at Dan's request: the first cut was a cool off-white, so
+     the ink masthead landed on it like black on grey. Real paper is warmer than
+     that, and warming the ground takes the edge off the contrast without
+     softening the ink. Every light surface moved together — a warm ground under
+     cool fields would just relocate the problem. */
+  --bg: #f7f4ea;
+  --surface: #fffdf7;
+  --surface-2: #f1ece0;
+  --surface-3: #e7e0d0;
+  /* Warm near-black rather than the old blue-black: ink ON this paper. */
+  --ink: #201d18;
+  --muted: #6d675c;
+  --line: #ded7c7;
   --accent: #2a52a8;          /* Crew Blue */
   --accent-ink: #ffffff;
   --accent-wash: rgba(42, 82, 168, 0.12);
@@ -43,12 +49,12 @@
      lifted strip under a bright rule — same skeleton, printed on black. The
      band always carries a 2px border-ink bottom rule; on light it vanishes
      into the slab, on dark it is the lift. */
-  --band: #17181a;
-  --band-ink: #f5f4ef;
+  --band: #201d18;
+  --band-ink: #f7f4ea;
 
   /* Hard offset shadow for true overlays (Select panels, menus): a lifted
      paper slip, crisp edge, no blur — glassy soft shadows are the disease. */
-  --edge-shadow: rgba(23, 24, 26, 0.18);
+  --edge-shadow: rgba(32, 29, 24, 0.18);
 
   /* Day-type tints — color as information. Same weight class as the accent:
      Dan's 2026-08-06 note was that the first, dustier register read washed-out
@@ -101,13 +107,15 @@
 
 /* explicit overrides win over the media query in both directions */
 :root[data-theme="light"] {
-  --bg: #f5f4ef;
-  --surface: #ffffff;
-  --surface-2: #f0eee7;
-  --surface-3: #e5e2d9;
-  --ink: #17181a;
-  --muted: #6b6a64;
-  --line: #dad7ce;
+  /* MUST stay identical to the :root defaults above — this block only exists to
+     beat the prefers-color-scheme media query when someone picks light by hand. */
+  --bg: #f7f4ea;
+  --surface: #fffdf7;
+  --surface-2: #f1ece0;
+  --surface-3: #e7e0d0;
+  --ink: #201d18;
+  --muted: #6d675c;
+  --line: #ded7c7;
   --accent: #2a52a8;
   --accent-ink: #ffffff;
   --accent-wash: rgba(42, 82, 168, 0.12);
@@ -118,9 +126,9 @@
   --good: #2e8757;
   --danger: #c63b30;
   --half-day: #7d5ba6;
-  --band: #17181a;
-  --band-ink: #f5f4ef;
-  --edge-shadow: rgba(23, 24, 26, 0.18);
+  --band: #201d18;
+  --band-ink: #f7f4ea;
+  --edge-shadow: rgba(32, 29, 24, 0.18);
   --day-travel: #3073a6;
   --day-loadin: #c67110;
   --day-rehearsal: #6e3cb1;

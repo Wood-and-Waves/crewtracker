@@ -43,7 +43,9 @@ export default function TeamListClient({
         <>
           {/* Desktop: data table, open on the paper. */}
           <div className="hidden lg:block">
-            <div className={cn(BAND, 'grid grid-cols-[1.6fr_1.8fr_1fr] gap-3 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em]')}>
+            {/* Light header strip closed by a 2px ink rule — one solid band per
+                screen (the masthead above). See ShowsListClient. */}
+            <div className={cn('grid grid-cols-[1.6fr_1.8fr_1fr] gap-3 border-b-2 border-ink bg-surface-2 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-ink')}>
               <div>Name</div><div>Email</div><div>Role</div>
             </div>
             {members.map(m => (

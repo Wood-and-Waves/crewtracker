@@ -294,7 +294,9 @@ export default function CrewDirectoryClient({
           {/* Desktop: dense data table, open on the paper — ink header band,
               hairline rows, 3px close. */}
           <div className="hidden lg:block">
-            <div className={cn(BAND, 'grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em]')}>
+            {/* Light header strip closed by a 2px ink rule — one solid band per
+                screen (the masthead above). See ShowsListClient. */}
+            <div className={cn('grid grid-cols-[1.6fr_1fr_1.1fr_1.6fr_172px] gap-3 border-b-2 border-ink bg-surface-2 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-ink')}>
               <div>Name</div><div>Role</div><div>Phone</div><div>Email</div><div className="text-right">Actions</div>
             </div>
             {sorted.map(person => (
