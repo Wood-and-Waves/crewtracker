@@ -1,7 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
 import OpenPositionRow from '@/components/OpenPositionRow'
-import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 import { getCurrentUser } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -14,10 +12,10 @@ import CopyCrewButton from '@/components/CopyCrewButton'
 import AddDayButton from '@/components/AddDayButton'
 import UnlockShowButton from '@/components/UnlockShowButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
-import DayTypePicker from '@/components/DayTypePicker'
 import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
 import { punchGridCols } from '@/lib/trackerLayout'
+import { dayTypeBgClass, dayTypeLabel } from '@/lib/dayTypes'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
@@ -48,26 +46,9 @@ export default async function ShowDetailPage({
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
   ])
 
-  // The crew call across the whole show, and who it was handed to. Counted
-  // rather than fetched — the sidebar only needs to know whether there is
-  // anything to hand over.
-  const [{ data: positionRows }, { data: scheduler }] = await Promise.all([
-    supabase
-      .from('crew_call_positions')
-      .select('id, rooms!inner(work_days!inner(date, show_id))')
-      .eq('rooms.work_days.show_id', id),
-    show?.scheduler_id
-      ? supabase.from('profiles').select('full_name, email').eq('id', show.scheduler_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ])
-
-  // Per-day, not per-row: a five-day show needing twelve people has sixty
-  // position rows, and "60" is not a number anybody crews against.
-  const callSummary = summarizeCall((positionRows ?? []).map((p: any) => {
-    const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
-    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-    return { date: wd?.date }
-  }).filter((r: any) => r.date))
+  // The handoff-to-scheduler control and its position/scheduler queries used to
+  // live here. Moved to Edit Show (2026-08-06): approving a call is an admin act
+  // on the whole show, and it had no business sitting beside the punch controls.
   if (!user) redirect('/login')
 
   if (!show) notFound()
@@ -310,11 +291,16 @@ export default async function ShowDetailPage({
                 Day {activeDay.day_number} of {workDays.length}
               </p>
               <p className="text-base font-bold tabular-nums text-ink">{dateLabel}</p>
-              <DayTypePicker
-                workDayId={activeDay.id}
-                value={activeDay.day_type ?? null}
-                className="mt-1"
-              />
+              {/* Read-only. The picker moved to Edit Show — on the tracker a
+                  dropdown under the date read as a question the operator had to
+                  answer before punching anybody in. Nothing shows when no type
+                  is set, rather than a "Set day type…" prompt. */}
+              {dayTypeLabel(activeDay.day_type) && (
+                <p className="mt-1 flex items-center justify-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-muted">
+                  <span className={cn('h-2 w-2 shrink-0', dayTypeBgClass(activeDay.day_type) ?? 'bg-line')} />
+                  {dayTypeLabel(activeDay.day_type)}
+                </p>
+              )}
             </div>
             {nextDay ? (
               <Link
@@ -374,14 +360,6 @@ export default async function ShowDetailPage({
               showId={id}
               currentWorkDayId={activeDay.id}
               remainingWorkDayIds={remainingWorkDayIds}
-            />
-            <HandoffToSchedulerButton
-              showId={id}
-              approvedAt={show.call_approved_at ?? null}
-              schedulerName={(scheduler as any)?.full_name || (scheduler as any)?.email || null}
-              positionCount={callSummary.total}
-              callSize={describeCallSize(callSummary)}
-              compact
             />
             <Link href={`/dashboard/shows/${id}/edit`}>
               <Button variant="ghost" size="sm">Edit Show</Button>

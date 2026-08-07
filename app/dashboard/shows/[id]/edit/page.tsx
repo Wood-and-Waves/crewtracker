@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
 export default async function EditShowPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -61,6 +62,27 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   }
   const crewRateEntries = Object.values(seen).sort((a: any, b: any) => a.name.localeCompare(b.name))
 
+  // Handing off to a scheduler. Moved here from the tracker header (2026-08-06)
+  // — it is an admin act on the whole show, not something you do while punching
+  // people in. Counted per DAY, never per row: a five-day show needing twelve
+  // people has sixty position rows, and "60" is not a number anybody crews
+  // against.
+  const [{ data: positionRows }, { data: scheduler }] = await Promise.all([
+    supabase
+      .from('crew_call_positions')
+      .select('id, rooms!inner(work_days!inner(date, show_id))')
+      .eq('rooms.work_days.show_id', id),
+    show.scheduler_id
+      ? supabase.from('profiles').select('full_name, email').eq('id', show.scheduler_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+
+  const callSummary = summarizeCall((positionRows ?? []).map((p: any) => {
+    const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
+    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+    return { date: wd?.date }
+  }).filter((r: any) => r.date))
+
   // Show Access — only fetched for admins, since only they can change it and
   // the member list is otherwise none of a PM's business.
   const canManageUsers = user.can('can_manage_users')
@@ -91,6 +113,11 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       canManageRulesets={user.can('can_manage_rulesets')}
       canViewRates={canViewRates}
       canEditRates={user.can('can_edit_pay_rates')}
+      scheduling={{
+        schedulerName: (scheduler as any)?.full_name || (scheduler as any)?.email || null,
+        positionCount: callSummary.total,
+        callSize: describeCallSize(callSummary),
+      }}
     >
       {canManageUsers && (
         <div className="mb-4">

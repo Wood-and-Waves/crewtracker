@@ -8,8 +8,8 @@ import TimecardRow from '@/components/TimecardRow'
 import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
 import CopyCrewButton from '@/components/CopyCrewButton'
-import DayTypePicker from '@/components/DayTypePicker'
 import { visiblePunchTypes } from '@/lib/punches'
+import { dayTypeBgClass, dayTypeLabel } from '@/lib/dayTypes'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 
@@ -218,7 +218,13 @@ export default function MobileRoomTracker({
           <div className="min-w-0 flex-1 text-center">
             <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {dayNumber} of {totalDays}</p>
             <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
-            <DayTypePicker workDayId={workDayId} value={dayType} className="mt-1" />
+            {/* Read-only: the picker lives on Edit Show now. */}
+            {dayTypeLabel(dayType) && (
+              <p className="mt-1 flex items-center justify-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-muted">
+                <span className={cn('h-2 w-2 shrink-0', dayTypeBgClass(dayType) ?? 'bg-line')} />
+                {dayTypeLabel(dayType)}
+              </p>
+            )}
           </div>
           {nextDayNumber ? (
             <Link
