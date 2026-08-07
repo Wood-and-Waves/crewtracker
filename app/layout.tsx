@@ -35,12 +35,14 @@ export const metadata: Metadata = {
   },
 };
 
-// Drives the browser/OS UI colour around the app. Split out from `metadata`
-// because Next requires themeColor in its own export. Matches the Showbill
-// grounds: paper in light, near-black in dark.
+// Drives the browser/OS UI colour around the app (the address-bar tint on a
+// phone). Split out from `metadata` because Next requires themeColor in its own
+// export. MUST track --bg in app/globals.css: these are literals, so warming the
+// paper there does not reach here, and the two drifted apart for one deploy on
+// 2026-08-07 — a cool white bar above a cream page.
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f4ef" },
+    { media: "(prefers-color-scheme: light)", color: "#f9f4e5" },
     { media: "(prefers-color-scheme: dark)", color: "#121317" },
   ],
 };
