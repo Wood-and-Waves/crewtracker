@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { applyRulesetChange, pickRulesetValues, type RulesetValues } from '@/lib/ruleset'
+import { applyRulesetChange, pickRulesetValues, DEFAULT_RULESET_VALUES, type RulesetValues } from '@/lib/ruleset'
 import RulesetFields from '@/components/RulesetFields'
 import Button from '@/components/ui/Button'
+import { RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 
 type Preset = { id: string; name: string; is_default: boolean; sort_order: number } & RulesetValues
@@ -23,10 +24,14 @@ export default function PayrollPresetsEditor({
   const router = useRouter()
   const supabase = createClient()
   const [presets, setPresets] = useState<Preset[]>(initialPresets)
-  const [newName, setNewName] = useState('')
+  // ONE composer, always on screen. `editingId` null = composing a new preset;
+  // set = editing that one. The old shape had a name-only "Add" that INSERTED
+  // an empty preset immediately and then revealed the rules, so abandoning it
+  // left a junk row, and the only way to edit an existing preset was to know
+  // that its name was secretly a button. Nothing is written now until Save.
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
-  const [draft, setDraft] = useState<RulesetValues | null>(null)
+  const [draft, setDraft] = useState<RulesetValues>(DEFAULT_RULESET_VALUES)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -36,55 +41,58 @@ export default function PayrollPresetsEditor({
     return true
   }
 
-  function openEditor(p: Preset) {
+  function editPreset(p: Preset) {
     setEditingId(p.id)
     setDraftName(p.name)
     setDraft(pickRulesetValues(p))
     setError('')
   }
 
-  function closeEditor() {
+  /** Back to composing a new one — also what Cancel does. */
+  function resetComposer() {
     setEditingId(null)
-    setDraft(null)
     setDraftName('')
+    setDraft(DEFAULT_RULESET_VALUES)
     setError('')
   }
 
-  async function addPreset() {
-    const trimmed = newName.trim()
+  async function save() {
+    const trimmed = draftName.trim()
     if (!trimmed) return
     setBusy(true)
     setError('')
+
+    if (editingId) {
+      const { data, error: e } = await supabase
+        .from('payroll_presets')
+        .update({ name: trimmed, ...draft })
+        .eq('id', editingId)
+        .select('id')
+      setBusy(false)
+      if (fail(e, `"${trimmed}" already exists.`)) return
+      if (!data || data.length === 0) {
+        setError("Couldn't save — you may not have permission to change presets.")
+        return
+      }
+      setPresets(prev => prev.map(p => (p.id === editingId ? { ...p, name: trimmed, ...draft } : p)))
+      resetComposer()
+      router.refresh()
+      return
+    }
+
     const nextSort = presets.length > 0 ? Math.max(...presets.map(p => p.sort_order)) + 1 : 0
     const { data, error: e } = await supabase
       .from('payroll_presets')
-      .insert({ organization_id: organizationId, name: trimmed, sort_order: nextSort })
+      .insert({ organization_id: organizationId, name: trimmed, sort_order: nextSort, ...draft })
       .select()
       .single()
     setBusy(false)
     if (fail(e, `"${trimmed}" already exists.`)) return
     if (data) {
       setPresets(prev => [...prev, data])
-      setNewName('')
-      openEditor(data)
+      resetComposer()
+      router.refresh()
     }
-  }
-
-  async function saveEditing() {
-    if (!editingId || !draft) return
-    const trimmed = draftName.trim()
-    if (!trimmed) return
-    setBusy(true)
-    setError('')
-    const { error: e } = await supabase
-      .from('payroll_presets')
-      .update({ name: trimmed, ...draft })
-      .eq('id', editingId)
-    setBusy(false)
-    if (fail(e, `"${trimmed}" already exists.`)) return
-    setPresets(prev => prev.map(p => (p.id === editingId ? { ...p, name: trimmed, ...draft } : p)))
-    closeEditor()
-    router.refresh()
   }
 
   async function makeDefault(id: string) {
@@ -141,7 +149,7 @@ export default function PayrollPresetsEditor({
     setBusy(false)
     if (e) { setError(e.message); return }
     setPresets(prev => prev.filter(x => x.id !== p.id))
-    if (editingId === p.id) closeEditor()
+    if (editingId === p.id) resetComposer()
     router.refresh()
   }
 
@@ -168,20 +176,33 @@ export default function PayrollPresetsEditor({
         a preset later never changes a show that already exists.
       </p>
 
-      <div className="flex flex-col gap-2 mb-4">
-        {presets.length === 0 && <p className="text-sm text-muted">No presets yet. Add one below.</p>}
-        {presets.map(p => (
-          <div key={p.id} className="rounded-field bg-surface-2 p-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => openEditor(p)} className="text-sm font-semibold text-ink hover:text-accent">
-                {p.name}
-              </button>
-              {p.is_default && (
-                <span className="rounded-pill bg-accent-wash px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent">
-                  Default
-                </span>
-              )}
-              <div className="ml-auto flex items-center gap-1">
+      {presets.length === 0 ? (
+        <p className="mb-6 text-sm text-muted">No presets yet — build your first one below.</p>
+      ) : (
+        <div className={cn('mb-8 border-t border-line', RULE_MAJOR)}>
+          {presets.map(p => (
+            <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-3 last:border-b-0">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-ink">{p.name}</span>
+                  {p.is_default && (
+                    <span className="bg-accent-wash px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent">
+                      Default
+                    </span>
+                  )}
+                  {editingId === p.id && (
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Editing</span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-xs text-muted">{summarize(p)}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                {/* Edit is a real labelled action now. It used to be the name
+                    itself — an affordance nobody could see. */}
+                <button onClick={() => editPreset(p)} disabled={busy}
+                  className="rounded-field px-2 py-1 text-xs font-semibold text-accent hover:opacity-80 disabled:opacity-40">
+                  Edit
+                </button>
                 {!p.is_default && (
                   <button onClick={() => makeDefault(p.id)} disabled={busy}
                     className="rounded-field px-2 py-1 text-xs text-muted hover:text-accent disabled:opacity-40">
@@ -198,54 +219,44 @@ export default function PayrollPresetsEditor({
                 </button>
               </div>
             </div>
-            <p className="mt-1 text-xs text-muted">{summarize(p)}</p>
-          </div>
-        ))}
-      </div>
-
-      {error && !editingId && <p className="text-xs text-danger mb-3">{error}</p>}
-
-      <div className="flex gap-2">
-        <input
-          placeholder="New preset name (e.g. Corporate Standard)"
-          value={newName}
-          onChange={e => setNewName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addPreset()}
-          className={`${inputCls} flex-1`}
-        />
-        <Button size="sm" onClick={addPreset} disabled={busy || !newName.trim()}>Add</Button>
-      </div>
-
-      {editing && draft && (
-        // Opens in place rather than over the page. A dialog on a settings
-        // screen hides the list you are editing against and cannot be scrolled
-        // alongside it; the rest of this redesign has been removing exactly
-        // that. RulesetFields is long, so it simply extends the section.
-        <div className="mt-4 border-t border-line pt-4">
-          <div className="w-full">
-            <div className="mb-4">
-              <p className="text-xs uppercase tracking-wide text-muted mb-3">Preset Name</p>
-              <input
-                value={draftName}
-                onChange={e => setDraftName(e.target.value)}
-                className={cn(inputCls, 'w-full px-4 py-3')}
-              />
-            </div>
-
-            <RulesetFields values={draft} onChange={(f, v) => setDraft(prev => (prev ? applyRulesetChange(prev, f, v) : prev))} />
-
-            <div className="mt-4">
-              {error && <p className="text-xs text-danger mb-3">{error}</p>}
-              <div className="flex gap-3">
-                <Button variant="ghost" className="flex-1 py-3" onClick={closeEditor}>Cancel</Button>
-                <Button className="flex-1 py-3" onClick={saveEditing} disabled={busy || !draftName.trim()}>
-                  {busy ? 'Saving…' : 'Save Preset'}
-                </Button>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       )}
+
+      {/* The composer. Always here, whether you are adding or editing — the
+          rules are the point of a preset, so they are never hidden behind a
+          name field. */}
+      <div>
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 border-b-[3px] border-ink pb-1.5">
+          <p className="font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">
+            {editing ? `Editing ${editing.name}` : 'New Preset'}
+          </p>
+          {editing && (
+            <button onClick={resetComposer} className="text-xs text-muted hover:text-ink">
+              Cancel — start a new one instead
+            </button>
+          )}
+        </div>
+
+        <input
+          placeholder="Preset name (e.g. Corporate Standard)"
+          value={draftName}
+          onChange={e => setDraftName(e.target.value)}
+          className={cn(inputCls, 'mb-5 w-full px-4 py-3')}
+        />
+
+        <RulesetFields values={draft} onChange={(f, v) => setDraft(prev => applyRulesetChange(prev, f, v))} />
+
+        {error && <p className="mb-3 text-xs text-danger">{error}</p>}
+        <div className="flex gap-3">
+          {editing && (
+            <Button variant="ghost" className="flex-1 py-3" onClick={resetComposer}>Cancel</Button>
+          )}
+          <Button className="flex-1 py-3" onClick={save} disabled={busy || !draftName.trim()}>
+            {busy ? 'Saving…' : editing ? 'Save Changes' : 'Create Preset'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

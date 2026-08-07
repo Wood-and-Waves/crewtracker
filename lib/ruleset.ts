@@ -40,6 +40,32 @@ export const RULESET_FIELDS = [
   'short_turn_rest_hours',
 ] as const satisfies readonly (keyof RulesetValues)[]
 
+/**
+ * The starting rule set for something being composed in the browser — a new
+ * payroll preset, today.
+ *
+ * These MIRROR the column defaults in scripts/sql/schema.sql (verified
+ * 2026-08-06), so a preset built and saved without touching a field lands on
+ * exactly what the database would have chosen for itself. If a default changes
+ * in a migration, change it here too — nothing enforces the match, because the
+ * browser never sees the DDL.
+ */
+export const DEFAULT_RULESET_VALUES: RulesetValues = {
+  overtime_after_hours: 10,
+  double_time_enabled: false,
+  double_time_after_hours: 12,
+  travel_rate: 'halfDay',
+  meal_penalty_enabled: false,
+  meal_penalty_grace_period: 6,
+  meal_penalty_amount: 0,
+  continuous_time_enabled: false,
+  minimum_meal_break_enabled: true,
+  minimum_meal_break_minutes: 60,
+  meal_break_deduction_cap: 60,
+  short_turn_penalty_enabled: false,
+  short_turn_rest_hours: 10,
+}
+
 /** Picks just the rule columns off any row that carries them. */
 export function pickRulesetValues(row: Record<string, any>): RulesetValues {
   const out: Record<string, any> = {}
