@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -8,9 +8,13 @@ import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES } from '@/lib/timezones'
 import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
+import DayTypePicker from '@/components/DayTypePicker'
+import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
+import { dayTypeBgClass } from '@/lib/dayTypes'
+import { cn } from '@/lib/cn'
 
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
@@ -35,6 +39,7 @@ export default function EditShowClient({
   canManageRulesets = false,
   canViewRates = false,
   canEditRates = false,
+  scheduling,
   children,
 }: {
   show: any
@@ -42,6 +47,9 @@ export default function EditShowClient({
   workDays: any[]
   rooms: any[]
   crewRateEntries: any[]
+  /** Handoff state, fetched server-side. Omitted for a caller who shouldn't
+   *  see the Scheduling section at all. */
+  scheduling?: { schedulerName: string | null; positionCount: number; callSize: string }
   shoulderSurferMode?: boolean
   organizationId?: string
   canManageRulesets?: boolean
@@ -56,8 +64,10 @@ export default function EditShowClient({
 }) {
   const router = useRouter()
   const supabase = createClient()
-  const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // Transient "Saved" tick. Deliberately not a toast: this page fires a lot of
+  // small writes and a stack of toasts would be worse than the Save button was.
+  const [savedTick, setSavedTick] = useState(0)
 
   const [name, setName] = useState(show.name)
   const [venue, setVenue] = useState(show.venue || '')
@@ -80,50 +90,98 @@ export default function EditShowClient({
   const [presetError, setPresetError] = useState('')
   const [presetSaved, setPresetSaved] = useState('')
 
-  function updateRuleset(field: string, value: any) {
-    setRs((prev: any) => applyRulesetChange(prev, field, value))
+  // ---------------------------------------------------------------------
+  // AUTOSAVE. There is no Save button on this page.
+  //
+  // Half of it never had one — Add Day, the crew rate editor and day types all
+  // wrote immediately — so the button only ever covered the other half, and a
+  // page where some controls commit instantly and others wait for a pill at the
+  // bottom is a page that loses work. Text fields save on blur, switches and
+  // pickers on change, and the payroll rules on a short debounce because number
+  // inputs fire per keystroke.
+  // ---------------------------------------------------------------------
+
+  function noteSaved() {
+    setSaveError('')
+    setSavedTick(t => t + 1)
   }
 
-  async function handleSave() {
-    setSaving(true)
-    setSaveError('')
-
-    const showResult = await supabase
+  /**
+   * One verified write to `shows`.
+   *
+   * `.select('id')` and a row count, never the absence of an error: an UPDATE
+   * that matches no RLS policy affects ZERO ROWS AND RETURNS SUCCESS, which
+   * looks exactly like a save that worked until the next page load. This
+   * project has shipped that bug before (migration 0007's header, and again on
+   * work_days in 0015).
+   */
+  async function saveShow(patch: Record<string, any>) {
+    const { data, error } = await supabase
       .from('shows')
-      .update({
-        name,
-        venue,
-        city_state: cityState.trim() || null,
-        client_company: clientCompany,
-        job_number: jobNumber,
-        show_notes: showNotes,
-        show_financials: showFinancials,
-        timezone_identifier: timezone,
-      })
+      .update(patch)
       .eq('id', show.id)
+      .select('id')
 
-    if (showResult.error) {
-      setSaving(false)
-      setSaveError(showResult.error.message)
+    if (error) { setSaveError(error.message); return false }
+    if (!data || data.length === 0) {
+      setSaveError("Couldn't save — you may not have permission to edit this show.")
+      return false
+    }
+    noteSaved()
+    router.refresh()
+    return true
+  }
+
+  /** Save a text field on blur, skipping the write when nothing changed. */
+  function saveTextField(column: string, value: string, original: string | null) {
+    const next = value.trim()
+    if (next === (original ?? '').trim()) return
+    saveShow({ [column]: next || null })
+  }
+
+  // Payroll rules: apply locally at once, write on a trailing debounce. A
+  // single shared timer, so dragging a threshold from 10 to 14 is one write.
+  const rulesetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingRuleset = useRef<any>(null)
+
+  async function flushRuleset() {
+    const values = pendingRuleset.current
+    if (!values) return
+    pendingRuleset.current = null
+    const { data, error } = await supabase
+      .from('payroll_rulesets')
+      .update(values)
+      .eq('show_id', show.id)
+      .select('id')
+
+    if (error) { setSaveError(error.message); return }
+    if (!data || data.length === 0) {
+      setSaveError("Couldn't save the payroll rules — you may not have permission.")
       return
     }
-
-    if (rs) {
-      const rulesetResult = await supabase
-        .from('payroll_rulesets')
-        .update(pickRulesetValues(rs))
-        .eq('show_id', show.id)
-
-      if (rulesetResult.error) {
-        setSaving(false)
-        setSaveError(rulesetResult.error.message)
-        return
-      }
-    }
-
-    setSaving(false)
-    router.push(`/dashboard/shows/${show.id}`)
+    noteSaved()
   }
+
+  function updateRuleset(field: string, value: any) {
+    setRs((prev: any) => {
+      const next = applyRulesetChange(prev, field, value)
+      // Queue the WHOLE ruleset rather than the single field: the mutual
+      // exclusion in applyRulesetChange can turn a second field off, and that
+      // consequence has to reach the database too.
+      pendingRuleset.current = pickRulesetValues(next)
+      return next
+    })
+    if (rulesetTimer.current) clearTimeout(rulesetTimer.current)
+    rulesetTimer.current = setTimeout(flushRuleset, 600)
+  }
+
+  // Leaving the page mid-debounce must not drop the last edit.
+  useEffect(() => {
+    return () => {
+      if (rulesetTimer.current) clearTimeout(rulesetTimer.current)
+      void flushRuleset()
+    }
+  }, [])
 
   async function saveAsPreset() {
     const trimmed = presetName.trim()
@@ -194,14 +252,14 @@ export default function EditShowClient({
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-4xl pb-32">
-      <div className="flex items-center justify-between">
-        <Link href={`/dashboard/shows/${show.id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
-        <Button onClick={handleSave} disabled={saving || !name.trim()}>
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
+    <div className="p-6 md:p-10 max-w-4xl pb-16">
+      <Link href={`/dashboard/shows/${show.id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
+      <div className="mt-2 mb-6 flex flex-wrap items-baseline justify-between gap-x-4">
+        <h1 className="font-display text-2xl font-bold uppercase tracking-wide">Edit Show Details</h1>
+        <p className="font-mono text-[10.5px] font-semibold uppercase tracking-wide text-muted">
+          {savedTick > 0 ? 'Saved' : 'Changes save automatically'}
+        </p>
       </div>
-      <h1 className="mt-2 mb-6 font-display text-2xl font-bold uppercase tracking-wide">Edit Show Details</h1>
 
       {saveError && (
         <div className="mb-4 border-l-[3px] border-danger py-1 pl-3 text-sm text-danger">
@@ -212,7 +270,17 @@ export default function EditShowClient({
       <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">
         <section className="mb-6">
           <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Show Name (Required)</p>
-          <input value={name} onChange={e => setName(e.target.value)} className={inputCls} />
+          {/* Required, so an empty value is never written — the field keeps
+              what you typed and says why rather than silently reverting. */}
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onBlur={() => {
+              if (!name.trim()) { setSaveError('A show needs a name — this one was not saved.'); return }
+              saveTextField('name', name, show.name)
+            }}
+            className={inputCls}
+          />
         </section>
 
         <section className="mb-6">
@@ -226,7 +294,7 @@ export default function EditShowClient({
               hasCrew={crewRateEntries.length > 0}
             />
           </div>
-          <p className="text-xs text-muted mt-2">Adding a day happens immediately — it isn&apos;t part of the Save button above.</p>
+          <p className="text-xs text-muted mt-2">Adding a day takes effect straight away.</p>
         </section>
 
         <section className="mb-6">
@@ -235,7 +303,7 @@ export default function EditShowClient({
             ariaLabel="Show timezone"
             className="mt-2"
             value={timezone}
-            onChange={setTimezone}
+            onChange={v => { setTimezone(v); saveShow({ timezone_identifier: v }) }}
             options={SHOW_TIMEZONES}
           />
           <p className="text-xs text-muted mt-2">Punch times, the day picker, and reports all use this timezone — useful when you&apos;re prepping a show that&apos;s in a different timezone than you are.</p>
@@ -247,12 +315,14 @@ export default function EditShowClient({
             placeholder="Client / Production Company"
             value={clientCompany}
             onChange={e => setClientCompany(e.target.value)}
+            onBlur={() => saveTextField('client_company', clientCompany, show.client_company)}
             className={`${inputCls} mb-3`}
           />
           <input
             placeholder="Job / PO Number"
             value={jobNumber}
             onChange={e => setJobNumber(e.target.value)}
+            onBlur={() => saveTextField('job_number', jobNumber, show.job_number)}
             className={inputCls}
           />
         </section>
@@ -263,12 +333,14 @@ export default function EditShowClient({
             placeholder="Venue Name (e.g. McCormick Place)"
             value={venue}
             onChange={e => setVenue(e.target.value)}
+            onBlur={() => saveTextField('venue', venue, show.venue)}
             className={`${inputCls} mb-3`}
           />
           <input
             placeholder="City & State (e.g. Chicago, IL)"
             value={cityState}
             onChange={e => setCityState(e.target.value)}
+            onBlur={() => saveTextField('city_state', cityState, show.city_state)}
             className={inputCls}
           />
         </section>
@@ -279,6 +351,7 @@ export default function EditShowClient({
             placeholder="Logistics, parking info, etc..."
             value={showNotes}
             onChange={e => setShowNotes(e.target.value)}
+            onBlur={() => saveTextField('show_notes', showNotes, show.show_notes)}
             rows={4}
             className={inputCls}
           />
@@ -293,7 +366,11 @@ export default function EditShowClient({
         <section className="mb-6">
           <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Rates &amp; Payroll Calculation</p>
           <FieldRow label="Show Dollar Amounts">
-            <Toggle checked={showFinancials} onChange={setShowFinancials} label="Show Dollar Amounts" />
+            <Toggle
+              checked={showFinancials}
+              onChange={v => { setShowFinancials(v); saveShow({ show_financials: v }) }}
+              label="Show Dollar Amounts"
+            />
           </FieldRow>
           <p className="text-xs text-muted mt-2">Turn this on to enter crew day rates and show dollar totals in reports.</p>
         </section>
@@ -338,8 +415,52 @@ export default function EditShowClient({
             </div>
           )}
           {canEditRates && (
-            <p className="text-xs text-muted mt-3">Tap a rate to update it — this saves immediately, separate from the Save button above. Changes apply to all of that person&apos;s timecards on this show for that role.</p>
+            <p className="text-xs text-muted mt-3">Tap a rate to update it. Changes apply to all of that person&apos;s timecards on this show for that role.</p>
           )}
+        </section>
+      )}
+
+      {/* Day types — the show's plan for each day, so they live with the show
+          rather than on the tracker, where a picker under the date read as
+          something the operator had to answer before punching anybody in.
+          Each tile saves itself (DayTypePicker owns its own verified write). */}
+      {workDays.length > 0 && (
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Day Types</p>
+          <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+            {workDays.map(wd => (
+              <div key={wd.id}>
+                <div className={cn('h-1.5 w-full', dayTypeBgClass(wd.day_type) ?? 'bg-line')} />
+                <div className="mt-1.5 flex items-center justify-between gap-3">
+                  <span className="shrink-0 whitespace-nowrap font-mono text-xs font-semibold uppercase text-muted">
+                    {new Date(wd.date + 'T00:00:00').toLocaleDateString('en-US', {
+                      weekday: 'short', month: 'short', day: 'numeric',
+                    })}
+                  </span>
+                  <DayTypePicker workDayId={wd.id} value={wd.day_type ?? null} className="w-[190px] shrink-0" />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            Optional. Shown on the tracker and beside each date in a crew booking request.
+          </p>
+        </section>
+      )}
+
+      {/* Handing the show to a scheduler — an admin act, so it belongs here
+          rather than in the tracker's header where it sat beside the punch
+          controls it has nothing to do with. */}
+      {scheduling && (
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Scheduling</p>
+          <HandoffToSchedulerButton
+            showId={show.id}
+            approvedAt={show.call_approved_at ?? null}
+            schedulerName={scheduling.schedulerName}
+            positionCount={scheduling.positionCount}
+            callSize={scheduling.callSize}
+          />
         </section>
       )}
 
@@ -419,14 +540,6 @@ export default function EditShowClient({
       )}
 
       {children}
-
-      {/* Floating save affordance for this long form. Sits clear of the
-          app's fixed bottom tab-bar (<1024px) instead of overlapping it. */}
-      <div className="fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-40">
-        <Button onClick={handleSave} disabled={saving || !name.trim()} className="px-8 py-3 shadow-edge">
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
-      </div>
     </div>
   )
 }
