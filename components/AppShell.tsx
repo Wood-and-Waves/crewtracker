@@ -75,6 +75,7 @@ export default function AppShell({
   userName,
   userEmail,
   organizations = [],
+  version,
 }: {
   children: React.ReactNode
   canManageUsers?: boolean
@@ -82,6 +83,9 @@ export default function AppShell({
   userName?: string
   organizations?: SwitcherOrg[]
   userEmail?: string
+  /** App version, read from package.json by the server layout. Shown in the
+   *  footer so a customer reporting a bug can say which build they are on. */
+  version?: string
 }) {
   const pathname = usePathname()
   const navItems = [
@@ -96,11 +100,12 @@ export default function AppShell({
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
       {/* Desktop / landscape-iPad: top nav for mouse navigation.
-          bg-bg, not bg-surface: the chrome IS the paper. A white strip over the
-          warm ground was the brightest thing on every screen and read as a
-          foreign toolbar rather than the top of the page. Opaque so content
-          scrolling under the sticky bar stays hidden. */}
-      <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-bg px-6 py-3 lg:flex">
+          bg-surface-2 — a shade OF the paper, not a sheet on top of it. Pure
+          white was the brightest thing on every screen and read as a foreign
+          toolbar; matching the ground exactly left the chrome indistinguishable
+          from the page. This warm tint is the middle Dan asked for. Opaque, so
+          content scrolling under the sticky bar stays hidden. */}
+      <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-surface-2 px-6 py-3 lg:flex">
         <Link href="/dashboard" className="mr-5 flex items-center gap-2 text-[15px] font-extrabold">
           <span className="text-accent"><Logo /></span>
           CrewTracker
@@ -126,7 +131,28 @@ export default function AppShell({
         </div>
       </header>
 
-      <main className="flex-1 pb-28 lg:pb-0">{children}</main>
+      <main className="flex-1">{children}</main>
+
+      {/* Footer. Sits at the bottom of the CONTENT, not fixed to the viewport —
+          a bar pinned over a punch table would cost a row of crew on a phone.
+          `mt-auto` on the flex column keeps it at the bottom on short pages.
+          The bottom padding clears the floating tab bar below 1024px. */}
+      <footer className="mt-auto border-t border-line px-6 pb-28 pt-5 lg:pb-6">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="flex items-center gap-2 text-[13px] font-bold text-ink">
+            <Logo className="h-5 w-5" />
+            CrewTracker
+          </span>
+          <span className="font-mono text-[10.5px] uppercase tracking-wide text-muted">
+            © 2026 · All rights reserved
+          </span>
+          {version && (
+            <span className="ml-auto font-mono text-[10.5px] uppercase tracking-wide text-muted">
+              v{version}
+            </span>
+          )}
+        </div>
+      </footer>
 
       {/* Portrait iPad / phone: fixed bottom tab-bar. A true overlay, so it
           keeps a box — but the Showbill one: squared, 2px ink edge, hard
