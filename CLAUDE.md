@@ -61,10 +61,12 @@ production since the same day's cutover) — a full identity redesign Dan chose
 through a mockup-reaction process (2026-08-03/04). Decisions, all locked with Dan and recorded in
 auto-memory (`showbill-identity-decisions.md`):
 
-- **Paper-first, ONE identity.** Light is the flagship: warm paper `#F7F4EA`, warm ink
-  `#201D18` (both warmed 2026-08-07 — the first cut was a cool off-white that made the ink
+- **Paper-first, ONE identity.** Light is the flagship: warm paper `#F9F4E5`, warm ink
+  `#221E16` (both warmed 2026-08-07, twice — the first cut was a cool off-white that made the ink
   masthead read as black-on-grey; warming the ground took the edge off without softening
-  the ink). Header chrome is `--surface-2` `#F1ECE0`, a shade off the paper.
+  the ink). Header chrome is `--surface-2` `#F2EBD8`, a shade off the paper. Verified AA at this
+  warmth: ink 15:1, muted 5:1, accent 6.7:1 — push the cream much further and `--muted`
+  on `--surface-2` (4.65:1 today) is the first thing to drop below AA.
   Dark is a faithful derivative (same document printed on black, ground `#121317`) reached via
   the existing app-wide toggle — **never a separate personality per screen**; Dan explicitly
   rejected the tracker defaulting dark while other pages are light.

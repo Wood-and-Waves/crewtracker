@@ -25,14 +25,14 @@
      that, and warming the ground takes the edge off the contrast without
      softening the ink. Every light surface moved together — a warm ground under
      cool fields would just relocate the problem. */
-  --bg: #f7f4ea;
-  --surface: #fffdf7;
-  --surface-2: #f1ece0;
-  --surface-3: #e7e0d0;
+  --bg: #f9f4e5;
+  --surface: #fffdf4;
+  --surface-2: #f2ebd8;
+  --surface-3: #e8dfc7;
   /* Warm near-black rather than the old blue-black: ink ON this paper. */
-  --ink: #201d18;
-  --muted: #6d675c;
-  --line: #ded7c7;
+  --ink: #221e16;
+  --muted: #6f6857;
+  --line: #ded4bc;
   --accent: #2a52a8;          /* Crew Blue */
   --accent-ink: #ffffff;
   --accent-wash: rgba(42, 82, 168, 0.12);
@@ -49,12 +49,12 @@
      lifted strip under a bright rule — same skeleton, printed on black. The
      band always carries a 2px border-ink bottom rule; on light it vanishes
      into the slab, on dark it is the lift. */
-  --band: #201d18;
-  --band-ink: #f7f4ea;
+  --band: #221e16;
+  --band-ink: #f9f4e5;
 
   /* Hard offset shadow for true overlays (Select panels, menus): a lifted
      paper slip, crisp edge, no blur — glassy soft shadows are the disease. */
-  --edge-shadow: rgba(32, 29, 24, 0.18);
+  --edge-shadow: rgba(34, 30, 22, 0.18);
 
   /* Day-type tints — color as information. Same weight class as the accent:
      Dan's 2026-08-06 note was that the first, dustier register read washed-out
@@ -109,13 +109,13 @@
 :root[data-theme="light"] {
   /* MUST stay identical to the :root defaults above — this block only exists to
      beat the prefers-color-scheme media query when someone picks light by hand. */
-  --bg: #f7f4ea;
-  --surface: #fffdf7;
-  --surface-2: #f1ece0;
-  --surface-3: #e7e0d0;
-  --ink: #201d18;
-  --muted: #6d675c;
-  --line: #ded7c7;
+  --bg: #f9f4e5;
+  --surface: #fffdf4;
+  --surface-2: #f2ebd8;
+  --surface-3: #e8dfc7;
+  --ink: #221e16;
+  --muted: #6f6857;
+  --line: #ded4bc;
   --accent: #2a52a8;
   --accent-ink: #ffffff;
   --accent-wash: rgba(42, 82, 168, 0.12);
@@ -126,9 +126,9 @@
   --good: #2e8757;
   --danger: #c63b30;
   --half-day: #7d5ba6;
-  --band: #201d18;
-  --band-ink: #f7f4ea;
-  --edge-shadow: rgba(32, 29, 24, 0.18);
+  --band: #221e16;
+  --band-ink: #f9f4e5;
+  --edge-shadow: rgba(34, 30, 22, 0.18);
   --day-travel: #3073a6;
   --day-loadin: #c67110;
   --day-rehearsal: #6e3cb1;
