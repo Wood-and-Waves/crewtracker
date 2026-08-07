@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
@@ -78,8 +79,6 @@ export default function CrewDirectoryClient({
   const [crew, setCrew] = useState<CrewMember[]>(initialCrew)
   const [sort, setSort] = useState<SortOption>('lastName')
   const [query, setQuery] = useState('')
-  const [showAdd, setShowAdd] = useState(false)
-  const [newName, setNewName] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [importStatus, setImportStatus] = useState('')
   const [importing, setImporting] = useState(false)
@@ -108,21 +107,10 @@ export default function CrewDirectoryClient({
     return ra.localeCompare(rb)
   })
 
-  async function addPerson() {
-    const trimmed = newName.trim()
-    if (!trimmed) return
-    const dupe = crew.find(c => c.full_name.trim().toLowerCase() === trimmed.toLowerCase())
-    if (dupe && !confirm(`A crew member named "${dupe.full_name}" already exists. Add another anyway?`)) return
-    const { data, error } = await supabase
-      .from('crew_members')
-      .insert({ organization_id: organizationId, full_name: trimmed })
-      .select()
-      .single()
-    if (error || !data) return
-    setShowAdd(false)
-    setNewName('')
-    router.push(`/dashboard/directory/${data.id}`)
-  }
+  // addPerson() lived here: a one-field dialog that inserted the row and then
+  // pushed you to the profile to do the real work. Replaced 2026-08-06 by
+  // /dashboard/directory/new, which collects the whole person before writing
+  // anything.
 
   async function deleteCrew(id: string) {
     const person = crew.find(c => c.id === id)
@@ -270,7 +258,7 @@ export default function CrewDirectoryClient({
             <Button variant="ghost" size="sm" onClick={exportCSV}>Export CSV</Button>
           )}
           <Button variant="ghost" size="sm" onClick={() => setShowImport(true)}>Import</Button>
-          <Button size="sm" onClick={() => setShowAdd(true)}>+ Add Person</Button>
+          <Link href="/dashboard/directory/new"><Button size="sm">+ Add Person</Button></Link>
         </div>
       </div>
 
@@ -363,25 +351,6 @@ export default function CrewDirectoryClient({
             ))}
           </div>
         </>
-      )}
-
-      {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
-            <h2 className="text-lg font-bold text-ink mb-4">Add Person</h2>
-            <input
-              placeholder="Name"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addPerson()}
-              className={`${inputCls} mb-4`}
-            />
-            <div className="flex gap-3">
-              <Button variant="ghost" className="flex-1 py-3" onClick={() => { setShowAdd(false); setNewName('') }}>Cancel</Button>
-              <Button className="flex-1 py-3" onClick={addPerson} disabled={!newName.trim()}>Next</Button>
-            </div>
-          </div>
-        </div>
       )}
 
       {showImport && (
