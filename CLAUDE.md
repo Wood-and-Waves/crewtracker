@@ -61,7 +61,10 @@ production since the same day's cutover) — a full identity redesign Dan chose
 through a mockup-reaction process (2026-08-03/04). Decisions, all locked with Dan and recorded in
 auto-memory (`showbill-identity-decisions.md`):
 
-- **Paper-first, ONE identity.** Light is the flagship: warm paper `#F5F4EF`, ink `#17181A`.
+- **Paper-first, ONE identity.** Light is the flagship: warm paper `#F7F4EA`, warm ink
+  `#201D18` (both warmed 2026-08-07 — the first cut was a cool off-white that made the ink
+  masthead read as black-on-grey; warming the ground took the edge off without softening
+  the ink). Header chrome is `--surface-2` `#F1ECE0`, a shade off the paper.
   Dark is a faithful derivative (same document printed on black, ground `#121317`) reached via
   the existing app-wide toggle — **never a separate personality per screen**; Dan explicitly
   rejected the tracker defaulting dark while other pages are light.
@@ -86,7 +89,13 @@ auto-memory (`showbill-identity-decisions.md`):
   `lib/panel.ts` and `components/ui/NumberedHead.tsx`:
   - **BAND** — a solid masthead strip (`bg-band text-band-ink border-b-2 border-ink`): a
     screen's title block, a room on the tracker. Ink slab on light, lifted strip on dark
-    (`--band`/`--band-ink` tokens).
+    (`--band`/`--band-ink` tokens). **ONE solid band per screen.** The list screens
+    (shows, directory, team) briefly had two — page title *and* table header — and Dan
+    called it out 2026-08-07 ("why are they black now?"): stacked a hundred pixels apart
+    they made the screen top-heavy. A data table's column header is now a LIGHT strip
+    (`bg-surface-2` closed by `border-b-2 border-ink`). The tracker and Reports are the
+    exception that proves the rule: their bands are per-room and per-day, one at a time
+    down the page, so they never stack.
   - **RULE_MAJOR** — 3px ink rule closing a section or a table. `NumberedHead` renders it
     with a blue Oswald numeral where a screen's sections are a genuine sequence (New Show 1–4).
   - **Hairlines** (`border-line`) for rows *within* a unit. Weight must mean something —
