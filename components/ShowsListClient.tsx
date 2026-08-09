@@ -59,6 +59,8 @@ const STATUS_RANK: Record<ShowStatus, number> = {
 // Scheduler dropped at Dan's request: it was blank on most rows, and who is
 // crewing a show is a fact you want on the show, not while scanning the list.
 const COLS = 'grid-cols-[minmax(0,1.8fr)_116px_104px_112px_84px]'
+// Same table minus the Staffing column, for organizations without scheduling.
+const COLS_NO_SCHEDULING = 'grid-cols-[minmax(0,1.8fr)_116px_104px_84px]'
 
 function fmtRange(start: string, end: string) {
   // Bare 'YYYY-MM-DD' + T00:00:00 = local midnight. A date-only string parses as
@@ -113,13 +115,19 @@ function Crewed({ row }: { row: ShowRow }) {
 export default function ShowsListClient({
   rows,
   canArchive,
+  schedulingEnabled = false,
 }: {
   rows: ShowRow[]
   canArchive: boolean
+  /** Without the scheduling module there are no positions to measure against, so
+   *  the Staffing column and its sort are dropped rather than shown empty. */
+  schedulingEnabled?: boolean
 }) {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('dates')
   const [asc, setAsc] = useState(false)
+
+  const cols = schedulingEnabled ? COLS : COLS_NO_SCHEDULING
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -131,8 +139,11 @@ export default function ShowsListClient({
       : rows
 
     const dir = asc ? 1 : -1
+    // 'crewed' is unreachable without the module (its header is not rendered),
+    // but a stale state value would otherwise sort by an invisible column.
+    const key: SortKey = sort === 'crewed' && !schedulingEnabled ? 'dates' : sort
     return [...filtered].sort((a, b) => {
-      switch (sort) {
+      switch (key) {
         case 'name': return dir * a.name.localeCompare(b.name)
         case 'status': return dir * (STATUS_RANK[a.status] - STATUS_RANK[b.status])
         case 'crewed': {
@@ -147,7 +158,7 @@ export default function ShowsListClient({
         default: return dir * a.startDate.localeCompare(b.startDate)
       }
     })
-  }, [rows, query, sort, asc])
+  }, [rows, query, sort, asc, schedulingEnabled])
 
   function header(key: SortKey, label: string, className?: string) {
     const active = sort === key
@@ -192,11 +203,11 @@ export default function ShowsListClient({
               one solid band per screen (the page masthead) is the rule. Two of
               them stacked made this screen top-heavy (Dan, 2026-08-07). */}
           <div className="hidden lg:block">
-            <div className={cn('grid gap-3 border-b-2 border-ink bg-surface-2 px-5 py-2.5', COLS)}>
+            <div className={cn('grid gap-3 border-b-2 border-ink bg-surface-2 px-5 py-2.5', cols)}>
               {header('name', 'Show')}
               {header('dates', 'Dates')}
               {header('status', 'Status')}
-              {header('crewed', 'Staffing')}
+              {schedulingEnabled && header('crewed', 'Staffing')}
               <span />
             </div>
 
@@ -206,7 +217,7 @@ export default function ShowsListClient({
                 className={cn(
                   'group grid items-center gap-3 border-b border-line px-5 py-3 transition-colors hover:bg-surface-2',
                   'last:border-b-[3px] last:border-ink',
-                  COLS,
+                  cols,
                 )}
               >
                 <Link href={`/dashboard/shows/${row.id}`} className="min-w-0">
@@ -227,7 +238,7 @@ export default function ShowsListClient({
                   <Chip tone={row.statusTone}>{row.statusLabel}</Chip>
                 </div>
 
-                <Crewed row={row} />
+                {schedulingEnabled && <Crewed row={row} />}
 
                 <div className="flex justify-end">
                   {canArchive && <ArchiveShowButton showId={row.id} archived={row.archived} />}
@@ -263,7 +274,11 @@ export default function ShowsListClient({
 
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    {row.total === 0 ? (
+                    {!schedulingEnabled ? (
+                      <span className="text-xs text-muted">
+                        {row.bookedPeakPerDay > 0 ? `${row.bookedPeakPerDay} crew` : 'Not staffed'}
+                      </span>
+                    ) : row.total === 0 ? (
                       <span className="text-xs text-muted">
                         {row.bookedPeakPerDay > 0
                           ? `${row.bookedPeakPerDay} booked · no positions set`

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
@@ -67,15 +67,19 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   // people in. Counted per DAY, never per row: a five-day show needing twelve
   // people has sixty position rows, and "60" is not a number anybody crews
   // against.
-  const [{ data: positionRows }, { data: scheduler }] = await Promise.all([
-    supabase
-      .from('crew_call_positions')
-      .select('id, rooms!inner(work_days!inner(date, show_id))')
-      .eq('rooms.work_days.show_id', id),
-    show.scheduler_id
-      ? supabase.from('profiles').select('full_name, email').eq('id', show.scheduler_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ])
+  const schedulingOn = canUseScheduling(user)
+
+  const [{ data: positionRows }, { data: scheduler }] = schedulingOn
+    ? await Promise.all([
+        supabase
+          .from('crew_call_positions')
+          .select('id, rooms!inner(work_days!inner(date, show_id))')
+          .eq('rooms.work_days.show_id', id),
+        show.scheduler_id
+          ? supabase.from('profiles').select('full_name, email').eq('id', show.scheduler_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ])
+    : [{ data: null }, { data: null }]
 
   const callSummary = summarizeCall((positionRows ?? []).map((p: any) => {
     const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
@@ -113,11 +117,13 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       canManageRulesets={user.can('can_manage_rulesets')}
       canViewRates={canViewRates}
       canEditRates={user.can('can_edit_pay_rates')}
-      scheduling={{
+      // Omitted entirely when the module is off — EditShowClient renders the
+      // Scheduling section only when this prop is present.
+      scheduling={schedulingOn ? {
         schedulerName: (scheduler as any)?.full_name || (scheduler as any)?.email || null,
         positionCount: callSummary.total,
         callSize: describeCallSize(callSummary),
-      }}
+      } : undefined}
     >
       {canManageUsers && (
         <div className="mb-4">

@@ -19,6 +19,7 @@ export default function RoomActionsMenu({
   canEditRates = false,
   locked = false,
   onBand = false,
+  schedulingEnabled = false,
 }: {
   roomId: string
   roomName: string
@@ -31,6 +32,9 @@ export default function RoomActionsMenu({
   /** Trigger sits on a masthead BAND: swap the muted-on-paper trigger colors
    *  for band-ink so ⋮ stays visible on the ink strip. */
   onBand?: boolean
+  /** Scheduling module available to this caller — gates the Positions panel.
+   *  The other four actions are core tracker and always available. */
+  schedulingEnabled?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -130,13 +134,15 @@ export default function RoomActionsMenu({
 
   return (
     <div className="relative">
-      <CrewCallModal
-        roomId={roomId}
-        roomName={roomName}
-        open={callOpen}
-        onClose={() => setCallOpen(false)}
-        locked={locked}
-      />
+      {schedulingEnabled && (
+        <CrewCallModal
+          roomId={roomId}
+          roomName={roomName}
+          open={callOpen}
+          onClose={() => setCallOpen(false)}
+          locked={locked}
+        />
+      )}
       <button
         onClick={() => setMenuOpen(v => !v)}
         className={cn(
@@ -154,11 +160,13 @@ export default function RoomActionsMenu({
         <div className="absolute right-0 z-20 mt-1 w-64 border-2 border-ink bg-surface p-3 shadow-edge">
           {mode === 'menu' && (
             <div className="flex flex-col gap-1">
-              <button
-                onClick={() => { setMenuOpen(false); setCallOpen(true) }}
-                className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2">
-                Positions
-              </button>
+              {schedulingEnabled && (
+                <button
+                  onClick={() => { setMenuOpen(false); setCallOpen(true) }}
+                  className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2">
+                  Positions
+                </button>
+              )}
               <button
                 onClick={startEditCrew}
                 disabled={locked}

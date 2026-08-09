@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import ShowsListClient, { type ShowRow } from '@/components/ShowsListClient'
 import Card from '@/components/ui/Card'
@@ -54,9 +54,17 @@ export default async function DashboardPage({
   // slow quietly. Aggregated here rather than in SQL because PostgREST cannot
   // group, and at beta size the row count is small — worth revisiting with a
   // view if an organization ever carries hundreds of live shows.
-  const { data: callRows } = await supabase
+  // Scheduling module: without it there are no positions to measure against, so
+  // the whole aggregation below is skipped and the Staffing column is dropped.
+  // The booked-headcount query underneath stays — knowing how many people are on
+  // a show is core tracker information, not scheduling.
+  const schedulingOn = canUseScheduling(user)
+
+  const { data: callRows } = schedulingOn
+    ? await supabase
     .from('crew_call_positions')
     .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( date, show_id ) )')
+    : { data: [] }
 
   // Dates are carried so peak-per-day can be worked out: the list must report
   // how many PEOPLE a show needs, never the position-row count. A twelve-person
@@ -119,7 +127,9 @@ export default async function DashboardPage({
 
   // Scheduler names, one query for the page. Only the shows on screen are
   // looked up, and only their name is read.
-  const schedulerIds = [...new Set(shows.map(s => s.scheduler_id).filter(Boolean))] as string[]
+  const schedulerIds = schedulingOn
+    ? [...new Set(shows.map(s => s.scheduler_id).filter(Boolean))] as string[]
+    : []
   const { data: schedulers } = schedulerIds.length
     ? await supabase.from('profiles').select('id, full_name, email').in('id', schedulerIds)
     : { data: [] }
@@ -209,7 +219,7 @@ export default async function DashboardPage({
           {showingArchived ? 'No archived shows.' : 'No shows yet. Create your first one to get started.'}
         </p>
       ) : (
-        <ShowsListClient rows={rows} canArchive={user.can('can_archive_shows')} />
+        <ShowsListClient rows={rows} canArchive={user.can('can_archive_shows')} schedulingEnabled={schedulingOn} />
       )}
     </div>
   )

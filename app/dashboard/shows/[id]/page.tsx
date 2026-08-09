@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import OpenPositionRow from '@/components/OpenPositionRow'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import AddRoomModal from '@/components/AddRoomModal'
@@ -59,6 +59,10 @@ export default async function ShowDetailPage({
   // Hoisted because TypeScript drops the narrowing above inside the .map()
   // callbacks further down — a local const keeps it.
   const organizationId = user.organizationId
+  // The scheduling module. Gated on the FLAG, never on "are there any positions"
+  // — a switched-off organization may still have positions sitting in the
+  // database from before, and those must not reappear as open rows.
+  const schedulingOn = canUseScheduling(user)
 
   const timezone = show.timezone_identifier || 'America/Chicago'
   // Finalized shows: the database refuses every punch and timecard write
@@ -154,7 +158,7 @@ export default async function ShowDetailPage({
   // screen that shows the crew — not behind a menu, which is where filling one
   // used to live.
   const dayRoomIds = roomsList.map(r => r.id)
-  const { data: openPositionRows } = dayRoomIds.length > 0
+  const { data: openPositionRows } = schedulingOn && dayRoomIds.length > 0
     ? await supabase
         .from('crew_call_positions')
         .select('id, room_id, role, sort_order, timecards(booking_status)')
@@ -418,7 +422,7 @@ export default async function ShowDetailPage({
             <section key={room.id} className="min-w-0">
               <div className={cn(BAND, 'flex items-center justify-between px-4 py-2')}>
                 <h2 className="font-display text-lg font-bold uppercase tracking-wide">{room.name}</h2>
-                <RoomActionsMenu onBand locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
+                <RoomActionsMenu onBand schedulingEnabled={schedulingOn} locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
 
               {crew.length > 0 && (
@@ -483,7 +487,7 @@ export default async function ShowDetailPage({
                   />
                 ))}
 
-                {(openByRoom[room.id] ?? []).map(pos => (
+                {schedulingOn && (openByRoom[room.id] ?? []).map(pos => (
                   <OpenPositionRow
                     key={pos.id}
                     positionId={pos.id}
@@ -547,6 +551,7 @@ export default async function ShowDetailPage({
         addDayControl={addDayControl}
         canViewRates={canViewRates}
         canEditRates={canEditRates}
+        schedulingEnabled={schedulingOn}
         // Plain object, not the Map: this crosses into a Client Component.
         ratesByTimecardId={Object.fromEntries(rateById)}
       />
