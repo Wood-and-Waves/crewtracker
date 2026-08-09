@@ -22,6 +22,7 @@ export type PermissionKey =
   | 'can_view_reports'
   | 'can_export_reports'
   | 'can_send_reports'
+  | 'can_manage_scheduling'
   | 'view_only'
 
 export type PermissionValues = Record<PermissionKey, boolean>
@@ -48,6 +49,9 @@ export const VISIBLE_PERMISSIONS: { key: PermissionKey; label: string }[] = [
   { key: 'can_view_reports', label: 'View reports' },
   { key: 'can_export_reports', label: 'Export reports' },
   { key: 'can_send_reports', label: 'Send reports' },
+  // Only has an effect where the ORGANIZATION also has the scheduling module —
+  // both gates must pass. See canUseScheduling() in lib/session.ts.
+  { key: 'can_manage_scheduling', label: 'Use scheduling' },
 ]
 
 // Set by presets but never shown as toggles (3 unused + view_only which is
@@ -88,6 +92,7 @@ export const PERMISSION_PRESETS: Record<Role, PermissionValues> = {
     can_view_reports: true,
     can_export_reports: true,
     can_send_reports: true,
+    can_manage_scheduling: true,
     view_only: false,
   },
   staff: {
@@ -108,6 +113,7 @@ export const PERMISSION_PRESETS: Record<Role, PermissionValues> = {
     can_view_reports: true,
     can_export_reports: false,
     can_send_reports: false,
+    can_manage_scheduling: false,
     view_only: false,
   },
   pm: {
@@ -128,6 +134,8 @@ export const PERMISSION_PRESETS: Record<Role, PermissionValues> = {
     can_view_reports: true,
     can_export_reports: true,
     can_send_reports: true,
+    // A PM in a small company is often the person who crews their own show.
+    can_manage_scheduling: true,
     view_only: false,
   },
 }

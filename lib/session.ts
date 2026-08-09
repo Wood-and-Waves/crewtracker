@@ -34,6 +34,12 @@ export type CurrentUser = {
   shoulderSurfer: boolean
   /** Removed from their organization. Every org-scoped read returns nothing. */
   deactivated: boolean
+  /**
+   * Does the ACTIVE organization have the scheduling module?
+   * An entitlement, not a permission — see canUseScheduling(), which is what
+   * call sites should almost always ask.
+   */
+  schedulingEnabled: boolean
   permissions: PermissionValues
   /** can('can_view_pay_rates') — reads better at call sites than permissions.x */
   can: (key: PermissionKey) => boolean
@@ -82,10 +88,17 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   //
   // maybeSingle(), not single(): "no membership for the active org" is an
   // ordinary state (never joined, just removed, stale pointer), not an error.
+  //
+  // organizations(scheduling_enabled) rides along as an embedded select rather
+  // than a second query: the module entitlement is a property of the org the
+  // caller is acting in, so it resolves at exactly the same moment their
+  // permissions do, for no extra round trip.
   const { data: membership } = activeOrgId
     ? await supabase
         .from('memberships')
-        .select(`organization_id, deactivated_at, ${ALL_PERMISSION_KEYS.join(', ')}`)
+        .select(
+          `organization_id, deactivated_at, organizations(scheduling_enabled), ${ALL_PERMISSION_KEYS.join(', ')}`,
+        )
         .eq('profile_id', user.id)
         .eq('organization_id', activeOrgId)
         .maybeSingle()
@@ -105,6 +118,17 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       ) as PermissionValues)
     : NO_PERMISSIONS
 
+  // PostgREST returns an embedded to-one relation as an object, but types it as
+  // an array often enough that both shapes have to be handled — the same dance
+  // every `rooms!inner(work_days!inner(...))` read in this app does.
+  const orgRel = m.organizations as { scheduling_enabled?: boolean } | { scheduling_enabled?: boolean }[] | null
+  const org = Array.isArray(orgRel) ? orgRel[0] : orgRel
+  // Default TRUE when unknown: the column is `not null default true`, so the
+  // only way to read undefined here is a shape surprise, and failing OPEN on a
+  // commercial entitlement is the right way round — a billing flag must never be
+  // able to silently hide a feature a customer is paying for.
+  const schedulingEnabled = live ? org?.scheduling_enabled !== false : false
+
   return {
     id: user.id,
     email: (row.email as string) ?? user.email ?? null,
@@ -114,6 +138,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     use24Hour: row.use_24_hour_time === true,
     shoulderSurfer: row.shoulder_surfer_mode === true,
     deactivated,
+    schedulingEnabled,
     permissions,
     can: (key) => permissions[key] === true,
   }
@@ -176,4 +201,23 @@ export function canSeeFinancials(
   showFinancials: boolean | null | undefined,
 ): boolean {
   return !!showFinancials && !!user?.can('can_view_pay_rates')
+}
+
+/**
+ * Whether the signed-in user may use the scheduling module.
+ *
+ * The same two-gate shape as canSeeFinancials, and for the same reason: the
+ * ORGANIZATION must have the module (a commercial entitlement, set by CrewTracker
+ * support and eventually by billing), and the USER must be allowed to use it (an
+ * ordinary permission an org admin controls). Neither implies the other — a
+ * company can pay for scheduling and still not want every PM booking crew.
+ *
+ * This is the single question every scheduling surface should ask. It is a UI
+ * convenience, not a security boundary: the API routes re-check it server-side,
+ * because hiding a button has never stopped a crafted request.
+ */
+export function canUseScheduling(
+  user: Pick<CurrentUser, 'can' | 'schedulingEnabled'> | null,
+): boolean {
+  return !!user?.schedulingEnabled && !!user?.can('can_manage_scheduling')
 }
