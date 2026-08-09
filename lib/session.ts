@@ -203,21 +203,7 @@ export function canSeeFinancials(
   return !!showFinancials && !!user?.can('can_view_pay_rates')
 }
 
-/**
- * Whether the signed-in user may use the scheduling module.
- *
- * The same two-gate shape as canSeeFinancials, and for the same reason: the
- * ORGANIZATION must have the module (a commercial entitlement, set by CrewTracker
- * support and eventually by billing), and the USER must be allowed to use it (an
- * ordinary permission an org admin controls). Neither implies the other — a
- * company can pay for scheduling and still not want every PM booking crew.
- *
- * This is the single question every scheduling surface should ask. It is a UI
- * convenience, not a security boundary: the API routes re-check it server-side,
- * because hiding a button has never stopped a crafted request.
- */
-export function canUseScheduling(
-  user: Pick<CurrentUser, 'can' | 'schedulingEnabled'> | null,
-): boolean {
-  return !!user?.schedulingEnabled && !!user?.can('can_manage_scheduling')
-}
+// canUseScheduling lives in lib/permissions.ts — it is pure, and this module is
+// server-only. Re-exported here so call sites can reach it beside
+// canSeeFinancials without caring where it is defined.
+export { canUseScheduling } from '@/lib/permissions'

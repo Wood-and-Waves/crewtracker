@@ -24,6 +24,7 @@ import {
   describeDates, buildBookingRequestText, describeDayLines, hasAnyDayType,
 } from '../../lib/bookingEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
+import { canUseScheduling } from '../../lib/permissions.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -504,6 +505,24 @@ const two = plannedPositions(addRole({}, R, 0, 'Stagehand', 3), 1)
 check('a quantity of three writes three rows', two.length, 3)
 check('sort order restarts per cell', two.map(p => p.sortOrder), [0, 1, 2])
 check('days outside the run are not written', plannedPositions(mid, 1).length, 0)
+
+// ---------------------------------------------------------------------------
+// The scheduling MODULE gate. Two independent switches, and the whole point is
+// that neither implies the other: a company can pay for scheduling and still
+// not want every PM booking crew, and a permitted user in a switched-off
+// company must get nothing.
+console.log('\nscheduling module gate')
+const gateUser = (schedulingEnabled: boolean, permitted: boolean) => ({
+  schedulingEnabled,
+  can: (k: string) => (k === 'can_manage_scheduling' ? permitted : false),
+}) as any
+
+check('org has it and user may use it', canUseScheduling(gateUser(true, true)), true)
+check('org has it, user may not', canUseScheduling(gateUser(true, false)), false)
+check('user may, org does not have it', canUseScheduling(gateUser(false, true)), false)
+check('neither', canUseScheduling(gateUser(false, false)), false)
+// Signed out, or a deactivated member: getCurrentUser returns null / no org.
+check('nobody signed in', canUseScheduling(null), false)
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

@@ -143,3 +143,25 @@ export const PERMISSION_PRESETS: Record<Role, PermissionValues> = {
 export function presetFor(role: Role): PermissionValues {
   return { ...PERMISSION_PRESETS[role] }
 }
+
+/**
+ * Whether somebody may use the scheduling module.
+ *
+ * TWO independent gates, and neither implies the other: the ORGANIZATION must
+ * have the module (a commercial entitlement set by CrewTracker support, and
+ * eventually by billing), and the USER must hold can_manage_scheduling (an
+ * ordinary permission their own admin controls). A company can pay for
+ * scheduling and still not want every PM booking crew.
+ *
+ * Lives here rather than in lib/session.ts because it is pure — two booleans in,
+ * one out — and session.ts is server-only (it imports next/headers through the
+ * Supabase server client), which put it out of reach of both the test harness
+ * and any client component. Typed structurally for the same reason: this module
+ * must not import CurrentUser. lib/session.ts re-exports it, so call sites can
+ * keep importing it from there alongside canSeeFinancials.
+ */
+export function canUseScheduling(
+  user: { schedulingEnabled: boolean; can: (key: PermissionKey) => boolean } | null | undefined,
+): boolean {
+  return !!user?.schedulingEnabled && user.can('can_manage_scheduling')
+}
