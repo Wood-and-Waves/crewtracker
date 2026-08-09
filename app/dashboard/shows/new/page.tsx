@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import Card from '@/components/ui/Card'
 import NewShowClient from '@/components/NewShowClient'
@@ -35,6 +35,7 @@ export default async function NewShowPage() {
       organizationId={user.organizationId}
       roles={(roleRows ?? []).map(r => r.name)}
       presets={(presets ?? []) as any}
+      schedulingEnabled={canUseScheduling(user)}
     />
   )
 }

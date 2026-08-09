@@ -63,6 +63,7 @@ function datesBetween(start: string, end: string) {
 }
 
 export default function NewShowClient({
+  schedulingEnabled = true,
   organizationId,
   roles,
   presets,
@@ -70,6 +71,9 @@ export default function NewShowClient({
   organizationId: string
   roles: string[]
   presets: Preset[]
+  /** Scheduling module. False collapses section 4 to a rooms-only editor and
+   *  skips the positions insert — see CrewCallGrid. */
+  schedulingEnabled?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -439,6 +443,7 @@ export default function NewShowClient({
           roles={roles}
           onChange={setCall}
           onRoomsChange={setRooms}
+          schedulingEnabled={schedulingEnabled}
           dayTypes={dayTypes}
           invalidRoomKeys={badRoomKeys}
           sectionNumber="4"

@@ -66,6 +66,7 @@ export default function CrewCallGrid({
   invalidRoomKeys,
   sectionNumber,
   readOnly = false,
+  schedulingEnabled = true,
 }: {
   rooms: GridRoom[]
   dates: string[]
@@ -81,6 +82,19 @@ export default function CrewCallGrid({
   /** Open Paper section number for the grid's NumberedHead ("4" on New Show). */
   sectionNumber?: string
   readOnly?: boolean
+  /**
+   * Scheduling module available. When FALSE this becomes a rooms-only editor:
+   * the day columns, the cell editors and Add positions all disappear, leaving
+   * just the room-name list.
+   *
+   * This component is the ONLY room editor on New Show, so it cannot simply be
+   * hidden for an org without scheduling — there would be no way to create a
+   * room at all. Collapsing it is deliberate rather than building a second
+   * editor: the submit path already does the right thing, because
+   * roomDayIndices() creates a room carrying no positions on EVERY day, which
+   * is exactly the no-scheduling behaviour.
+   */
+  schedulingEnabled?: boolean
 }) {
   const [selected, setSelected] = useState<{ roomKey: string; day: number } | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -96,8 +110,11 @@ export default function CrewCallGrid({
   // which owns it — that state is meaningless outside adding one line.
 
   const totalDays = dates.length
-  const gridTemplateColumns = `${NAME_COL}px repeat(${totalDays}, minmax(${MIN_DAY_COL}px, 1fr))`
-  const minWidth = NAME_COL + totalDays * MIN_DAY_COL
+  // Rooms-only mode: one full-width column, nothing to scroll sideways.
+  const gridTemplateColumns = schedulingEnabled
+    ? `${NAME_COL}px repeat(${totalDays}, minmax(${MIN_DAY_COL}px, 1fr))`
+    : 'minmax(0, 1fr)'
+  const minWidth = schedulingEnabled ? NAME_COL + totalDays * MIN_DAY_COL : undefined
   const perDay = peakPerDay(call, totalDays)
 
   function addRoom() {
@@ -123,13 +140,17 @@ export default function CrewCallGrid({
     <div>
       <NumberedHead
         n={sectionNumber}
-        title="Rooms & Positions"
-        note={perDay > 0 ? `${perDay} crew on the busiest day` : 'No positions yet'}
+        title={schedulingEnabled ? 'Rooms & Positions' : 'Rooms'}
+        note={
+          !schedulingEnabled
+            ? 'Each room is created on every day of the show'
+            : perDay > 0 ? `${perDay} crew on the busiest day` : 'No positions yet'
+        }
         className="mb-4"
       >
         {/* The labelled way in. Until this existed the only way to add a
             position was to discover that grid cells are clickable. */}
-        {!readOnly && (
+        {!readOnly && schedulingEnabled && (
           <Button
             type="button"
             size="sm"
@@ -143,7 +164,7 @@ export default function CrewCallGrid({
 
       {/* Opens above the grid, so the grid slides down and stays visible as the
           live preview of what this is about to do. */}
-      {bulkOpen && !readOnly && (
+      {bulkOpen && !readOnly && schedulingEnabled && (
         <PositionsBulkAdd
           rooms={rooms}
           dates={dates}
@@ -169,7 +190,7 @@ export default function CrewCallGrid({
             <div className="sticky left-0 z-20 bg-band px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-band-ink">
               Room
             </div>
-            {dates.map((date, i) => {
+            {schedulingEnabled && dates.map((date, i) => {
               const l = dayLabel(date)
               const tint = dayTypeBgClass(dayTypes?.[date])
               return (
@@ -205,7 +226,10 @@ export default function CrewCallGrid({
               className="grid border-b border-line last:border-b-[3px] last:border-ink"
               style={{ gridTemplateColumns }}
             >
-              <div className="sticky left-0 z-10 flex items-center gap-1 border-r border-line bg-bg px-2 py-2">
+              <div className={cn(
+                'flex items-center gap-1 bg-bg px-2 py-2',
+                schedulingEnabled && 'sticky left-0 z-10 border-r border-line',
+              )}>
                 <input
                   value={room.name}
                   onChange={e =>
@@ -233,7 +257,7 @@ export default function CrewCallGrid({
                 )}
               </div>
 
-              {dates.map((date, day) => {
+              {schedulingEnabled && dates.map((date, day) => {
                 const lines = cellLines(call, room.key, day)
                 const isSelected = selected?.roomKey === room.key && selected.day === day
                 const l = dayLabel(date)
@@ -279,7 +303,7 @@ export default function CrewCallGrid({
           rooms on a phone the editor was rendering past the bottom of the
           viewport, so tapping a cell appeared to do nothing at all. The
           scrollIntoView below is the belt to that braces. */}
-      {selected && !readOnly && (
+      {selected && !readOnly && schedulingEnabled && (
         <div ref={editorRef} className="mt-3 rounded-card border border-accent bg-surface p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-[13px] font-semibold text-ink">
