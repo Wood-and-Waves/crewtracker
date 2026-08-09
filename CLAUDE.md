@@ -249,8 +249,10 @@ scripts/
                        0013 scheduler_id/call_approved_at · 0014 booking_invites
                        0015 work_days.day_type + its UPDATE grant AND policy (both halves or the
                        silent-success bug returns) · 0016 eighth day type (show_load_out)
+                       · 0017 scheduling module (organizations.scheduling_enabled +
+                       memberships.can_manage_scheduling + the guard trigger)
                        Applied to BOTH databases — production caught up from 0010 to 0016
-                       during the 2026-08-06 cutover.
+                       during the 2026-08-06 cutover. 0017 is on DEV only until its cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
@@ -320,6 +322,54 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - **A web texting service (Twilio et al.) is deliberately not being used.** Crew timesheet delivery is device-native — `SendHoursButton` offers `sms:` / Web Share / clipboard depending on what the browser supports. That feature is **built**; this note is about not replacing it with a paid SMS gateway.
 - ~~Superadmin pages still on the old zinc palette.~~ **DONE 2026-07-27** — all of `app/superadmin/*` and `SuperAdminClient.tsx` are token-driven; no hardcoded colours or raw radii remain.
 - No public self-serve signup — new orgs are onboarded only via superadmin-generated invite links. The "Join the Beta" form is a lead-capture funnel, not an auto-provisioning flow, so this stays true. **One thing did quietly contradict it:** `signInWithOtp` defaults `shouldCreateUser` to TRUE, so the login page's "Send magic link instead" created an account for any address typed in and sent the *Confirm signup* email. Found 2026-07-28 when a magic-link request recreated an account deleted the day before. The login page now passes `shouldCreateUser: false`; the invite page keeps the default, because creating an account is the point there and it is gated by a valid token. Any future `signInWithOtp` call needs the same decision made explicitly.
+
+## Scheduling is a switchable MODULE (2026-08-09)
+
+The tracker is the product; scheduling is an add-on, eventually a paid one. Dan:
+*"maybe not everyone will use scheduling. Or maybe that will be a paid upgrade as it involves
+email and such."* The landing page has only ever sold the tracker, so the commercial shape
+already matched.
+
+**Two gates, and neither implies the other** — the same shape as `canSeeFinancials`:
+- `organizations.scheduling_enabled` — the company's entitlement. **Operator-only**: the
+  `organizations` UPDATE policy is COLUMN-BLIND, so without `guard_organization_disabled_at()`
+  (which despite its name now guards this column too) any customer admin could switch on their
+  own paid feature. Verified 2026-08-09 through a real authenticated session that the guard
+  raises — `npm run db:sql` bypasses it and would report a false pass.
+- `memberships.can_manage_scheduling` — which people inside that company may use it.
+
+Ask **`canUseScheduling(user)`** (`lib/permissions.ts`, re-exported from `lib/session.ts`).
+It lives in permissions.ts because it is pure and session.ts is server-only — importing
+session.ts into a test drags in `next/headers` and dies.
+
+**What is in the module**: positions (`crew_call_positions`) and the New Show positions grid ·
+room ⋮ → Positions · Fill position · open-position rows on the tracker · handoff to scheduler ·
+booking requests (emails, SMS text, `/book/[token]`, record-by-phone) · `/dashboard/schedule` ·
+the shows list's **Staffing** column and its sort. **What is NOT**: everything else, including
+**day types** (they label what the production is doing and belong to the show) and staffing crew
+into rooms (recording who worked is the core product).
+
+**Switching it off deletes NOTHING.** Positions, booking invites and `booking_status` all stay;
+the UI is hidden and switching back on restores the feature whole. This is why
+`lib/timecardFields.ts` needs no change — with the module off nothing ever reaches `'declined'`,
+so the decline filter is simply inert. **Not enforced in RLS**, deliberately, matching the call
+recorded for `disabled_at`: a commercial state is not a security boundary, and an RLS gate would
+risk cutting a downgraded customer off from exports they are still owed. The API routes
+(`api/bookings/*`, `api/shows/approve-call`) re-check server-side and 403; `/book/[token]` stays
+public and ungated so an invite already sent can still be answered.
+
+**The trap worth knowing**: `CrewCallGrid` is also the ONLY room editor on New Show. With the
+module off it collapses to a rooms-only editor (`schedulingEnabled={false}`) rather than being
+hidden — otherwise there would be no way to create a room at all. `roomDayIndices()` already
+creates a position-less room on every day, which is exactly the right no-scheduling behaviour.
+
+**Deployment order is load-bearing**: `getCurrentUser()` selects every key in
+`ALL_PERMISSION_KEYS` and `my_perm()` raises `undefined_column` on an unknown one, so shipping
+the code before migration 0017 makes **every page 400**. Migrate first, then deploy.
+
+Flip it from the superadmin panel (`Scheduling: on/off` beside Suspend →
+`api/admin/org-scheduling`). `subscriptions.plan` is deliberately NOT the gate: entitlement and
+billing stay separate, so a beta customer can be granted scheduling without inventing a plan.
 
 ### Already built — do not rebuild these
 
