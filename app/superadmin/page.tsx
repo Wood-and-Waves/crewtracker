@@ -23,7 +23,7 @@ export default async function SuperAdminPage() {
 
   const [{ data: orgs }, { data: subs }, { data: memberOrgIds }, { data: showOrgIds }, { data: invites }] =
     await Promise.all([
-      admin.from('organizations').select('id, name, created_at, disabled_at').order('created_at', { ascending: false }),
+      admin.from('organizations').select('id, name, created_at, disabled_at, scheduling_enabled').order('created_at', { ascending: false }),
       admin.from('subscriptions').select('organization_id, plan, status, trial_ends_at'),
       // organization_id only — counting members must not mean reading them.
       //
@@ -57,6 +57,7 @@ export default async function SuperAdminPage() {
       name: o.name,
       created_at: o.created_at,
       disabled_at: o.disabled_at,
+      schedulingEnabled: o.scheduling_enabled !== false,
       plan: sub?.plan ?? null,
       status: sub?.status ?? null,
       trialEndsAt: sub?.trial_ends_at ?? null,

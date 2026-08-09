@@ -26,6 +26,8 @@ export type OrgRow = {
   name: string
   created_at: string
   disabled_at: string | null
+  /** The scheduling module — positions, booking requests, the calendar. */
+  schedulingEnabled: boolean
   plan: string | null
   status: string | null
   trialEndsAt: string | null
@@ -70,6 +72,28 @@ export default function SuperAdminClient({
     const res = await fetch('/api/admin/org-status', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orgId: org.id, suspend }),
+    })
+    setBusyId(null)
+    if (!res.ok) { setError((await res.json()).error || 'Could not update the organization.'); return }
+    router.refresh()
+  }
+
+  // Switching the module off hides it; it deletes nothing. Anything already
+  // built stays in the database and comes back intact if it is switched on
+  // again — worth saying in the confirm, because "turn off scheduling" sounds
+  // destructive and isn't.
+  async function setScheduling(org: OrgRow, enabled: boolean) {
+    if (!confirm(
+      `${enabled ? 'Enable' : 'Disable'} scheduling for ${org.name}?\n\n` +
+      (enabled
+        ? 'Positions, crew booking requests and the company calendar become available to members who have the scheduling permission.'
+        : 'The scheduling screens are hidden. Nothing is deleted — any positions and booking history are kept, and come back if you switch it on again.')
+    )) return
+
+    setBusyId(org.id); setError('')
+    const res = await fetch('/api/admin/org-scheduling', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId: org.id, enabled }),
     })
     setBusyId(null)
     if (!res.ok) { setError((await res.json()).error || 'Could not update the organization.'); return }
@@ -155,14 +179,27 @@ export default function SuperAdminClient({
                     {org.trialEndsAt && ` · trial ends ${fmtDate(org.trialEndsAt)}`}
                   </p>
                 </div>
-                <Button
-                  variant={org.disabled_at ? 'ghost' : 'danger'}
-                  size="sm"
-                  disabled={busyId === org.id}
-                  onClick={() => setOrgStatus(org, !org.disabled_at)}
-                >
-                  {busyId === org.id ? 'Working…' : org.disabled_at ? 'Re-enable' : 'Suspend'}
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busyId === org.id}
+                    onClick={() => setScheduling(org, !org.schedulingEnabled)}
+                    title={org.schedulingEnabled
+                      ? 'Scheduling is on for this organization'
+                      : 'Scheduling is off for this organization'}
+                  >
+                    {org.schedulingEnabled ? 'Scheduling: on' : 'Scheduling: off'}
+                  </Button>
+                  <Button
+                    variant={org.disabled_at ? 'ghost' : 'danger'}
+                    size="sm"
+                    disabled={busyId === org.id}
+                    onClick={() => setOrgStatus(org, !org.disabled_at)}
+                  >
+                    {busyId === org.id ? 'Working…' : org.disabled_at ? 'Re-enable' : 'Suspend'}
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
