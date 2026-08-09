@@ -9,10 +9,15 @@ import Logo from '@/components/Logo'
 
 const baseNavItems = [
   { href: '/dashboard', label: 'Shows', icon: 'briefcase', match: (p: string) => p === '/dashboard' || p.startsWith('/dashboard/shows') },
-  { href: '/dashboard/schedule', label: 'Schedule', icon: 'calendar', match: (p: string) => p.startsWith('/dashboard/schedule') },
   { href: '/dashboard/directory', label: 'Directory', icon: 'users', match: (p: string) => p.startsWith('/dashboard/directory') },
   { href: '/dashboard/settings', label: 'Settings', icon: 'settings', match: (p: string) => p.startsWith('/dashboard/settings') },
 ]
+
+// The scheduling module. Present only for an organization that has it AND a
+// member permitted to use it — see canUseScheduling() in lib/session.ts. Slotted
+// after Shows rather than appended, so enabling the module doesn't reorder the
+// nav somebody has learned.
+const scheduleNavItem = { href: '/dashboard/schedule', label: 'Schedule', icon: 'calendar', match: (p: string) => p.startsWith('/dashboard/schedule') }
 
 const teamNavItem = { href: '/dashboard/team', label: 'Team', icon: 'shield', match: (p: string) => p.startsWith('/dashboard/team') }
 
@@ -76,6 +81,7 @@ export default function AppShell({
   userEmail,
   organizations = [],
   version,
+  canUseScheduling = false,
 }: {
   children: React.ReactNode
   canManageUsers?: boolean
@@ -86,10 +92,14 @@ export default function AppShell({
   /** App version, read from package.json by the server layout. Shown in the
    *  footer so a customer reporting a bug can say which build they are on. */
   version?: string
+  /** Org has the scheduling module AND this member may use it. */
+  canUseScheduling?: boolean
 }) {
   const pathname = usePathname()
   const navItems = [
-    ...baseNavItems,
+    baseNavItems[0],
+    ...(canUseScheduling ? [scheduleNavItem] : []),
+    ...baseNavItems.slice(1),
     ...(canManageUsers ? [teamNavItem] : []),
     ...(isSuperAdmin ? [superAdminNavItem] : []),
   ]

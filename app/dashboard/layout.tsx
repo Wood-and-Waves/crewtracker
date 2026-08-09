@@ -3,7 +3,7 @@ import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
 import SignOutButton from '@/components/SignOutButton'
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser, getMyOrganizations } from '@/lib/session'
+import { getCurrentUser, getMyOrganizations, canUseScheduling } from '@/lib/session'
 // Read server-side and passed down as a string: importing package.json into a
 // client component would bundle the whole dependency list into the browser.
 import { version as APP_VERSION } from '@/package.json'
@@ -97,6 +97,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       userEmail={user?.email ?? undefined}
       organizations={organizations}
       version={APP_VERSION}
+      canUseScheduling={canUseScheduling(user)}
     >
       {children}
     </AppShell>

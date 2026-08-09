@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { BAND } from '@/lib/panel'
@@ -34,6 +34,9 @@ export default async function SchedulePage({
   const supabase = await createClient()
   const user = await getCurrentUser()
   if (!user) redirect('/login')
+  // The scheduling module. Hiding the nav item is not a gate — this is, for
+  // anyone who kept the URL in a bookmark after their org was switched off.
+  if (!canUseScheduling(user)) redirect('/dashboard')
 
   if (!user.organizationId) {
     return (

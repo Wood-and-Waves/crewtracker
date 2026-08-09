@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { sendCallHandoffEmail } from '@/lib/callHandoffEmail'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
@@ -20,6 +21,17 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
+  // The scheduling module. Hiding a button is tidiness; THIS is the gate — a
+  // switched-off organization must not be able to send crew requests or hand a
+  // show off by posting here directly. Deliberately 403 with a plain reason
+  // rather than a 404: the caller is legitimate, the feature simply isn't theirs.
+  if (!canUseScheduling(await getCurrentUser())) {
+    return NextResponse.json(
+      { error: 'Scheduling is not enabled for this account.' },
+      { status: 403 },
+    )
+  }
 
   let showId: string | undefined
   let schedulerId: string | undefined
