@@ -115,7 +115,7 @@ export default function AppShell({
           toolbar; matching the ground exactly left the chrome indistinguishable
           from the page. This warm tint is the middle Dan asked for. Opaque, so
           content scrolling under the sticky bar stays hidden. */}
-      <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-surface-2 px-6 py-3 lg:flex">
+      <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-surface-2 px-6 py-3 lg:flex print:hidden">
         <Link href="/dashboard" className="mr-5 flex items-center gap-2 text-[15px] font-extrabold">
           <span className="text-accent"><Logo /></span>
           CrewTracker
@@ -147,7 +147,7 @@ export default function AppShell({
           a bar pinned over a punch table would cost a row of crew on a phone.
           `mt-auto` on the flex column keeps it at the bottom on short pages.
           The bottom padding clears the floating tab bar below 1024px. */}
-      <footer className="mt-auto border-t border-line px-6 pb-28 pt-5 lg:pb-6">
+      <footer className="mt-auto border-t border-line px-6 pb-28 pt-5 lg:pb-6 print:hidden">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="flex items-center gap-2 text-[13px] font-bold text-ink">
             <Logo className="h-5 w-5" />
@@ -168,7 +168,7 @@ export default function AppShell({
           keeps a box — but the Showbill one: squared, 2px ink edge, hard
           offset shadow. The 26px pill it used to be was the "iOS forced to
           big screen" disease in miniature. */}
-      <nav className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-0.5 border-2 border-ink bg-surface p-1.5 shadow-edge lg:hidden">
+      <nav className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 gap-0.5 border-2 border-ink bg-surface p-1.5 shadow-edge lg:hidden print:hidden">
         {tabItems.map(item => {
           const active = item.match(pathname)
           return (

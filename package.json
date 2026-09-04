@@ -19,13 +19,15 @@
     "test:rls": "node --no-warnings --env-file=.env.local --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/rls.mts",
     "test:schedule": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/schedule.mts",
     "preview:booking": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/preview-booking-message.mts",
-    "test": "npm run test:payroll && npm run test:schedule && npm run test:rls"
+    "test": "npm run test:payroll && npm run test:schedule && npm run test:clock && npm run test:rls",
+    "test:clock": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/clock.mts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.2",
     "next": "16.2.10",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^6.17.2"
@@ -34,6 +36,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

@@ -3,6 +3,7 @@ import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
+import CrewClockPanel from '@/components/CrewClockPanel'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
@@ -61,6 +62,28 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
     }
   }
   const crewRateEntries = Object.values(seen).sort((a: any, b: any) => a.name.localeCompare(b.name))
+
+  // Crew Clock — one entry per PERSON, not per person+role like Crew & Rates
+  // above: a clock link belongs to a human, not to a job title, and somebody
+  // holding two roles on a show still punches once.
+  //
+  // crew_member_id is nullable, and lib/crew.ts nulls it before deleting a
+  // crew member, so historical rows can carry a name with no FK. A personal
+  // link needs the FK, so those people are simply absent here and fall back to
+  // the venue QR.
+  const canEditTimecards = user.can('can_edit_timecards')
+  const clockSeen = new Set<string>()
+  const clockCrew: { crewMemberId: string; name: string }[] = []
+  for (const tc of timecards || []) {
+    if (!tc.crew_member_id || clockSeen.has(tc.crew_member_id)) continue
+    clockSeen.add(tc.crew_member_id)
+    clockCrew.push({ crewMemberId: tc.crew_member_id, name: tc.crew_member_name || 'Unnamed' })
+  }
+  clockCrew.sort((a, b) => a.name.localeCompare(b.name))
+
+  const { data: clockLinks } = canEditTimecards
+    ? await supabase.from('clock_links').select('id, crew_member_id, token, revoked_at').eq('show_id', id)
+    : { data: [] }
 
   // Handing off to a scheduler. Moved here from the tracker header (2026-08-06)
   // — it is an admin act on the whole show, not something you do while punching
@@ -125,6 +148,19 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
         callSize: describeCallSize(callSummary),
       } : undefined}
     >
+      {canEditTimecards && (
+        <CrewClockPanel
+          showId={show.id}
+          showName={show.name}
+          showEndDate={show.end_date}
+          timeZone={show.timezone_identifier || 'America/Chicago'}
+          organizationId={user.organizationId!}
+          createdBy={user.id}
+          crew={clockCrew}
+          initialLinks={clockLinks || []}
+        />
+      )}
+
       {canManageUsers && (
         <div className="mb-4">
           <ShowAccessEditor
