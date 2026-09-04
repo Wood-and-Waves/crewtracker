@@ -129,13 +129,13 @@ export function buildTimesheetText({
 
     const ot = paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
     sumPaidOT += ot
-    if (ot > 0) out += `• OT Paid: ${num(ot)}h\n`
+    if (ot > 0) out += `• OT: ${num(ot)}h\n`
 
     const dt = paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
     sumPaidDT += dt
     if (dt > 0) {
       const label = isShortTurnaround(tc, allTimecards, ruleset) ? 'ST Penalty (DT)' : 'DT'
-      out += `• ${label} Paid: ${num(dt)}h\n`
+      out += `• ${label}: ${num(dt)}h\n`
     }
 
     // Only a day with both punches counts as worked; a half day counts 0.5.
@@ -147,8 +147,8 @@ export function buildTimesheetText({
   out += '----------------\n'
   out += `Travel Days: ${travelDays}\n`
   out += `Work Days: ${num(workDays)}\n`
-  if (sumPaidOT > 0) out += `Overtime Hours (Paid): ${num(sumPaidOT)}\n`
-  if (sumPaidDT > 0) out += `Double Time Hours (Paid): ${num(sumPaidDT)}\n`
+  if (sumPaidOT > 0) out += `Overtime Hours: ${num(sumPaidOT)}\n`
+  if (sumPaidDT > 0) out += `Double Time Hours: ${num(sumPaidDT)}\n`
 
   return out
 }
@@ -158,7 +158,7 @@ export function buildSmsMessage(crewName: string, showName: string, timesheet: s
   const firstName = crewName.trim().split(/\s+/)[0] || crewName
   return (
     `Hi ${firstName},\n\n` +
-    `Here are your hours for ${showName}:\n\n` +
+    `Here are the hours I have recorded for you for ${showName}:\n\n` +
     `${timesheet}\n` +
     `Please let me know if this does not match your records.\n\n` +
     `Created with the CrewTracker app`
