@@ -53,6 +53,15 @@ const MailIcon = () => (
   <svg {...svgProps}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
 )
 
+// Empty stand-in the exact size of a contact button.
+//
+// The icons are right-aligned, so without this a person with no email had their
+// phone and message buttons slide one column right, and nothing lined up down
+// the list. Every row now renders all three slots; a missing contact is a gap.
+function BlankSlot() {
+  return <span className="h-9 w-9 shrink-0" aria-hidden="true" />
+}
+
 // Blue circular contact button (call / message / email), matching the iOS app.
 function ContactCircle({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
   return (
@@ -310,13 +319,17 @@ export default function CrewDirectoryClient({
                 <div className="text-muted truncate">{person.phone ? formatPhone(person.phone) : '—'}</div>
                 <div className="text-muted truncate">{person.email || '—'}</div>
                 <div className="flex justify-end items-center gap-2" onClick={e => e.stopPropagation()}>
-                  {person.phone && (
+                  {person.phone ? (
                     <>
                       <ContactCircle href={`tel:${person.phone}`} label="Call"><PhoneIcon /></ContactCircle>
                       <ContactCircle href={`sms:${person.phone}`} label="Text"><MessageIcon /></ContactCircle>
                     </>
+                  ) : (
+                    <><BlankSlot /><BlankSlot /></>
                   )}
-                  {person.email && <ContactCircle href={`mailto:${person.email}`} label="Email"><MailIcon /></ContactCircle>}
+                  {person.email
+                    ? <ContactCircle href={`mailto:${person.email}`} label="Email"><MailIcon /></ContactCircle>
+                    : <BlankSlot />}
                   <button onClick={() => deleteCrew(person.id)} className="flex h-9 w-9 items-center justify-center rounded-field text-muted hover:bg-surface-3 hover:text-danger" title="Delete" aria-label="Delete">
                     <svg {...svgProps}><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
                   </button>
@@ -340,13 +353,17 @@ export default function CrewDirectoryClient({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-                  {person.phone && (
+                  {person.phone ? (
                     <>
                       <ContactCircle href={`tel:${person.phone}`} label="Call"><PhoneIcon /></ContactCircle>
                       <ContactCircle href={`sms:${person.phone}`} label="Text"><MessageIcon /></ContactCircle>
                     </>
+                  ) : (
+                    <><BlankSlot /><BlankSlot /></>
                   )}
-                  {person.email && <ContactCircle href={`mailto:${person.email}`} label="Email"><MailIcon /></ContactCircle>}
+                  {person.email
+                    ? <ContactCircle href={`mailto:${person.email}`} label="Email"><MailIcon /></ContactCircle>
+                    : <BlankSlot />}
                 </div>
                 <span className="text-muted shrink-0" aria-hidden="true">›</span>
               </div>
