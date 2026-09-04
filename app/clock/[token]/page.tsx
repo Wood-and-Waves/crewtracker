@@ -108,6 +108,7 @@ export default async function ClockPage({ params }: { params: Promise<{ token: s
         venue={view.venue}
         crewName={view.me.name}
         timeZone={view.timeZone}
+        roundingMinutes={view.roundingMinutes}
         assignments={view.me.assignments}
       />
     </Shell>

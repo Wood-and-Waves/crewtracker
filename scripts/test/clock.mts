@@ -16,7 +16,7 @@
 // that survives the paste.
 
 import { clockUrl, clockLinkExpiry, buildSlackList, type ClockLinkRow } from '../../lib/clockLinks.ts'
-import { getChronologyError, isEligibleForBatch, type Punch } from '../../lib/punches.ts'
+import { getChronologyError, isEligibleForBatch, roundWallTime, type Punch } from '../../lib/punches.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -131,6 +131,42 @@ check('a lunch that ends before it starts is refused',
 check('and a start after the wrap is refused',
   getChronologyError(new Date('2026-09-04T23:00:00Z'), 'start', wrapped),
   'Start must be before Wrap.')
+
+// ---------------------------------------------------------------------------
+// Snapping a crew-picked time to the company's grid.
+//
+// This is NOT the rounding calculateNetHours does. That one ceilings a
+// finished day's total net minutes; this one moves the punch itself. Same org
+// setting, different operation, and they are not interchangeable — 8:07→17:52
+// billed as a duration is 8.75h at a 15-minute grid, but snapped to 8:00→18:00
+// it is 9.0h. Anyone "unifying" them should read roundWallTime's header first.
+console.log('\ncrew punch rounding')
+
+check('exact-minute orgs are left alone', roundWallTime('08:07', 1), { timeStr: '08:07', dayOffset: 0 })
+check('0 is treated as exact, not as a divide-by-zero', roundWallTime('08:07', 0), { timeStr: '08:07', dayOffset: 0 })
+
+check('rounds down to the nearest quarter', roundWallTime('08:07', 15), { timeStr: '08:00', dayOffset: 0 })
+check('rounds up to the nearest quarter', roundWallTime('08:08', 15), { timeStr: '08:15', dayOffset: 0 })
+check('already on the grid does not move', roundWallTime('08:15', 15), { timeStr: '08:15', dayOffset: 0 })
+check('carries into the next hour', roundWallTime('08:53', 15), { timeStr: '09:00', dayOffset: 0 })
+check('half-hour grid', roundWallTime('17:52', 30), { timeStr: '18:00', dayOffset: 0 })
+check('half-hour grid, down', roundWallTime('17:12', 30), { timeStr: '17:00', dayOffset: 0 })
+
+// Neutral, not employer-favouring: a tie goes up, and 8:07 losing 7 minutes is
+// matched by 8:08 gaining 7.
+check('ties round up', roundWallTime('08:07:30'.slice(0, 5), 15), { timeStr: '08:00', dayOffset: 0 })
+check('the midpoint itself rounds up', roundWallTime('08:23', 15), { timeStr: '08:30', dayOffset: 0 })
+
+// The case that silently produces an invalid "24:00" if dayOffset is dropped.
+check('23:58 at a quarter grid becomes midnight TOMORROW',
+  roundWallTime('23:58', 15), { timeStr: '00:00', dayOffset: 1 })
+check('23:52 at a half-hour grid does the same',
+  roundWallTime('23:52', 30), { timeStr: '00:00', dayOffset: 1 })
+check('23:44 stays on the same day',
+  roundWallTime('23:44', 15), { timeStr: '23:45', dayOffset: 0 })
+
+check('garbage in is returned untouched rather than becoming 00:00',
+  roundWallTime('not-a-time', 15), { timeStr: 'not-a-time', dayOffset: 0 })
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

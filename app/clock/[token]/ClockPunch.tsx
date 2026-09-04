@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import {
-  PUNCH_LABELS, formatPunchTime, nextPunchType, visiblePunchTypes,
+  PUNCH_LABELS, formatPunchTime, nextPunchType, visiblePunchTypes, roundWallTime,
   type Punch, type PunchType,
 } from '@/lib/punches'
 import type { ClockAssignment } from '@/lib/clockSession'
@@ -20,26 +20,41 @@ import type { ClockAssignment } from '@/lib/clockSession'
 // anything else would be a lie the moment the two disagree.
 
 export default function ClockPunch({
-  token, showName, venue, crewName, timeZone, assignments,
+  token, showName, venue, crewName, timeZone, roundingMinutes, assignments,
 }: {
   token: string
   showName: string
   venue: string | null
   crewName: string
   timeZone: string
+  /** The company's punch grid, from organizations.timecard_rounding_minutes. */
+  roundingMinutes: number
   assignments: ClockAssignment[]
 }) {
   const [rows, setRows] = useState(assignments)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [timeStr, setTimeStr] = useState('')
 
-  async function punch(timecardId: string, type: PunchType) {
+  // "Now" means now IN THE SHOW'S ZONE, not on this phone — somebody on a
+  // Chicago show whose phone is still on Pacific must not pre-fill two hours
+  // early. Snapped so the field opens already on the company's grid.
+  const nowInZone = new Intl.DateTimeFormat('en-GB', {
+    timeZone, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date())
+  const defaultTime = roundWallTime(nowInZone, roundingMinutes).timeStr
+
+  async function punch(timecardId: string, type: PunchType, at?: string) {
     setBusy(`${timecardId}:${type}`); setError('')
     try {
       const res = await fetch('/api/clock/punch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, timecardId, punchType: type }),
+        // No `at` means now, decided by the server. The date is never sent —
+        // the server pins every punch to the work day it resolved from the
+        // show's timezone, which is what stops a bookmarked link back-dating.
+        body: JSON.stringify({ token, timecardId, punchType: type, at }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'That did not save.'); setBusy(null); return }
@@ -50,6 +65,7 @@ export default function ClockPunch({
         const added: Punch = { id: `${type}-${body.punchedAt}`, punch_type: type, punched_at: body.punchedAt }
         return { ...r, punches: [...rest, added].sort((a, b) => a.punched_at.localeCompare(b.punched_at)) }
       }))
+      setEditing(null)
     } catch {
       setError('No connection. Your punch was NOT saved — try again.')
     }
@@ -87,25 +103,66 @@ export default function ClockPunch({
                 const isNext = !done && type === next
                 const working = busy === `${row.timecardId}:${type}`
 
+                const editKey = `${row.timecardId}:${type}`
+                const open = editing === editKey
+
                 return (
-                  <div key={type} className="flex items-center justify-between gap-3 border-b border-line py-3">
-                    <span className="text-sm font-semibold uppercase tracking-wide text-ink">
-                      {PUNCH_LABELS[type]}
-                    </span>
-                    {done ? (
-                      <span className="font-mono text-base tabular-nums text-ink">
-                        {formatPunchTime(done.punched_at, timeZone)}
+                  <div key={type}>
+                    <div className="flex items-center justify-between gap-3 border-b border-line py-3">
+                      <span className="text-sm font-semibold uppercase tracking-wide text-ink">
+                        {PUNCH_LABELS[type]}
                       </span>
-                    ) : isNext ? (
-                      <button
-                        onClick={() => punch(row.timecardId, type)}
-                        disabled={busy !== null}
-                        className="min-w-[7.5rem] bg-accent px-5 py-3 text-sm font-bold uppercase tracking-wide text-accent-ink disabled:opacity-60"
-                      >
-                        {working ? 'Saving…' : `Tap to ${PUNCH_LABELS[type]}`}
-                      </button>
-                    ) : (
-                      <span className="text-sm text-muted">—</span>
+                      {done ? (
+                        <span className="font-mono text-base tabular-nums text-ink">
+                          {formatPunchTime(done.punched_at, timeZone)}
+                        </span>
+                      ) : isNext ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            onClick={() => punch(row.timecardId, type)}
+                            disabled={busy !== null}
+                            className="min-w-[7.5rem] bg-accent px-5 py-3 text-sm font-bold uppercase tracking-wide text-accent-ink disabled:opacity-60"
+                          >
+                            {working ? 'Saving…' : `Tap to ${PUNCH_LABELS[type]}`}
+                          </button>
+                          {/* The one-tap path stays the headline and still
+                              means "now". Picking a time is the exception —
+                              somebody who forgot to tap at the door — so it
+                              sits underneath as a quiet link rather than
+                              turning every punch into a form. */}
+                          <button
+                            onClick={() => { setEditing(open ? null : editKey); setTimeStr(defaultTime) }}
+                            className="text-[11px] font-semibold uppercase tracking-wide text-accent"
+                          >
+                            {open ? 'Cancel' : 'Different time'}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted">—</span>
+                      )}
+                    </div>
+
+                    {open && (
+                      <div className="flex items-center gap-2 border-b border-line py-3">
+                        <input
+                          type="time"
+                          value={timeStr}
+                          // Steps the picker to the company's own grid. The
+                          // server snaps it too — step is a hint a browser
+                          // will happily let somebody type past, and this
+                          // value gets paid.
+                          step={roundingMinutes > 1 ? roundingMinutes * 60 : undefined}
+                          onChange={e => setTimeStr(e.target.value)}
+                          className="flex-1 rounded-field border-2 border-ink bg-surface px-3 py-3 font-mono text-base text-ink"
+                        />
+                        <button
+                          onClick={() => punch(row.timecardId, type, timeStr)}
+                          disabled={busy !== null || !timeStr}
+                          className="bg-accent px-5 py-3 text-sm font-bold uppercase tracking-wide text-accent-ink disabled:opacity-60"
+                        >
+                          {working ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 )

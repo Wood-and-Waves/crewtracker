@@ -49,6 +49,8 @@ export type ClockView = {
   timeZone: string
   /** Today's date IN THE SHOW'S ZONE. Never the server's — see below. */
   today: string
+  /** organizations.timecard_rounding_minutes: the grid crew times snap to. */
+  roundingMinutes: number
   finalized: boolean
   expired: boolean
   revoked: boolean
@@ -89,7 +91,8 @@ export async function loadClockView(token: string): Promise<ClockView | null> {
     admin.from('shows')
       .select('id, name, venue, city_state, timezone_identifier, finalized_at')
       .eq('id', link.show_id).maybeSingle(),
-    admin.from('organizations').select('name').eq('id', link.organization_id).maybeSingle(),
+    admin.from('organizations')
+      .select('name, timecard_rounding_minutes').eq('id', link.organization_id).maybeSingle(),
   ])
   if (!show) return null
 
@@ -104,6 +107,7 @@ export async function loadClockView(token: string): Promise<ClockView | null> {
     organizationName: org?.name ?? 'the production team',
     timeZone,
     today,
+    roundingMinutes: org?.timecard_rounding_minutes ?? 1,
     finalized: !!show.finalized_at,
     expired: new Date(link.expires_at) < new Date(),
     revoked: !!link.revoked_at,

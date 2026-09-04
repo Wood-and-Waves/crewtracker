@@ -3,8 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInZone } from '@/lib/showStatus'
 import {
   PUNCH_ORDER, PUNCH_LABELS, getChronologyError, isEligibleForBatch, isWrapped,
-  type Punch, type PunchType,
+  roundWallTime, type Punch, type PunchType,
 } from '@/lib/punches'
+import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
 
 // A crew member recording their own punch, with no login.
 //
@@ -20,22 +21,28 @@ import {
 // its work day. All of that lives in TypeScript components today, which the
 // public page cannot be trusted to have run.
 //
-// WHAT THE TIME IS: the server's clock, always. The body cannot name a time.
-// A crew member taps when it happens; if they miss one, the PM fixes it on the
-// tracker. Accepting a time from the browser would make back-dating a
-// one-line request.
+// WHAT THE TIME IS: a wall-clock HH:MM the crew member picks, read in the
+// SHOW's timezone and pinned to the work day the server resolved — never a
+// date from the browser. So somebody can correct "I actually started at 8"
+// without calling the PM, but a bookmarked link still cannot reach another
+// day. Omitting `at` means now.
+//
+// The picked time is snapped to organizations.timecard_rounding_minutes.
+// That is a DIFFERENT operation from the rounding calculateNetHours does to a
+// finished day's net minutes — see roundWallTime for why they are not
+// interchangeable.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function POST(request: NextRequest) {
-  let body: { token?: string; timecardId?: string; punchType?: string }
+  let body: { token?: string; timecardId?: string; punchType?: string; at?: string }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
 
-  const { token, timecardId, punchType } = body
+  const { token, timecardId, punchType, at } = body
   if (!token || !timecardId || !UUID.test(token) || !UUID.test(timecardId)) {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 })
   }
@@ -45,6 +52,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 })
   }
   const type = punchType as PunchType
+
+  // HH:MM, 24-hour. Rejected rather than coerced: a time we cannot parse must
+  // never quietly become "now" and land a punch hours from where the person
+  // meant it.
+  if (at !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(at)) {
+    return NextResponse.json({ error: 'Invalid time.' }, { status: 400 })
+  }
 
   const admin = createAdminClient()
 
@@ -67,7 +81,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: show } = await admin
-    .from('shows').select('id, timezone_identifier, finalized_at').eq('id', link.show_id).maybeSingle()
+    .from('shows').select('id, organization_id, timezone_identifier, finalized_at').eq('id', link.show_id).maybeSingle()
   if (!show) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
 
   // Checked BEFORE writing. punches_blocked_when_finalized is a TRIGGER, and
@@ -151,7 +165,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `${why} Ask your PM if that’s not right.` }, { status: 400 })
   }
 
-  const now = new Date()
+  // The instant being recorded. `at` is a wall-clock time in the SHOW's zone
+  // on the work day the server already resolved, so the date is never the
+  // caller's to choose. No `at` means now, which is what the tracker's own
+  // "punch now" does.
+  const { data: org } = await admin
+    .from('organizations').select('timecard_rounding_minutes')
+    .eq('id', show.organization_id).maybeSingle()
+  const roundingMinutes = org?.timecard_rounding_minutes ?? 1
+
+  const wall = at ?? new Intl.DateTimeFormat('en-GB', {
+    timeZone, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date())
+
+  // Snapped server-side, not just stepped in the picker: `step` on a time
+  // input is a hint browsers let you type past, and this is the value that
+  // gets paid.
+  const { timeStr, dayOffset } = roundWallTime(wall, roundingMinutes)
+  const now = zonedWallTimeToUtc(addDays(today, dayOffset), timeStr, timeZone)
+
   // Chronology, re-run server-side against every OTHER punch. Excluding this
   // type matches TimeEntryModal: replacing a punch must not be blocked by the
   // value it is replacing.

@@ -419,6 +419,21 @@ there is no earlier time to contradict. "The previous punch must exist" is a sep
 `isEligibleForBatch` already owns it. This shipped as a real bug during the build and is now
 pinned by tests in `scripts/test/clock.mts`. The database enforces neither.
 
+**Crew pick their own time (2026-09-04), and it snaps to the company's grid.** The one-tap
+button still means now; "Different time" opens an inline picker for somebody who forgot to tap
+at the door. Only a wall-clock HH:MM is ever sent — the DATE stays the work day the server
+resolved, so picking a time can move a punch within the day but never to another one.
+
+**`roundWallTime` is NOT the rounding `calculateNetHours` does, despite reading the same
+`organizations.timecard_rounding_minutes`.** The payroll one ceilings a finished day's total NET
+MINUTES; this one moves the punch itself, to the NEAREST interval. They give different answers —
+8:07→17:52 with an hour's lunch is 8.75h billed as a duration, but 9.0h once the punches
+themselves snap to 8:00→18:00 — so do not "unify" them. Nearest, not up: rounding that
+consistently favours the employer is the version that gets you sued. It rounds WALL CLOCK, not
+the instant, because a zone offset by :45 or :30 would otherwise land on a clean quarter in UTC
+and an ugly one on the clock the crew member is reading. **This currently applies to crew
+punches only** — the PM's TimeEntryModal still stores the exact minute typed.
+
 Other things that are load-bearing and were each verified:
 - **The show's timezone decides "today"**, server-side, which is what stops a bookmarked link
   back-dating. `clockLinkExpiry` goes through `zonedWallTimeToUtc` for the same reason — a

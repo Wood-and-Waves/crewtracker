@@ -93,6 +93,45 @@ export type Punch = {
   source?: 'staff' | 'crew'
 }
 
+/**
+ * Snap a wall-clock time to the organization's punch grid.
+ *
+ * WALL CLOCK, NOT THE INSTANT. Rounding the epoch millisecond looks equivalent
+ * and is not: a zone offset by :45 (Kathmandu) or :30 (Adelaide) would land on
+ * a clean quarter-hour in UTC and an ugly one on the wall the crew member is
+ * reading. The grid people care about is the one on the clock.
+ *
+ * NEAREST, not up or down. Rounding that consistently favours one side is a
+ * thumb on the scale — and in the US, employer-favouring punch rounding is
+ * the version that gets you sued. Ties go up, which is what Math.round does.
+ *
+ * NOTE this is a DIFFERENT operation from the roundingMinutes that
+ * calculateNetHours applies. That one ceilings the total NET MINUTES of a
+ * finished day; this one moves the punch itself. They read from the same org
+ * setting but they are not interchangeable, and applying both to the same
+ * timecard is not double-counting — the first decides the times, the second
+ * decides how the resulting duration is billed.
+ *
+ * Returns dayOffset because 23:58 at a 15-minute grid rounds to 24:00, which
+ * is 00:00 the next day — the correct answer for an overnight wrap, and one
+ * that silently becomes an invalid "24:00" if you only return the string.
+ */
+export function roundWallTime(
+  timeStr: string,
+  roundingMinutes: number,
+): { timeStr: string; dayOffset: number } {
+  const interval = roundingMinutes > 0 ? Math.floor(roundingMinutes) : 1
+  const [h, m] = timeStr.split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return { timeStr, dayOffset: 0 }
+  if (interval <= 1) return { timeStr, dayOffset: 0 }
+
+  const snapped = Math.round((h * 60 + m) / interval) * interval
+  const dayOffset = Math.floor(snapped / 1440)
+  const mins = snapped % 1440
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return { timeStr: `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`, dayOffset }
+}
+
 export function nextPunchType(punches: Punch[]): PunchType | null {
   const done = new Set(punches.map(p => p.punch_type))
   for (const type of PUNCH_ORDER) {
