@@ -10,6 +10,12 @@ import { cn } from '@/lib/cn'
 
 type RoomCrew = { id: string; crewMemberId: string | null; name: string; role: string; dayRate: number }
 
+// Free-text escape hatch in the role picker, matching StaffRoomModal. Staffing
+// someone has always allowed a one-off title; EDITING them afterwards did not,
+// so a role typed at staffing time could not be corrected here, and a position
+// that is not in the org's AV Roles list could not be set at all.
+const OTHER = '__other__'
+
 export default function RoomActionsMenu({
   roomId,
   roomName,
@@ -46,6 +52,8 @@ export default function RoomActionsMenu({
   const [crewList, setCrewList] = useState<RoomCrew[]>(crew)
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({})
   const [roles, setRoles] = useState<string[]>([])
+  // Timecard ids currently typing a custom role.
+  const [customRole, setCustomRole] = useState<Record<string, boolean>>({})
   const [callOpen, setCallOpen] = useState(false)
 
   // Load the org's AV roles for the role dropdown when Edit Crew opens.
@@ -271,11 +279,22 @@ export default function RoomActionsMenu({
                         ariaLabel={`Role for ${tc.name}`}
                         size="sm"
                         className="min-w-0 flex-1"
-                        value={tc.role}
-                        onChange={v => updateRole(tc, v)}
+                        value={customRole[tc.id] ? OTHER : tc.role}
+                        onChange={v => {
+                          if (v === OTHER) {
+                            // Open the field; write nothing yet. Committing an
+                            // empty role here would clear a good one the moment
+                            // somebody opened the picker to look.
+                            setCustomRole(prev => ({ ...prev, [tc.id]: true }))
+                            return
+                          }
+                          setCustomRole(prev => ({ ...prev, [tc.id]: false }))
+                          updateRole(tc, v)
+                        }}
                         options={[
                           ...(tc.role ? [] : [{ value: '', label: 'No role' }]),
                           ...roleOptions.map(r => ({ value: r, label: r })),
+                          { value: OTHER, label: 'Other…' },
                         ]}
                       />
                       {canViewRates && (
@@ -296,6 +315,32 @@ export default function RoomActionsMenu({
                         )
                       )}
                     </div>
+
+                    {/* Free-text role. Saved on blur or Enter, not per keystroke:
+                        every write here propagates through the show-wide day-rate
+                        triggers, and "A", "A1", "A1 " would be three of them. */}
+                    {customRole[tc.id] && (
+                      <input
+                        autoFocus
+                        placeholder="Custom role title"
+                        defaultValue={tc.role}
+                        onBlur={e => {
+                          const next = e.target.value.trim()
+                          setCustomRole(prev => ({ ...prev, [tc.id]: false }))
+                          if (next && next !== tc.role) updateRole(tc, next)
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') e.currentTarget.blur()
+                          // Escape abandons without writing, leaving the old role.
+                          if (e.key === 'Escape') {
+                            e.currentTarget.value = tc.role
+                            e.currentTarget.blur()
+                          }
+                        }}
+                        aria-label={`Custom role for ${tc.name}`}
+                        className="mt-2 w-full rounded-field border border-line bg-surface-3 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+                      />
+                    )}
                   </div>
                 )
               })}
