@@ -172,7 +172,8 @@ app/
     team/page.tsx              — org member list (admin)
     team/[userId]/page.tsx     — per-user role + permission editor, gated on can_manage_users
     shows/[id]/page.tsx        — Show workspace: day nav, room columns, tracker console
-    shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset
+    shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset, Crew Clock links
+    shows/[id]/clock/print/page.tsx — printable venue QR sign (AppShell chrome is print:hidden)
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
     shows/new/page.tsx          — create a show: details, payroll preset, and the rooms×days positions grid
     schedule/page.tsx           — company-wide calendar across shows
@@ -180,9 +181,12 @@ app/
   api/
     admin/create-invite/route.ts — server-side invite creation (service role, bypasses RLS)
     invite/accept/route.ts       — finalizes invite acceptance for password sign-in path
+    clock/identify/route.ts      — trades a venue QR for one person's personal link (POST only)
+    clock/punch/route.ts         — the public punch write; owns every rule the DB doesn't (POST only)
     beta-signup/route.ts         — Join the Beta form submissions -> Resend
     reports/final/route.ts       — Final Report: renders CSV+PDF server-side, emails admin-designated recipients, locks the show
     keepalive/route.ts           — daily cron ping so Supabase's free tier doesn't pause (see Notes)
+  clock/[token]/page.tsx       — PUBLIC crew clock: personal link punches, venue QR picks room then name
   invite/[token]/page.tsx      — invite landing page
   invite/[token]/InviteAuthForm.tsx — client auth form for invite flow
   login/page.tsx               — Google SSO + email/password + magic link + forgot-password link
@@ -222,6 +226,8 @@ lib/
                   buttons and the server-side Final Report render the identical file. reportPdf takes
                   @react-pdf's parts as an argument so it works in both environments.
   timesheet.ts  — per-crew plain-text timesheet for SendHoursButton (deliberately dollar-free)
+  clockLinks.ts / clockSession.ts — clock link URL + expiry (pure, tested) and the service-role
+                  reader for the public page; clockSession never uses select('*')
   ruleset.ts    — payroll ruleset field list + the Continuous Time / Working Lunch mutual exclusion
   permissions.ts — role presets and permission metadata, shared by the team screens
   timezones.ts  — the one shared timezone list (New Show and Edit Show used to disagree)
@@ -251,8 +257,10 @@ scripts/
                        silent-success bug returns) · 0016 eighth day type (show_load_out)
                        · 0017 scheduling module (organizations.scheduling_enabled +
                        memberships.can_manage_scheduling + the guard trigger)
+                       · 0018 crew clock (clock_links + punches.source/created_by/source_link)
                        Applied to BOTH databases — production caught up from 0010 to 0016
-                       during the 2026-08-06 cutover. 0017 is on DEV only until its cutover.
+                       during the 2026-08-06 cutover. 0017 and 0018 are on DEV only until
+                       their cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
@@ -270,7 +278,14 @@ scripts/
 - `work_days` — id, show_id, date, day_number
 - `rooms` — id, work_day_id, name (scoped to a day, not persistent across the show). Has full SELECT/INSERT/UPDATE/DELETE policies (UPDATE/DELETE added when room rename/delete UI was built).
 - `timecards` — id, room_id, crew_member_id, crew_member_name, role, day_rate, is_travel_day, travel_in_day, travel_out_day, pay_as_half_day. Partial unique index on `(room_id, crew_member_id) where crew_member_id is not null`. Four triggers: the finalized-show write block, and the two that keep `day_rate` show-wide (see Payroll business logic).
-- `punches` — id, timecard_id, punch_type (`start|meal_out|meal_in|meal2_out|meal2_in|end`), punched_at
+- `punches` — id, timecard_id, punch_type (`start|meal_out|meal_in|meal2_out|meal2_in|end`), punched_at,
+  plus the attribution trio from 0018: `source` (`staff|crew`, default `staff` so every pre-existing
+  row is correct), `created_by` (null for crew-entered — nobody is signed in), `source_link`.
+  **Almost nothing is enforced here**: no chronology trigger, no uniqueness on
+  `(timecard_id, punch_type)`, no day-range check. Those rules live in `lib/punches.ts` and every
+  writer must apply them itself.
+- `clock_links` — the no-login crew clock token. `crew_member_id` NULL = the show's venue QR;
+  NOT NULL = one person's personal link. Two partial unique indexes keep one of each.
 - `crew_members` — id, organization_id, full_name, email, phone, notes
 - `rate_cards` — id, crew_member_id, role, day_rate
 - `av_roles` — id, organization_id, name, sort_order, created_at — per-org job title list, auto-seeded with 31 defaults on org creation (guarded against duplicate seeding — this broke once, see below). Existing orgs are never backfilled when the seed list changes.
@@ -370,6 +385,57 @@ the code before migration 0017 makes **every page 400**. Migrate first, then dep
 Flip it from the superadmin panel (`Scheduling: on/off` beside Suspend →
 `api/admin/org-scheduling`). `subscriptions.plan` is deliberately NOT the gate: entitlement and
 billing stay separate, so a beta customer can be granted scheduling without inventing a plan.
+
+## Crew clock links — crew punch themselves, no login (2026-09-04)
+
+Dan's purpose: **the PM cannot see everyone** on a multi-room or staggered show, **and the PM
+wants crew to carry responsibility for their own punches.** Built toward crew logins, not
+instead of them — everything keys on `crew_member_id`, so a real session later resolves to the
+same rows through the same write path.
+
+**Crew punches are REAL punches, and finalize is the sign-off.** An earlier design had them
+land in a `punch_proposals` table the PM accepted row by row; that was dropped before any code
+existed, because four punches × fifty crew is two hundred approvals — more work than batch
+punching, and the PM stays the author, so responsibility never transfers. It is also **not**
+the `booking_status` / `day_type` case: those are *scheduling states* walled off from payroll.
+A punch is not a scheduling state; it is the same time data the PM already enters unverified.
+The question was never "is it payroll data" but "is it attributable", and columns answer that.
+
+**`punches.source` is ATTRIBUTION ONLY. `lib/payroll.ts` must never read it** — a crew-entered
+hour is worth what a PM-entered hour is worth, and the moment the calculator can tell them
+apart somebody will make it pay differently. The tracker marks it (dotted underline + tooltip);
+the Final Report's pre-send checks count it. Nothing else.
+
+**Two kinds of link, one table** (`clock_links`): a **personal** link per crew member — the
+normal route, handed out in bulk paste-ready for Slack from Crew Clock on Edit Show — and one
+**venue** QR per show, printed from `/dashboard/shows/[id]/clock/print`, which carries no
+identity and asks for a room then a name before trading itself for that person's link.
+Generating links IS the opt-in; there is no separate feature flag. **Core tracker, ungated** —
+recording who worked is not the paid module.
+
+**The public route must apply TWO checks, not one.** `getChronologyError` only orders the
+punches that EXIST, so it happily accepts an M1 In from somebody who never went to lunch —
+there is no earlier time to contradict. "The previous punch must exist" is a separate rule and
+`isEligibleForBatch` already owns it. This shipped as a real bug during the build and is now
+pinned by tests in `scripts/test/clock.mts`. The database enforces neither.
+
+Other things that are load-bearing and were each verified:
+- **The show's timezone decides "today"**, server-side, which is what stops a bookmarked link
+  back-dating. `clockLinkExpiry` goes through `zonedWallTimeToUtc` for the same reason — a
+  local-midnight version expires links mid-show for a Los Angeles show built on a UTC server.
+- **`shows.finalized_at` is pre-checked before every write.** `punches_blocked_when_finalized`
+  is a TRIGGER and the service role does **not** bypass triggers, so without it a crew member
+  gets a raw 500.
+- **Crew may change a punch they entered, never one a PM entered** — the whole point of
+  `source`. `TimeEntryModal` and `BatchPunchBar` therefore stamp `source: 'staff'` on UPDATE as
+  well as INSERT, so a PM correcting a crew time becomes its author.
+- **POST only**, both routes, and both allowlisted in `proxy.ts` (`/clock`, `/api/clock`).
+  Slack unfurls every link pasted into a channel, and these links exist to be pasted there.
+- Service role means the `day_rate` column lockdown does not apply. `lib/clockSession.ts` uses
+  explicit column lists and **never `select('*')`** — the same convention, and the same lack of
+  a lint rule, as `lib/bookingInvite.ts`.
+
+Still open: no rate limiting on the public write endpoint (nothing in this app has any).
 
 ### Already built — do not rebuild these
 
