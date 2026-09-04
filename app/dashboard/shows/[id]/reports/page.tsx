@@ -278,18 +278,21 @@ export default async function ShowReportPage({
   // Builds a crew member's own timesheet, server-side. Deliberately carries no
   // dollar figures, so it's always safe to hand to the crew member themselves.
   function timesheetFor(crew: { name: string; roles: string[]; entries: any[] }) {
+    // Rooms are per work day, so the same room across five days is five rows
+    // with five ids — dedupe on NAME or "Grand Ballroom" would appear five times.
+    const roomNames: string[] = []
     const entries = crew.entries
       .map((rawTc: any) => {
         const room = (rooms || []).find(r => r.id === rawTc.room_id)
         const wd = (workDays || []).find(d => d.id === room?.work_day_id)
+        if (room?.name && !roomNames.includes(room.name)) roomNames.push(room.name)
         return { date: wd?.date as string, timecard: findTc(rawTc) }
       })
       .filter(e => !!e.date)
 
     const text = buildTimesheetText({
-      showName: show.name,
-      crewName: crew.name,
       role: crew.roles.join(' · '),
+      room: roomNames.join(' · '),
       entries,
       allTimecards,
       ruleset,

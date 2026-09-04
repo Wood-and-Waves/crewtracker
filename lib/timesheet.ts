@@ -51,9 +51,8 @@ function dayHeading(dateStr: string): string {
 }
 
 export function buildTimesheetText({
-  showName,
-  crewName,
   role,
+  room,
   entries,
   allTimecards,
   ruleset,
@@ -61,9 +60,13 @@ export function buildTimesheetText({
   timezone,
   use24Hour = false,
 }: {
-  showName: string
-  crewName: string
   role: string
+  /**
+   * Where they worked. Rooms belong to a DAY, so somebody moved between rooms
+   * mid-run has more than one — the caller joins them, exactly as it does for
+   * role. Optional: omitted rather than printed empty when unknown.
+   */
+  room?: string
   entries: TimesheetEntry[]
   /** Whole show, so short-turnaround detection can see the previous day. */
   allTimecards: TimecardLike[]
@@ -73,7 +76,15 @@ export function buildTimesheetText({
   use24Hour?: boolean
 }): string {
   const rate = travelRateLabel(ruleset)
-  let out = `Show: ${showName}\nCrew: ${crewName}${role ? ` (${role})` : ''}\n\n`
+
+  // Only what the wrapper does NOT already say. buildCrewMessage opens with
+  // "Hi <first name>" and names the show in the same sentence, so a "Show:" line
+  // and a "Crew:" line printed both of them a second time. Role and room are the
+  // facts nothing else carries.
+  let out = ''
+  if (role) out += `Role: ${role}\n`
+  if (room) out += `Room: ${room}\n`
+  if (out) out += '\n'
 
   let travelDays = 0
   let workDays = 0
