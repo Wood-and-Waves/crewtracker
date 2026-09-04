@@ -49,6 +49,13 @@ export async function proxy(request: NextRequest) {
     // no account for.
     !request.nextUrl.pathname.startsWith("/book") &&
     !request.nextUrl.pathname.startsWith("/api/bookings/respond") &&
+    // Crew clock links, same bargain as booking requests above: the page AND
+    // the routes it posts to must both be reachable signed-out, or a crew
+    // member gets asked to log in to an app they have no account for. The
+    // /api/clock prefix covers both identify and punch deliberately — two
+    // separate clauses is two chances to forget one.
+    !request.nextUrl.pathname.startsWith("/clock") &&
+    !request.nextUrl.pathname.startsWith("/api/clock") &&
     // The dev sign-in route has to be reachable without a session — that is its
     // entire job — and forgetting this allowlist is the 307-to-/login trap that
     // has already caught the keepalive cron and the web manifest. Compiled out

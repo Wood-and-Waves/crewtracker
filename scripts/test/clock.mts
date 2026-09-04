@@ -16,6 +16,7 @@
 // that survives the paste.
 
 import { clockUrl, clockLinkExpiry, buildSlackList, type ClockLinkRow } from '../../lib/clockLinks.ts'
+import { getChronologyError, isEligibleForBatch, type Punch } from '../../lib/punches.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -79,6 +80,57 @@ check('names people with no link', withGaps.includes('Rowan Aoki'), true)
 check('treats a revoked link as no link', withGaps.includes('Quinn Whitfield'), true)
 check('a revoked token is never printed as a usable URL',
   withGaps.includes('clock/tok-d'), false)
+
+// ---------------------------------------------------------------------------
+// The rule the PUBLIC punch route has to compose, and the reason it is two
+// checks and not one.
+//
+// This is a regression test for a real bug: /api/clock/punch originally called
+// getChronologyError alone, and accepted an M1 In from somebody who had never
+// gone to lunch. Chronology only orders the punches that EXIST — with no M1
+// Out there is no earlier time to contradict, so it passes. "The previous
+// punch must exist" is a SEPARATE rule, and isEligibleForBatch is where this
+// app already keeps it.
+//
+// None of this is enforced by the database: punches has no chronology trigger
+// and no uniqueness on (timecard_id, punch_type). A signed-in PM gets these
+// rules from the tracker UI. An unauthenticated stranger gets them only if the
+// route applies them itself.
+console.log('\nserver-side punch guards')
+
+const at = (iso: string, type: string): Punch =>
+  ({ id: type, punch_type: type as Punch['punch_type'], punched_at: iso })
+
+const started = [at('2026-09-04T13:00:00Z', 'start')]
+
+// The bug, stated as a test: chronology alone says yes.
+check('chronology ALONE waves through M1 In with no M1 Out',
+  getChronologyError(new Date('2026-09-04T18:00:00Z'), 'meal_in', started), null)
+// Eligibility is what catches it.
+check('eligibility catches the missing M1 Out',
+  isEligibleForBatch(started, false, 'meal_in'), false)
+check('and allows the punch that really is next',
+  isEligibleForBatch(started, false, 'meal_out'), true)
+
+check('cannot wrap before starting',
+  isEligibleForBatch([], false, 'end'), false)
+check('can start from nothing',
+  isEligibleForBatch([], false, 'start'), true)
+check('no punches at all on a travel day',
+  isEligibleForBatch(started, true, 'meal_out'), false)
+
+const wrapped = [...started, at('2026-09-04T22:00:00Z', 'end')]
+check('no meal punches after wrap',
+  isEligibleForBatch(wrapped, false, 'meal_out'), false)
+
+// Chronology still does the job eligibility cannot: ordering the times.
+check('a lunch that ends before it starts is refused',
+  getChronologyError(new Date('2026-09-04T12:00:00Z'), 'meal_in',
+    [...started, at('2026-09-04T18:00:00Z', 'meal_out')]),
+  'M1 In must be after M1 Out.')
+check('and a start after the wrap is refused',
+  getChronologyError(new Date('2026-09-04T23:00:00Z'), 'start', wrapped),
+  'Start must be before Wrap.')
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)
