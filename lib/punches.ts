@@ -77,7 +77,21 @@ export function visiblePunchTypes(punchSets: Punch[][]): PunchType[] {
   return types
 }
 
-export type Punch = { id: string; punch_type: PunchType; punched_at: string }
+export type Punch = {
+  id: string
+  punch_type: PunchType
+  punched_at: string
+  /**
+   * Who authored this punch: 'staff' (a signed-in PM) or 'crew' (a no-login
+   * clock link). Optional because most callers neither select nor need it.
+   *
+   * ATTRIBUTION ONLY. lib/payroll.ts must never read this — a crew-entered
+   * hour is worth exactly what a PM-entered hour is worth, and the moment the
+   * calculator can tell them apart somebody will make it pay them differently.
+   * The tracker marks it and the Final Report counts it; nothing else.
+   */
+  source?: 'staff' | 'crew'
+}
 
 export function nextPunchType(punches: Punch[]): PunchType | null {
   const done = new Set(punches.map(p => p.punch_type))

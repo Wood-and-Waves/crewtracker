@@ -28,6 +28,7 @@ export default function BatchPunchBar({
   timecards,
   dayDate,
   timezone,
+  authorId,
   label = 'Batch Actions',
   locked = false,
   gridCols,
@@ -36,6 +37,8 @@ export default function BatchPunchBar({
   timecards: BatchTimecard[]
   dayDate: string
   timezone: string
+  /** The signed-in PM. Recorded as the author of every punch this writes. */
+  authorId: string
   /**
    * Heading above the buttons. The same component drives a room's own bar and
    * the day-level "All Rooms" bar, and those need telling apart — two
@@ -110,9 +113,13 @@ export default function BatchPunchBar({
       const tc = timecards.find(t => t.id === a.id)
       const existing = tc?.punches.find(p => p.punch_type === type)
       if (existing) {
-        await supabase.from('punches').update({ punched_at: when.toISOString() }).eq('id', existing.id)
+        // Stamped on update as well as insert — see TimeEntryModal for why.
+        await supabase.from('punches')
+          .update({ punched_at: when.toISOString(), source: 'staff', created_by: authorId })
+          .eq('id', existing.id)
       } else {
-        await supabase.from('punches').insert({ timecard_id: a.id, punch_type: type, punched_at: when.toISOString() })
+        await supabase.from('punches')
+          .insert({ timecard_id: a.id, punch_type: type, punched_at: when.toISOString(), source: 'staff', created_by: authorId })
       }
     }
 

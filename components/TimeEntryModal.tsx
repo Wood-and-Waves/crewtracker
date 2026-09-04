@@ -16,6 +16,7 @@ export default function TimeEntryModal({
   showTravelToggle,
   isTravelDay,
   dayDate,
+  authorId,
   onClose,
 }: {
   timecardId: string
@@ -26,6 +27,8 @@ export default function TimeEntryModal({
   showTravelToggle: boolean
   isTravelDay: boolean
   dayDate: string
+  /** The signed-in PM. Recorded as the author of whatever this writes. */
+  authorId: string
   onClose: () => void
 }) {
   const router = useRouter()
@@ -80,8 +83,15 @@ export default function TimeEntryModal({
     setLoading(true)
     const existing = allPunches.find(p => p.punch_type === type)
     const result = existing
-      ? await supabase.from('punches').update({ punched_at: combined.toISOString() }).eq('id', existing.id)
-      : await supabase.from('punches').insert({ timecard_id: timecardId, punch_type: type, punched_at: combined.toISOString() })
+      // source/created_by are stamped on the UPDATE too, not just the insert:
+      // a PM correcting a crew-entered time becomes its author, which both
+      // keeps the Final Report's crew-entered count honest and stops the crew
+      // link overwriting the correction (see app/api/clock/punch).
+      ? await supabase.from('punches')
+          .update({ punched_at: combined.toISOString(), source: 'staff', created_by: authorId })
+          .eq('id', existing.id)
+      : await supabase.from('punches')
+          .insert({ timecard_id: timecardId, punch_type: type, punched_at: combined.toISOString(), source: 'staff', created_by: authorId })
 
     setLoading(false)
 

@@ -232,6 +232,22 @@ export default async function ShowReportPage({
       detail: emptyDays.map(d => `Day ${d.day_number}`).join(', '),
     })
 
+    // Crew-entered times. NOT a problem — the whole point of clock links is
+    // that crew record their own hours — but the PM is about to assert these
+    // times are right, and they should know how many of them somebody else
+    // typed. Listed last, after the things that actually look unfinished.
+    const crewEntered = (punches || []).filter(p => p.source === 'crew')
+    if (crewEntered.length) {
+      const tcById = new Map((timecards || []).map(t => [t.id, t]))
+      const people = [...new Set(
+        crewEntered.map(p => tcById.get(p.timecard_id)?.crew_member_name).filter(Boolean),
+      )]
+      out.push({
+        label: `${crewEntered.length} ${crewEntered.length === 1 ? 'time' : 'times'} entered by crew`,
+        detail: people.slice(0, 4).join(', ') + (people.length > 4 ? ` and ${people.length - 4} more` : ''),
+      })
+    }
+
     return out
   })()
 

@@ -398,6 +398,7 @@ export default async function ShowDetailPage({
           // search field above Directory's table.
           <div className="pb-1">
             <BatchPunchBar
+              authorId={user.id}
               locked={locked}
               timecards={dayTimecards}
               dayDate={activeDay.date}
@@ -427,6 +428,7 @@ export default async function ShowDetailPage({
 
               {crew.length > 0 && (
                 <BatchPunchBar
+                  authorId={user.id}
                   timecards={crew}
                   dayDate={activeDay.date}
                   timezone={timezone}
@@ -473,6 +475,7 @@ export default async function ShowDetailPage({
                 )}
                 {crew.map(tc => (
                   <TimecardRow
+                    authorId={user.id}
                     locked={locked}
                     key={tc.id}
                     timecard={tc}
@@ -519,6 +522,7 @@ export default async function ShowDetailPage({
       </div>
 
       <MobileRoomTracker
+        authorId={user.id}
         locked={locked}
         className="lg:hidden min-w-0"
         showId={id}

@@ -21,6 +21,7 @@ export default function TimecardRow({
   use24Hour = false,
   roundingMinutes = 1,
   visibleTypes,
+  authorId,
   locked = false,
 }: {
   timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean }
@@ -36,6 +37,8 @@ export default function TimecardRow({
   /** Punch columns to render, computed once for the whole day so every row and
    *  every room lines up under the same header. */
   visibleTypes: PunchType[]
+  /** The signed-in PM. Recorded as the author of whatever this writes. */
+  authorId: string
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -183,7 +186,18 @@ export default function TimecardRow({
             <span className="lg:hidden block text-[10px] uppercase tracking-wide text-muted leading-none">
               {PUNCH_LABELS[type]}
             </span>
-            <span className="block font-mono text-xl leading-none font-bold lg:text-xs lg:font-medium lg:leading-normal">
+            {/* Crew-entered times wear a dotted underline — deliberately the
+                quietest mark available. It has to say "somebody else typed
+                this" without reading as an error or as a button, because on a
+                show where everyone self-punches it would otherwise be on every
+                cell of every row. The tooltip carries the meaning. */}
+            <span
+              title={done.source === 'crew' ? 'Entered by the crew member' : undefined}
+              className={cn(
+                'block font-mono text-xl leading-none font-bold lg:text-xs lg:font-medium lg:leading-normal',
+                done.source === 'crew' && 'border-b border-dotted border-muted',
+              )}
+            >
               {formatPunchTime(done.punched_at, timezone, use24Hour)}
             </span>
           </>
@@ -345,6 +359,7 @@ export default function TimecardRow({
           showTravelToggle={editingType === 'start'}
           isTravelDay={timecard.is_travel_day}
           dayDate={dayDate}
+          authorId={authorId}
           onClose={() => setEditingType(null)}
         />
       )}

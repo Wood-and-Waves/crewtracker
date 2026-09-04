@@ -19,6 +19,7 @@ type Room = { id: string; name: string }
 
 export default function MobileRoomTracker({
   className,
+  authorId,
   showId,
   showName,
   showMeta,
@@ -54,6 +55,8 @@ export default function MobileRoomTracker({
   schedulingEnabled = false,
 }: {
   className?: string
+  /** The signed-in PM. Recorded as the author of every punch written here. */
+  authorId: string
   showId: string
   showName: string
   showMeta?: string
@@ -155,6 +158,7 @@ export default function MobileRoomTracker({
         use24Hour={use24Hour}
         roundingMinutes={roundingMinutes}
         visibleTypes={dayPunchTypes}
+        authorId={authorId}
       />
     ))
   }
@@ -281,7 +285,7 @@ export default function MobileRoomTracker({
         <div className="space-y-8">
           {/* Page-level control above the content it governs — no box. */}
           {dayCrew.length > 0 && (
-            <BatchPunchBar timecards={dayCrew} dayDate={dayDate} timezone={timezone} locked={locked} />
+            <BatchPunchBar timecards={dayCrew} dayDate={dayDate} timezone={timezone} authorId={authorId} locked={locked} />
           )}
           {rooms.map(room => {
             const crew = roomCrew[room.id] || []
@@ -311,7 +315,7 @@ export default function MobileRoomTracker({
                 <h2 className="font-display text-lg font-bold uppercase tracking-wide">{activeRoom!.name}</h2>
                 <RoomActionsMenu onBand schedulingEnabled={schedulingEnabled} locked={locked} roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} />
               </div>
-              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} locked={locked} />}
+              {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} authorId={authorId} locked={locked} />}
               <div className={RULE_MAJOR}>
                 {crew.length === 0 && emptyRoster(activeRoom!.id)}
                 {rowsFor(crew)}
