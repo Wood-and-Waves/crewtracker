@@ -82,6 +82,17 @@ export default function EditShowClient({
 
   const [rateEntry, setRateEntry] = useState<any>(null)
   const [rateText, setRateText] = useState('')
+  // "Also update their saved rate in the Crew Directory." This used to be a
+  // browser confirm() fired AFTER the show rate had already been written, which
+  // read as a redundant "are you sure" when it is actually a separate question
+  // about a different record. Asked here instead, before saving, so one Save
+  // does everything.
+  //
+  // Defaults OFF: a rate negotiated for one show is not automatically that
+  // person's standing rate, and silently rewriting their directory default
+  // would follow them onto every future show.
+  const [alsoSaveToDirectory, setAlsoSaveToDirectory] = useState(false)
+  const [rateError, setRateError] = useState('')
 
   // "Save as preset" — captures this show's tuned rules as a reusable template.
   const [presetOpen, setPresetOpen] = useState(false)
@@ -214,22 +225,39 @@ export default function EditShowClient({
   async function commitRateEdit() {
     if (!rateEntry) return
     const newRate = parseFloat(rateText)
-    if (isNaN(newRate) || newRate < 0 || newRate === rateEntry.dayRate) {
-      setRateEntry(null)
-      setRateText('')
+    if (isNaN(newRate) || newRate < 0) {
+      setRateError('Enter a day rate of 0 or more.')
+      return
+    }
+    if (newRate === rateEntry.dayRate) {
+      closeRateEditor()
       return
     }
 
     const showRoomIds = rooms.map(r => r.id)
-    let query = supabase.from('timecards').update({ day_rate: newRate }).in('room_id', showRoomIds).eq('role', rateEntry.role)
+    let query = supabase
+      .from('timecards')
+      .update({ day_rate: newRate })
+      .in('room_id', showRoomIds)
+      .eq('role', rateEntry.role)
     if (rateEntry.crewMemberId) {
       query = query.eq('crew_member_id', rateEntry.crewMemberId)
     } else {
       query = query.eq('crew_member_name', rateEntry.name)
     }
-    await query
+    // .select('id') and a row count, not the absence of an error: the pay-rate
+    // write guard and RLS can both refuse this, and an UPDATE matching nothing
+    // returns SUCCESS. This used to `await query` and discard the result
+    // entirely, so a refused rate change looked exactly like a saved one.
+    const { data, error } = await query.select('id')
 
-    if (rateEntry.crewMemberId && confirm(`Update ${rateEntry.name}'s ${rateEntry.role} rate in the crew directory to $${Math.round(newRate)}?`)) {
+    if (error) { setRateError(error.message); return }
+    if (!data || data.length === 0) {
+      setRateError("Couldn't save — you may not have permission to change pay rates.")
+      return
+    }
+
+    if (alsoSaveToDirectory && rateEntry.crewMemberId) {
       // Only the id is needed, to choose update vs insert. `select('*')` would
       // pull day_rate, which authenticated no longer holds SELECT on.
       const { data: existingCard } = await supabase
@@ -239,16 +267,28 @@ export default function EditShowClient({
         .eq('role', rateEntry.role)
         .maybeSingle()
 
-      if (existingCard) {
-        await supabase.from('rate_cards').update({ day_rate: newRate }).eq('id', existingCard.id)
-      } else {
-        await supabase.from('rate_cards').insert({ crew_member_id: rateEntry.crewMemberId, role: rateEntry.role, day_rate: newRate })
+      const cardResult = existingCard
+        ? await supabase.from('rate_cards').update({ day_rate: newRate }).eq('id', existingCard.id)
+        : await supabase.from('rate_cards').insert({
+            crew_member_id: rateEntry.crewMemberId, role: rateEntry.role, day_rate: newRate,
+          })
+
+      if (cardResult.error) {
+        // The SHOW rate did save. Say exactly that rather than reporting a
+        // failure that would send them back to re-enter a rate already applied.
+        setSaveError(`Rate updated on this show, but the Crew Directory was not: ${cardResult.error.message}`)
       }
     }
 
+    closeRateEditor()
+    router.refresh()
+  }
+
+  function closeRateEditor() {
     setRateEntry(null)
     setRateText('')
-    router.refresh()
+    setRateError('')
+    setAlsoSaveToDirectory(false)
   }
 
   return (
@@ -403,7 +443,12 @@ export default function EditShowClient({
                 return canEditRates ? (
                   <button
                     key={entry.name + entry.role}
-                    onClick={() => { setRateEntry(entry); setRateText(String(Math.round(entry.dayRate))) }}
+                    onClick={() => {
+                      setRateEntry(entry)
+                      setRateText(String(Math.round(entry.dayRate)))
+                      setAlsoSaveToDirectory(false)
+                      setRateError('')
+                    }}
                     className={`${cls} hover:bg-line/40`}
                   >
                     {inner}
@@ -526,13 +571,45 @@ export default function EditShowClient({
             <h2 className="text-lg font-bold text-ink mb-1">Edit Day Rate</h2>
             <p className="text-sm text-muted mb-4">New day rate for {rateEntry.name} ({rateEntry.role})</p>
             <input
+              autoFocus
               type="number"
+              inputMode="decimal"
               value={rateText}
-              onChange={e => setRateText(e.target.value)}
-              className={`${inputCls} mb-4`}
+              onChange={e => { setRateText(e.target.value); setRateError('') }}
+              // Enter saves, Escape backs out — the keys you expect from a field
+              // with one obvious action. Reaching for the mouse to commit a
+              // number you have just typed is the complaint this fixes.
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); commitRateEdit() }
+                if (e.key === 'Escape') { e.preventDefault(); closeRateEditor() }
+              }}
+              className={inputCls}
             />
-            <div className="flex gap-3">
-              <Button variant="ghost" className="flex-1 py-3" onClick={() => { setRateEntry(null); setRateText('') }}>Cancel</Button>
+            <p className="mt-2 text-xs text-muted">
+              Applies to every day {rateEntry.name.split(' ')[0]} works this show as {rateEntry.role || 'this role'}.
+            </p>
+
+            {/* The second question, asked BEFORE saving rather than as a popup
+                afterwards. Only offered for someone who is in the directory —
+                a name-only timecard has no rate card to write. */}
+            {rateEntry.crewMemberId && (
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
+                <span className="text-sm text-ink">
+                  Also update their saved rate
+                  <span className="block text-xs text-muted">Their default for future shows, in the Crew Directory.</span>
+                </span>
+                <Toggle
+                  checked={alsoSaveToDirectory}
+                  onChange={setAlsoSaveToDirectory}
+                  label="Also update their saved rate in the Crew Directory"
+                />
+              </div>
+            )}
+
+            {rateError && <p className="mt-3 text-xs text-danger">{rateError}</p>}
+
+            <div className="mt-4 flex gap-3">
+              <Button variant="ghost" className="flex-1 py-3" onClick={closeRateEditor}>Cancel</Button>
               <Button className="flex-1 py-3" onClick={commitRateEdit}>Save</Button>
             </div>
           </div>
