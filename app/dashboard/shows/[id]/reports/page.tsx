@@ -277,7 +277,7 @@ export default async function ShowReportPage({
 
   // Builds a crew member's own timesheet, server-side. Deliberately carries no
   // dollar figures, so it's always safe to hand to the crew member themselves.
-  function timesheetFor(crew: { name: string; role: string; entries: any[] }) {
+  function timesheetFor(crew: { name: string; roles: string[]; entries: any[] }) {
     const entries = crew.entries
       .map((rawTc: any) => {
         const room = (rooms || []).find(r => r.id === rawTc.room_id)
@@ -289,7 +289,7 @@ export default async function ShowReportPage({
     const text = buildTimesheetText({
       showName: show.name,
       crewName: crew.name,
-      role: crew.role,
+      role: crew.roles.join(' · '),
       entries,
       allTimecards,
       ruleset,
@@ -510,13 +510,29 @@ export default async function ShowReportPage({
         <div className="flex flex-col gap-8">
           {Object.values(
             (timecards || []).reduce((acc: Record<string, any>, tc) => {
-              const key = `${tc.crew_member_name}|${tc.role}`
+              // Group by PERSON, not by person+role.
+              //
+              // This used to key on `name|role`, which split anyone who covered a
+              // different position mid-run into two entries with two sets of
+              // totals and two Send Hours buttons — one human, two timesheets.
+              // A role is a property of a DAY here; the person is the thing being
+              // paid. Their day RATE is still per (show, crew, role) and still
+              // enforced by the timecards triggers — this only decides how the
+              // report buckets rows for display. Every hour and dollar is
+              // computed per timecard either way, so the Master Summary is
+              // untouched by this.
+              //
+              // crew_member_id first, name as the fallback: lib/crew.ts nulls the
+              // FK before deleting a directory entry, so historical timecards can
+              // carry a name and no id. Same key shape Edit Show already uses.
+              const key = tc.crew_member_id || tc.crew_member_name
               if (!acc[key]) acc[key] = {
                 name: tc.crew_member_name,
-                role: tc.role,
+                roles: [] as string[],
                 crewMemberId: tc.crew_member_id,
                 entries: [],
               }
+              if (tc.role && !acc[key].roles.includes(tc.role)) acc[key].roles.push(tc.role)
               acc[key].entries.push(tc)
               return acc
             }, {})
@@ -528,13 +544,14 @@ export default async function ShowReportPage({
               let crewMP = 0
 
               return (
-                // Keyed on name AND role — the grouping is by `name|role`, so one
-                // person billed in two roles would otherwise collide.
-                <section key={`${crew.name}|${crew.role}`}>
+                <section key={crew.crewMemberId || crew.name}>
                   <div className={cn(BAND, 'flex items-center justify-between gap-3 px-4 py-2')}>
                     <div className="min-w-0">
                       <h2 className="truncate font-display text-base font-bold uppercase tracking-wide">{crew.name}</h2>
-                      <p className="truncate text-xs text-band-ink/70">{crew.role}</p>
+                      {/* Every role they held on this show. One role reads
+                          exactly as before; several are listed rather than
+                          splitting the person in two. */}
+                      <p className="truncate text-xs text-band-ink/70">{crew.roles.join(' · ')}</p>
                     </div>
                     {user.can('can_send_reports') && (() => {
                       const ts = timesheetFor(crew)
@@ -579,6 +596,11 @@ export default async function ShowReportPage({
                             <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
                               <div className={CELL_LABEL}>
                                 <span className="truncate text-sm text-ink">{wd ? dayLabel(wd.date) : ''}</span>
+                                {/* Only when it varies — printing the same role
+                                    on every row of a single-role person is noise. */}
+                                {crew.roles.length > 1 && tc.role && (
+                                  <span className="shrink-0 font-mono text-[10.5px] uppercase tracking-wide text-muted">{tc.role}</span>
+                                )}
                               </div>
                               <div className={CELL_BREAKDOWN}>
                                 <span className="text-sm font-semibold text-accent">Travel Day</span>
@@ -596,6 +618,11 @@ export default async function ShowReportPage({
                           <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
                             <div className={cn(CELL_LABEL, 'flex items-center gap-1')}>
                               <span className="truncate text-sm text-ink">{wd ? dayLabel(wd.date) : ''}</span>
+                                {/* Only when it varies — printing the same role
+                                    on every row of a single-role person is noise. */}
+                                {crew.roles.length > 1 && tc.role && (
+                                  <span className="shrink-0 font-mono text-[10.5px] uppercase tracking-wide text-muted">{tc.role}</span>
+                                )}
                               {b.shortTurn && <span className="text-xs text-ot">⚠️</span>}
                               {tc.travel_in_day && <span className="text-xs text-accent">✈️</span>}
                               {tc.travel_out_day && <span className="text-xs text-accent">✈️</span>}

@@ -131,9 +131,13 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
   }
   const totalPaidHours = totalPaidST + totalPaidOT + totalPaidDT
 
+  // Grouped by PERSON, not by person+role — see the same change in the By Crew
+  // report. Somebody who covered a different position mid-run used to appear
+  // twice in the client's PDF with their hours split between the two. The
+  // per-timecard maths below is unchanged; this only decides the buckets.
   const grouped: Record<string, any[]> = {}
   for (const tc of timecards) {
-    const key = `${tc.crew_member_name}|${tc.role}`
+    const key = tc.crew_member_id || tc.crew_member_name
     ;(grouped[key] ??= []).push(tc)
   }
 
@@ -154,7 +158,11 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
     const rates = [...new Set(entries.map((e: any) => Number(e.day_rate) || 0))]
       .sort((a, b) => a - b)
     return {
-      name: entries[0].crew_member_name, role: entries[0].role, entries,
+      name: entries[0].crew_member_name,
+      // Every role they held, in the order the days ran. The rates array below
+      // already anticipated a group spanning more than one rate.
+      role: [...new Set(entries.map((e: any) => e.role).filter(Boolean))].join(' · '),
+      entries,
       st, ot, dt, worked: st + ot + dt,
       pST, pOT, pDT, paid: pST + pOT + pDT,
       pay, travel,
