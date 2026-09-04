@@ -12,17 +12,21 @@ import Button from '@/components/ui/Button'
 //
 // The text is built server-side and passed in, so this component holds no
 // payroll logic.
+//
+// ONE message for all three, and for the preview. They used to differ — Text
+// sent the full greeting-and-sign-off version while Copy and Share sent a bare
+// timesheet — which meant what the crew member got depended on which button the
+// PM happened to press, and the preview showed the short one either way.
 
 export default function SendHoursButton({
   crewName,
   phone,
-  timesheetText,
-  smsMessage,
+  message,
 }: {
   crewName: string
   phone: string | null
-  timesheetText: string
-  smsMessage: string
+  /** The complete message — see buildCrewMessage in lib/timesheet.ts. */
+  message: string
 }) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<'' | 'copied' | 'manual'>('')
@@ -47,14 +51,14 @@ export default function SendHoursButton({
   function sendText() {
     // Apple's SMS handler wants `&body=`; Android and the spec want `?body=`.
     const sep = isApple ? '&' : '?'
-    window.location.href = `sms:${digits}${sep}body=${encodeURIComponent(smsMessage)}`
+    window.location.href = `sms:${digits}${sep}body=${encodeURIComponent(message)}`
   }
 
   async function share() {
     try {
       // The bare timesheet, matching iOS's ShareLink — only the SMS path adds
       // the "Hi {name}," wrapper.
-      await navigator.share({ text: timesheetText })
+      await navigator.share({ text: message })
     } catch {
       // User dismissed the share sheet — nothing to report.
     }
@@ -62,7 +66,7 @@ export default function SendHoursButton({
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(timesheetText)
+      await navigator.clipboard.writeText(message)
       setStatus('copied')
       setTimeout(() => setStatus(''), 2000)
     } catch {
@@ -105,7 +109,7 @@ export default function SendHoursButton({
         {/* Mono here is deliberate: it's a column-aligned timesheet, which is
             the one case CLAUDE.md reserves monospace for. */}
         <pre ref={preRef} className="flex-1 overflow-auto px-6 py-4 text-xs text-ink font-mono whitespace-pre-wrap">
-          {timesheetText}
+          {message}
         </pre>
 
         <div className="p-6 pt-3 border-t border-line flex flex-col gap-2">

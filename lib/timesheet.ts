@@ -153,8 +153,17 @@ export function buildTimesheetText({
   return out
 }
 
-/** Wraps a timesheet in the message body iOS sends over SMS. */
-export function buildSmsMessage(crewName: string, showName: string, timesheet: string): string {
+/**
+ * The complete message a crew member receives — greeting, timesheet, sign-off.
+ *
+ * Was buildSmsMessage, and was used ONLY by the sms: link: Copy, Share and the
+ * on-screen preview all handed over the bare timesheet, so a crew member who
+ * got their hours by any route other than a text received a fragment starting
+ * "Show:" with no greeting and no "let me know if this doesn't match" line.
+ * Renamed and used everywhere, because the channel should not change what you
+ * are sending somebody.
+ */
+export function buildCrewMessage(crewName: string, showName: string, timesheet: string): string {
   const firstName = crewName.trim().split(/\s+/)[0] || crewName
   return (
     `Hi ${firstName},\n\n` +

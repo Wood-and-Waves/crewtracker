@@ -8,7 +8,7 @@ import {
   mealPenaltyCount, mealPenaltyTotal, totalPay, isShortTurnaround,
   TimecardLike, PayrollRuleset,
 } from '@/lib/payroll'
-import { buildTimesheetText, buildSmsMessage } from '@/lib/timesheet'
+import { buildTimesheetText, buildCrewMessage } from '@/lib/timesheet'
 import ExportCSVButton from '@/components/ExportCSVButton'
 import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
@@ -297,7 +297,7 @@ export default async function ShowReportPage({
       timezone,
       use24Hour: use24Hour,
     })
-    return { text, sms: buildSmsMessage(crew.name, show.name, text) }
+    return buildCrewMessage(crew.name, show.name, text)
   }
 
   return (
@@ -554,13 +554,11 @@ export default async function ShowReportPage({
                       <p className="truncate text-xs text-band-ink/70">{crew.roles.join(' · ')}</p>
                     </div>
                     {user.can('can_send_reports') && (() => {
-                      const ts = timesheetFor(crew)
                       return (
                         <SendHoursButton
                           crewName={crew.name}
                           phone={crew.crewMemberId ? phoneById[crew.crewMemberId] ?? null : null}
-                          timesheetText={ts.text}
-                          smsMessage={ts.sms}
+                          message={timesheetFor(crew)}
                         />
                       )
                     })()}
