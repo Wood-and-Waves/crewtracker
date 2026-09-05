@@ -16,7 +16,7 @@
 // that survives the paste.
 
 import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow } from '../../lib/clockLinks.ts'
-import { getChronologyError, isEligibleForBatch, roundWallTime, type Punch } from '../../lib/punches.ts'
+import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, type Punch } from '../../lib/punches.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -201,6 +201,39 @@ check('the STORED expiry would already have lapsed',
   new Date(clockLinkExpiry(mintedFor, tz)) <= lastDay, true)
 check('but the derived one is still live, because the show grew',
   isClockLinkExpired(showGrewTo, tz, lastDay), false)
+
+// ---------------------------------------------------------------------------
+// Crew may clear a punch they entered themselves — but not one that a later
+// punch depends on. Deleting from the middle of a day is what would leave
+// mealBreakPairs() reading a lunch that ended without starting.
+console.log('\nclearing a punch')
+
+const full = [
+  at('2026-09-05T13:00:00Z', 'start'),
+  at('2026-09-05T18:00:00Z', 'meal_out'),
+  at('2026-09-05T19:00:00Z', 'meal_in'),
+  at('2026-09-05T23:00:00Z', 'end'),
+]
+
+check('the wrap can always go — nothing depends on it',
+  clearBlockedReason(full, 'end'), null)
+check('M1 In can go once it is the last meal punch',
+  clearBlockedReason(full, 'meal_in'), null)
+check('M1 Out cannot go while M1 In still needs it',
+  clearBlockedReason(full, 'meal_out'), 'Clear M1 In first — it needs M1 Out.')
+// Names the FIRST dependent in punch order, not all of them — clearing a start
+// on a full day would orphan M1 Out, M1 In and Wrap, and listing three things
+// to do is worse than naming the next one.
+check('start cannot go while anything still needs it',
+  clearBlockedReason(full, 'start'), 'Clear M1 Out first — it needs Start.')
+
+const startOnly = [at('2026-09-05T13:00:00Z', 'start')]
+check('a lone start clears fine', clearBlockedReason(startOnly, 'start'), null)
+
+const startAndOut = [full[0], full[1]]
+check('M1 Out clears once M1 In is gone', clearBlockedReason(startAndOut, 'meal_out'), null)
+check('start still blocked by an M1 Out that needs it',
+  clearBlockedReason(startAndOut, 'start'), 'Clear M1 Out first — it needs Start.')
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

@@ -36,7 +36,13 @@ export type ClockAssignment = {
   room: string
   role: string | null
   isTravelDay: boolean
-  punches: Punch[]
+  /**
+   * `source` is REQUIRED on this path, unlike the shared Punch type where it is
+   * optional. The crew screen gates editing and clearing on it, so a query that
+   * forgets to select it would silently mark every punch as the PM's. Requiring
+   * it here turns that into a compile error.
+   */
+  punches: (Punch & { source: 'staff' | 'crew' })[]
 }
 
 export type ClockView = {
@@ -206,7 +212,12 @@ export async function loadClockView(
   const timecardIds = (mine || []).map(t => t.id)
   const { data: punches } = timecardIds.length
     ? await admin.from('punches')
-        .select('id, timecard_id, punch_type, punched_at')
+        // `source` is NOT optional here, whatever the Punch type says: the crew
+        // screen decides from it whether a punch is this person's to edit, and
+        // omitting it made every punch read as PM-entered — locking crew out of
+        // their own times. ClockAssignment.punches requires it so the compiler
+        // catches a repeat.
+        .select('id, timecard_id, punch_type, punched_at, source')
         .in('timecard_id', timecardIds)
     : { data: [] as any[] }
 
@@ -217,7 +228,10 @@ export async function loadClockView(
     isTravelDay: t.is_travel_day === true,
     punches: (punches || [])
       .filter((p: any) => p.timecard_id === t.id)
-      .map((p: any) => ({ id: p.id, punch_type: p.punch_type, punched_at: p.punched_at }))
+      .map((p: any) => ({
+        id: p.id, punch_type: p.punch_type, punched_at: p.punched_at,
+        source: (p.source === 'crew' ? 'crew' : 'staff') as 'staff' | 'crew',
+      }))
       .sort((a: Punch, b: Punch) => a.punched_at.localeCompare(b.punched_at)),
   })).sort((a, b) => a.room.localeCompare(b.room))
 

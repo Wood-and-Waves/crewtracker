@@ -237,6 +237,31 @@ export function isEligibleForBatch(punches: Punch[], isTravelDay: boolean, type:
   return has(punches, previous)
 }
 
+// May this punch be REMOVED without orphaning a later one?
+//
+// Deleting a punch from the middle of a day leaves the punches after it with a
+// missing predecessor: clear M1 Out and M1 In is a lunch that ended without
+// starting, which mealBreakPairs() would then read as a broken pair. The rule
+// is the mirror of isEligibleForBatch — after the removal, every punch that
+// REMAINS must still have whatever it depends on.
+//
+// Returns null when the clear is safe, or the reason it is not, phrased for
+// whoever is about to be refused.
+export function clearBlockedReason(punches: Punch[], type: PunchType): string | null {
+  const remaining = punches.filter(p => p.punch_type !== type)
+  for (const p of remaining) {
+    // 'end' needs a start, not the meal before it; 'start' needs nothing.
+    const requirement: PunchType | null =
+      p.punch_type === 'start' ? null
+      : p.punch_type === 'end' ? 'start'
+      : PUNCH_ORDER[PUNCH_ORDER.indexOf(p.punch_type) - 1]
+    if (requirement && !has(remaining, requirement)) {
+      return `Clear ${PUNCH_LABELS[p.punch_type]} first — it needs ${PUNCH_LABELS[type]}.`
+    }
+  }
+  return null
+}
+
 // A batch button is "active" (highlighted) if at least one crew member in
 // scope is eligible. Multiple buttons can be active at once.
 export function canApplyBatch(timecards: BatchTimecard[], type: PunchType): boolean {

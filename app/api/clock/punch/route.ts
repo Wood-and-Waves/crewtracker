@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   PUNCH_ORDER, PUNCH_LABELS, getChronologyError, isEligibleForBatch, isWrapped,
-  roundWallTime, type Punch, type PunchType,
+  roundWallTime, clearBlockedReason, type Punch, type PunchType,
 } from '@/lib/punches'
 import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
 import { isClockLinkExpired } from '@/lib/clockLinks'
@@ -40,14 +40,14 @@ import { isClockLinkExpired } from '@/lib/clockLinks'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function POST(request: NextRequest) {
-  let body: { token?: string; timecardId?: string; punchType?: string; at?: string }
+  let body: { token?: string; timecardId?: string; punchType?: string; at?: string; clear?: boolean }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
 
-  const { token, timecardId, punchType, at } = body
+  const { token, timecardId, punchType, at, clear } = body
   if (!token || !timecardId || !UUID.test(token) || !UUID.test(timecardId)) {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 })
   }
@@ -138,11 +138,33 @@ export async function POST(request: NextRequest) {
 
   // A punch the PM entered is theirs. Crew may fix their OWN mistake but must
   // never overwrite a correction — which is exactly what the source column is
-  // for.
+  // for. Applies to clearing as much as to changing.
   if (mine && mine.source !== 'crew') {
     return NextResponse.json({
-      error: `Your ${PUNCH_LABELS[type]} was set by your PM, so it can't be changed here. Ask them.`,
+      error: `Your ${PUNCH_LABELS[type]} was set by your PM, so it can't be ${clear ? 'cleared' : 'changed'} here. Ask them.`,
     }, { status: 400 })
+  }
+
+  // ---- Clearing a punch the crew member entered themselves ----------------
+  if (clear) {
+    if (!mine) {
+      return NextResponse.json({ error: 'There is nothing recorded to clear.' }, { status: 400 })
+    }
+    // Removing from the middle of a day would orphan whatever comes after it.
+    const all: Punch[] = (existing || [])
+      .map(p => ({ id: p.id, punch_type: p.punch_type as PunchType, punched_at: p.punched_at }))
+    const blocked = clearBlockedReason(all, type)
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 400 })
+
+    // Verified delete: a delete matching no row returns success with zero rows.
+    const { data: gone, error: delError } = await admin
+      .from('punches').delete().eq('id', mine.id).select('id')
+    if (delError || !gone || gone.length === 0) {
+      return NextResponse.json({
+        error: delError?.message ?? 'That did not clear. Try again, or tell your PM.',
+      }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true, cleared: type })
   }
 
   const all: Punch[] = (existing || [])

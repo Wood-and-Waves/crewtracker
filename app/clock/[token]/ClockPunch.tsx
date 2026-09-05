@@ -58,6 +58,13 @@ export default function ClockPunch({
   const [hh, setHh] = useState('09')   // 24-hour internally; the UI shows 12-hour
   const [mm, setMm] = useState('00')
 
+  // The punch the editor is open on, if it already exists — decides whether
+  // Clear is offered.
+  const editingPunch = editing
+    ? rows.find(r => r.timecardId === editing.timecardId)
+        ?.punches.find(p => p.punch_type === editing.type)
+    : undefined
+
   const dayIndex = days.indexOf(selectedDate)
   const prevDay = dayIndex > 0 ? days[dayIndex - 1] : null
   const nextDay = dayIndex >= 0 && dayIndex < days.length - 1 ? days[dayIndex + 1] : null
@@ -112,6 +119,28 @@ export default function ClockPunch({
     router.push(`?d=${date}`)
   }
 
+  /** Remove a punch this person entered themselves. */
+  async function clearPunch() {
+    if (!editing) return
+    const { timecardId, type } = editing
+    setBusy(true); setError('')
+    try {
+      const res = await fetch('/api/clock/punch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, timecardId, punchType: type, clear: true }),
+      })
+      const body = await res.json()
+      if (!res.ok) { setError(body.error ?? 'That did not clear.'); setBusy(false); return }
+      setRows(prev => prev.map(r => r.timecardId !== timecardId ? r
+        : { ...r, punches: r.punches.filter(p => p.punch_type !== type) }))
+      setEditing(null)
+    } catch {
+      setError('No connection. Nothing was cleared — try again.')
+    }
+    setBusy(false)
+  }
+
   async function save() {
     if (!editing) return
     const { timecardId, type } = editing
@@ -130,7 +159,7 @@ export default function ClockPunch({
       setRows(prev => prev.map(r => {
         if (r.timecardId !== timecardId) return r
         const rest = r.punches.filter(p => p.punch_type !== type)
-        const added: Punch = {
+        const added: Punch & { source: 'staff' | 'crew' } = {
           id: `${type}-${body.punchedAt}`, punch_type: type,
           punched_at: body.punchedAt, source: 'crew',
         }
@@ -339,6 +368,21 @@ export default function ClockPunch({
             </div>
 
             {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+
+            {/* Only for a punch they entered themselves — the server refuses
+                a PM's either way, so offering it would be a button that
+                fails. Sits on its own row BELOW Cancel/Save rather than
+                beside them: a destructive action next to the primary one is
+                a misclick waiting to happen on a phone. */}
+            {editingPunch?.source === 'crew' && (
+              <button
+                onClick={clearPunch}
+                disabled={busy}
+                className="mb-3 w-full border-2 border-danger py-3 text-sm font-bold uppercase tracking-wide text-danger disabled:opacity-60"
+              >
+                Clear this punch
+              </button>
+            )}
 
             <div className="flex gap-3">
               <button

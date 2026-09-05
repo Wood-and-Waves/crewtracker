@@ -530,9 +530,18 @@ Other things that are load-bearing and were each verified:
 - **`shows.finalized_at` is pre-checked before every write.** `punches_blocked_when_finalized`
   is a TRIGGER and the service role does **not** bypass triggers, so without it a crew member
   gets a raw 500.
-- **Crew may change a punch they entered, never one a PM entered** — the whole point of
+- **Crew may change or CLEAR a punch they entered, never one a PM entered** — the whole point of
   `source`. `TimeEntryModal` and `BatchPunchBar` therefore stamp `source: 'staff'` on UPDATE as
-  well as INSERT, so a PM correcting a crew time becomes its author.
+  well as INSERT, so a PM correcting a crew time becomes its author. Clearing (Dan, 2026-09-05)
+  goes through `clearBlockedReason`, which refuses a delete that would orphan a later punch —
+  removing M1 Out while M1 In stands would leave `mealBreakPairs()` reading a lunch that ended
+  without starting.
+- **`ClockAssignment.punches` requires `source`, unlike the shared `Punch` type where it is
+  optional.** That is deliberate: `lib/clockSession.ts` originally did not select the column, so
+  `done.source` was `undefined`, `undefined !== 'crew'` was true, and EVERY punch rendered as
+  "set by PM" — locking crew out of editing their own times. It was invisible until a punch
+  survived a page reload, and was caught by comparing the screen against the database. The
+  required field turns a forgotten column into a compile error.
 - **POST only**, both routes, and both allowlisted in `proxy.ts` (`/clock`, `/api/clock`).
   Slack unfurls every link pasted into a channel, and these links exist to be pasted there.
 - Service role means the `day_rate` column lockdown does not apply. `lib/clockSession.ts` uses
