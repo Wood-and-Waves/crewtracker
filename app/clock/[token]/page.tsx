@@ -27,6 +27,8 @@ import type { Metadata } from 'next'
 // that can be done about that.
 export const metadata: Metadata = { robots: { index: false, follow: false } }
 
+// A short message (bad link, expired, closed out) is genuinely a little sheet,
+// so it keeps the centred Card the other public pages use.
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen items-start justify-center bg-bg p-4 sm:items-center">
@@ -34,6 +36,17 @@ function Shell({ children }: { children: React.ReactNode }) {
         <Logo className="mx-auto mb-5 h-10 w-10" />
         {children}
       </Card>
+    </div>
+  )
+}
+
+// The working screens are NOT a sheet. They are the tracker for one person, so
+// they get the paper ground and the full width of the phone — the card inset is
+// most of why the first cut read "a little small".
+function Working({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-bg">
+      {children}
     </div>
   )
 }
@@ -83,14 +96,14 @@ export default async function ClockPage({ params }: { params: Promise<{ token: s
         body="Nothing is scheduled on this show today." />
     }
     return (
-      <Shell>
+      <Working>
         <ClockPicker
           token={view.token}
           showName={view.showName}
           venue={view.venue}
           roster={view.roster}
         />
-      </Shell>
+      </Working>
     )
   }
 
@@ -101,7 +114,7 @@ export default async function ClockPage({ params }: { params: Promise<{ token: s
   }
 
   return (
-    <Shell>
+    <Working>
       <ClockPunch
         token={view.token}
         showName={view.showName}
@@ -111,6 +124,6 @@ export default async function ClockPage({ params }: { params: Promise<{ token: s
         roundingMinutes={view.roundingMinutes}
         assignments={view.me.assignments}
       />
-    </Shell>
+    </Working>
   )
 }

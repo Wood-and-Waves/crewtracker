@@ -101,9 +101,16 @@ export type Punch = {
  * a clean quarter-hour in UTC and an ugly one on the wall the crew member is
  * reading. The grid people care about is the one on the clock.
  *
- * NEAREST, not up or down. Rounding that consistently favours one side is a
- * thumb on the scale — and in the US, employer-favouring punch rounding is
- * the version that gets you sued. Ties go up, which is what Math.round does.
+ * ALWAYS UP to the next interval, never nearest — Dan's call, 2026-09-04, and
+ * it matches what calculateNetHours already does to a day's net minutes, so
+ * the app rounds one direction everywhere. A time already ON the grid does not
+ * move; only a non-zero remainder pushes to the next mark, which is the same
+ * `remainder > 0` shape calculateNetHours uses.
+ *
+ * Note this is not uniformly in the crew member's favour: rounding a START up
+ * moves it later and costs them the difference, while rounding a WRAP up pays
+ * them to the next mark. That is inherent in "always up" and is a policy
+ * choice, not an oversight.
  *
  * NOTE this is a DIFFERENT operation from the roundingMinutes that
  * calculateNetHours applies. That one ceilings the total NET MINUTES of a
@@ -112,9 +119,10 @@ export type Punch = {
  * timecard is not double-counting — the first decides the times, the second
  * decides how the resulting duration is billed.
  *
- * Returns dayOffset because 23:58 at a 15-minute grid rounds to 24:00, which
- * is 00:00 the next day — the correct answer for an overnight wrap, and one
- * that silently becomes an invalid "24:00" if you only return the string.
+ * Returns dayOffset because anything after 23:45 at a 15-minute grid rounds up
+ * to 24:00, which is 00:00 the next day — the correct answer for an overnight
+ * wrap, and one that silently becomes an invalid "24:00" if you only return
+ * the string.
  */
 export function roundWallTime(
   timeStr: string,
@@ -125,7 +133,9 @@ export function roundWallTime(
   if (!Number.isFinite(h) || !Number.isFinite(m)) return { timeStr, dayOffset: 0 }
   if (interval <= 1) return { timeStr, dayOffset: 0 }
 
-  const snapped = Math.round((h * 60 + m) / interval) * interval
+  const total = h * 60 + m
+  const remainder = total % interval
+  const snapped = remainder > 0 ? total - remainder + interval : total
   const dayOffset = Math.floor(snapped / 1440)
   const mins = snapped % 1440
   const pad = (n: number) => String(n).padStart(2, '0')

@@ -145,25 +145,30 @@ console.log('\ncrew punch rounding')
 check('exact-minute orgs are left alone', roundWallTime('08:07', 1), { timeStr: '08:07', dayOffset: 0 })
 check('0 is treated as exact, not as a divide-by-zero', roundWallTime('08:07', 0), { timeStr: '08:07', dayOffset: 0 })
 
-check('rounds down to the nearest quarter', roundWallTime('08:07', 15), { timeStr: '08:00', dayOffset: 0 })
-check('rounds up to the nearest quarter', roundWallTime('08:08', 15), { timeStr: '08:15', dayOffset: 0 })
-check('already on the grid does not move', roundWallTime('08:15', 15), { timeStr: '08:15', dayOffset: 0 })
+// ALWAYS UP, never nearest. 08:07 and 08:14 both go to 08:15 — under nearest
+// rounding the first would have gone back to 08:00.
+check('one minute past the mark still goes to the NEXT mark',
+  roundWallTime('08:01', 15), { timeStr: '08:15', dayOffset: 0 })
+check('08:07 rounds UP, not back to 08:00',
+  roundWallTime('08:07', 15), { timeStr: '08:15', dayOffset: 0 })
+check('08:14 rounds up', roundWallTime('08:14', 15), { timeStr: '08:15', dayOffset: 0 })
+check('already on the grid does NOT jump a mark',
+  roundWallTime('08:15', 15), { timeStr: '08:15', dayOffset: 0 })
+check('midnight is on the grid and stays put',
+  roundWallTime('00:00', 15), { timeStr: '00:00', dayOffset: 0 })
 check('carries into the next hour', roundWallTime('08:53', 15), { timeStr: '09:00', dayOffset: 0 })
-check('half-hour grid', roundWallTime('17:52', 30), { timeStr: '18:00', dayOffset: 0 })
-check('half-hour grid, down', roundWallTime('17:12', 30), { timeStr: '17:00', dayOffset: 0 })
 
-// Neutral, not employer-favouring: a tie goes up, and 8:07 losing 7 minutes is
-// matched by 8:08 gaining 7.
-check('ties round up', roundWallTime('08:07:30'.slice(0, 5), 15), { timeStr: '08:00', dayOffset: 0 })
-check('the midpoint itself rounds up', roundWallTime('08:23', 15), { timeStr: '08:30', dayOffset: 0 })
+check('half-hour grid rounds up', roundWallTime('17:12', 30), { timeStr: '17:30', dayOffset: 0 })
+check('half-hour grid, just past the hour', roundWallTime('17:01', 30), { timeStr: '17:30', dayOffset: 0 })
+check('half-hour grid, on the mark', roundWallTime('17:30', 30), { timeStr: '17:30', dayOffset: 0 })
 
 // The case that silently produces an invalid "24:00" if dayOffset is dropped.
-check('23:58 at a quarter grid becomes midnight TOMORROW',
-  roundWallTime('23:58', 15), { timeStr: '00:00', dayOffset: 1 })
-check('23:52 at a half-hour grid does the same',
-  roundWallTime('23:52', 30), { timeStr: '00:00', dayOffset: 1 })
-check('23:44 stays on the same day',
-  roundWallTime('23:44', 15), { timeStr: '23:45', dayOffset: 0 })
+check('23:46 at a quarter grid becomes midnight TOMORROW',
+  roundWallTime('23:46', 15), { timeStr: '00:00', dayOffset: 1 })
+check('23:45 is on the grid, so it stays today',
+  roundWallTime('23:45', 15), { timeStr: '23:45', dayOffset: 0 })
+check('23:31 at a half-hour grid rolls over too',
+  roundWallTime('23:31', 30), { timeStr: '00:00', dayOffset: 1 })
 
 check('garbage in is returned untouched rather than becoming 00:00',
   roundWallTime('not-a-time', 15), { timeStr: 'not-a-time', dayOffset: 0 })

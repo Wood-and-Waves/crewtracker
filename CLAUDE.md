@@ -419,20 +419,29 @@ there is no earlier time to contradict. "The previous punch must exist" is a sep
 `isEligibleForBatch` already owns it. This shipped as a real bug during the build and is now
 pinned by tests in `scripts/test/clock.mts`. The database enforces neither.
 
-**Crew pick their own time (2026-09-04), and it snaps to the company's grid.** The one-tap
-button still means now; "Different time" opens an inline picker for somebody who forgot to tap
-at the door. Only a wall-clock HH:MM is ever sent — the DATE stays the work day the server
-resolved, so picking a time can move a punch within the day but never to another one.
+**Crew pick their own time (2026-09-04), and it snaps to the company's grid.** Only a wall-clock
+HH:MM is ever sent — the DATE stays the work day the server resolved, so picking a time can move
+a punch within the day but never to another one.
+
+**The crew screen is the tracker, for one person.** Same gesture (tap a punch cell → the
+TimeEntryModal-shaped editor, pre-filled, Save), same vocabulary (ink `BAND` masthead, the
+mobile tracker's 3-across punch grid, `RULE_MAJOR` closing), scaled up from `h-12` to `h-24`
+because the whole phone serves one person. Two earlier cuts were rejected and are worth not
+repeating: a bespoke "Tap to Start" button plus a separate "Different time" link (two
+affordances for one action), and full-width rows inside a `Card`, which Dan read as "a little
+small". The message screens (bad link, expired, closed out) keep the centred `Card`; the
+working screens sit on the paper ground.
 
 **`roundWallTime` is NOT the rounding `calculateNetHours` does, despite reading the same
 `organizations.timecard_rounding_minutes`.** The payroll one ceilings a finished day's total NET
-MINUTES; this one moves the punch itself, to the NEAREST interval. They give different answers —
-8:07→17:52 with an hour's lunch is 8.75h billed as a duration, but 9.0h once the punches
-themselves snap to 8:00→18:00 — so do not "unify" them. Nearest, not up: rounding that
-consistently favours the employer is the version that gets you sued. It rounds WALL CLOCK, not
-the instant, because a zone offset by :45 or :30 would otherwise land on a clean quarter in UTC
-and an ugly one on the clock the crew member is reading. **This currently applies to crew
-punches only** — the PM's TimeEntryModal still stores the exact minute typed.
+MINUTES; this one moves the punch itself. They give different answers, so do not "unify" them.
+**Always UP to the next mark, never nearest** (Dan, 2026-09-04) — which does match the direction
+`calculateNetHours` rounds, so the app only ever rounds one way. A time already on the grid does
+not move. Note this is not uniformly in the crew member's favour: rounding a START up costs them
+the difference, rounding a WRAP up pays them to the next mark; that is the policy, not a bug. It
+rounds WALL CLOCK, not the instant, because a zone offset by :45 or :30 would otherwise land on
+a clean quarter in UTC and an ugly one on the clock the crew member is reading. **Crew punches
+only** — the PM's TimeEntryModal still stores the exact minute typed.
 
 Other things that are load-bearing and were each verified:
 - **The show's timezone decides "today"**, server-side, which is what stops a bookmarked link

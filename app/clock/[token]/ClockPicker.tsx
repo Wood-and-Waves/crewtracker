@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { BAND, RULE_MAJOR } from '@/lib/panel'
+import { cn } from '@/lib/cn'
 
 // The venue-QR path: which room, then which name.
 //
@@ -9,6 +11,9 @@ import { useState } from 'react'
 // thinking. Picking a name trades this shared code for that person's own link
 // and sends them there, so they can bookmark it and never see this screen
 // again.
+//
+// Wears the same ink BAND and 3px closing rule as the punch screen and the
+// tracker — same job, same clothes.
 
 type Roster = { room: string; people: { crewMemberId: string; name: string }[] }[]
 
@@ -47,61 +52,68 @@ export default function ClockPicker({
   }
 
   return (
-    <div>
-      <p className="text-center font-display text-[11px] font-semibold uppercase tracking-[0.15em] text-muted">
-        Clock in &amp; out
-      </p>
-      <h1 className="mt-1 text-center text-xl font-bold text-ink">{showName}</h1>
-      {venue && <p className="mb-5 text-center text-sm text-muted">{venue}</p>}
+    <div className="mx-auto w-full max-w-xl pb-10">
+      <div className={cn(BAND, 'px-4 py-3')}>
+        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.15em] opacity-80">
+          Clock in &amp; out{venue ? ` · ${venue}` : ''}
+        </p>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-tight">{showName}</h1>
+      </div>
 
-      {error && <p className="mb-3 text-center text-sm text-danger">{error}</p>}
+      {error && <p className="border-b border-line px-4 py-3 text-center text-sm text-danger">{error}</p>}
 
       {!room ? (
-        <>
-          <p className="mb-2 mt-4 text-center text-sm font-semibold text-ink">Which room are you in?</p>
-          <div className="border-t-[3px] border-ink">
+        <section>
+          <div className="border-b-2 border-ink bg-surface-2 px-4 py-2">
+            <h2 className="font-display text-base font-bold uppercase tracking-wide text-ink">
+              Which room are you in?
+            </h2>
+          </div>
+          <div className={RULE_MAJOR}>
             {roster.map(r => (
               <button
                 key={r.room}
                 onClick={() => setRoom(r.room)}
-                className="flex w-full items-center justify-between border-b border-line py-4 text-left"
+                // py-5: tapped with a thumb, in the dark, by somebody carrying
+                // a case. The tracker's own touch targets set the floor here.
+                className="flex w-full items-center justify-between border-b border-line px-4 py-5 text-left last:border-b-0"
               >
-                <span className="text-base text-ink">{r.room}</span>
-                <span className="text-xs text-muted">
+                <span className="text-xl font-semibold text-ink">{r.room}</span>
+                <span className="text-sm text-muted">
                   {r.people.length} {r.people.length === 1 ? 'person' : 'people'}
                 </span>
               </button>
             ))}
           </div>
-        </>
+        </section>
       ) : (
-        <>
-          <div className="mb-2 mt-4 flex items-baseline justify-between">
-            <p className="text-sm font-semibold text-ink">Find your name</p>
+        <section>
+          <div className="flex items-center justify-between border-b-2 border-ink bg-surface-2 px-4 py-2">
+            <h2 className="font-display text-base font-bold uppercase tracking-wide text-ink">
+              Find your name
+            </h2>
             {roster.length > 1 && (
-              <button onClick={() => setRoom(null)} className="text-xs font-semibold uppercase tracking-wide text-accent">
+              <button onClick={() => setRoom(null)} className="text-xs font-bold uppercase tracking-wide text-accent">
                 Change room
               </button>
             )}
           </div>
-          <div className="border-t-[3px] border-ink">
+          <div className={RULE_MAJOR}>
             {people.map(p => (
               <button
                 key={p.crewMemberId}
                 onClick={() => pick(p.crewMemberId)}
                 disabled={busy !== null}
-                // py-4 rather than the app's usual py-2: this is tapped with a
-                // thumb, in the dark, by somebody carrying a case.
-                className="w-full border-b border-line py-4 text-left text-base text-ink disabled:opacity-40"
+                className="w-full border-b border-line px-4 py-5 text-left text-xl font-semibold text-ink last:border-b-0 disabled:opacity-40"
               >
                 {busy === p.crewMemberId ? 'Setting up…' : p.name}
               </button>
             ))}
           </div>
-          <p className="mt-4 text-center text-xs text-muted">
+          <p className="px-4 pt-4 text-center text-sm text-muted">
             Not listed? Your PM can add you, or punch you in themselves.
           </p>
-        </>
+        </section>
       )}
     </div>
   )
