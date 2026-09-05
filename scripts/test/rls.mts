@@ -195,6 +195,38 @@ try {
     check('another company cannot punch on our timecard', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
   })
 
+  console.log('\n=== timecard writes require permission too (0020) ===')
+  // Same hole as 0019, on the table one level up. Deleting a timecard is worse
+  // than editing a punch: it removes somebody from the day and cascades their
+  // punches with it.
+  await asUser(carol, async () => {
+    const seen = await q(`select count(*)::int n from timecards where id=$1`, [tcA.id])
+    check('a view_only member can still SEE the timecard', seen[0].n === 1, `${seen[0].n}`)
+
+    const ins = await probe(`insert into timecards (room_id, crew_member_name, role) values ($1,'Sneak','X')`, [roomA.id])
+    check('but cannot staff anybody', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
+
+    const upd = await probe(`update timecards set crew_member_name='Renamed' where id=$1`, [tcA.id])
+    check('cannot rename one', !upd.ok || upd.n === 0, upd.ok ? `updated ${upd.n}` : '')
+
+    const del = await probe(`delete from timecards where id=$1`, [tcA.id])
+    check('cannot delete one — which would take the punches with it',
+      !del.ok || del.n === 0, del.ok ? `deleted ${del.n}` : '')
+  })
+
+  // The staffing flows a PM actually uses must survive the tightening.
+  await asUser(alice, async () => {
+    const ins = await probe(`insert into timecards (room_id, crew_member_name, role) values ($1,'Staffed','A2')`, [roomA.id])
+    check('a timecard editor can still staff', ins.ok && ins.n === 1, ins.ok ? '' : ins.code)
+
+    // add_show_day is NOT security definer, so it runs under these policies and
+    // its copy-crew step inserts timecards. This is the regression that a
+    // careless tightening would cause, and it is invisible until somebody
+    // presses Add Day on a real show.
+    const rpc = await probe(`select add_show_day($1, true)`, [showA.id])
+    check('and Add Day (copy crew) still works through the RPC', rpc.ok, rpc.ok ? '' : rpc.code)
+  })
+
   console.log('\n=== removed and misdirected users get nothing ===')
   await q(`update memberships set deactivated_at=now() where profile_id=$1 and organization_id=$2`, [alice, orgA])
   await asUser(alice, async () => {

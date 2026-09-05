@@ -278,9 +278,11 @@ scripts/
                        · 0018 crew clock (clock_links + punches.source/created_by/source_link)
                        · 0019 punch writes require can_edit_timecards (+ is_own_timecard,
                        the placeholder second door for future crew logins)
+                       · 0020 timecard writes require can_edit_timecards (same hole, table
+                       above; add_show_day runs as the caller so Add Day is covered by a test)
                        Applied to BOTH databases — production caught up from 0010 to 0016
-                       during the 2026-08-06 cutover. 0017, 0018 and 0019 are on DEV only
-                       until their cutover.
+                       during the 2026-08-06 cutover. 0017–0020 are on DEV only until
+                       their cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
@@ -352,14 +354,14 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
     themselves proven by temporarily re-adding the old policy and watching them fail
     (Postgres ORs policies for a command, which is why 0019 drops the old ones rather than
     leaving them alongside).
-  - **`timecards` write policies have the SAME hole**, found while fixing the punches one and
-    NOT yet fixed. INSERT/UPDATE/DELETE test only `shows.organization_id = my_organization_id()`,
-    so a `view_only` member can still staff, unstaff, rename or delete a timecard on any show in
-    the org. Arguably worse than the punch one — deleting a timecard removes somebody from the
-    day entirely. `day_rate` is separately protected by `enforce_pay_rate_write_permission`, so
-    the money column is safe; the rest is not. Deliberately left for its own pass because the
-    right permission is less obvious: staffing is a PM's job and may not be the same permission
-    as editing times.
+  - ~~`timecards` write policies have the SAME hole.~~ **FIXED on DEV by migration 0020
+    (2026-09-05); still open in PRODUCTION until the cutover.** Same shape as 0019 — scope
+    delegated to `rooms`, gated on `can_edit_timecards` — but with NO `is_own_timecard` door,
+    because staffing is a PM's decision and a crew member should never create or delete their
+    own booking. The trap here is that **`add_show_day` is not SECURITY DEFINER**, so it runs
+    under these policies and its copy-crew step inserts timecards; a careless tightening breaks
+    Add Day invisibly until somebody presses it on a real show. There is a test for exactly
+    that.
   - **`UnlockShowButton` needs only `can_edit_timecards`**, not admin, so the copy "an admin
     can unlock it" overstates the protection on a finalized show. Either gate it or reword it.
   - **No rate limiting anywhere in the app.** `/api/bookings/respond` is replayable and each
