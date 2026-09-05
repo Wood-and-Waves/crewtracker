@@ -276,9 +276,11 @@ scripts/
                        · 0017 scheduling module (organizations.scheduling_enabled +
                        memberships.can_manage_scheduling + the guard trigger)
                        · 0018 crew clock (clock_links + punches.source/created_by/source_link)
+                       · 0019 punch writes require can_edit_timecards (+ is_own_timecard,
+                       the placeholder second door for future crew logins)
                        Applied to BOTH databases — production caught up from 0010 to 0016
-                       during the 2026-08-06 cutover. 0017 and 0018 are on DEV only until
-                       their cutover.
+                       during the 2026-08-06 cutover. 0017, 0018 and 0019 are on DEV only
+                       until their cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
 ```
@@ -341,12 +343,23 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   while tracing the punch guards; recorded here because they were previously only in a scratch
   plan file). None is exploitable by a stranger; all are internal-permission or
   denial-of-service shaped:
-  - **The punch write policies check no permission at all.** Unlike `shows` and
-    `booking_invites`, `punches` INSERT/UPDATE/DELETE only test
-    `shows.organization_id = my_organization_id()`. So a `view_only` member can write punches,
-    and a member can write punches on a show they cannot even see (the write policies join
-    `shows` directly and skip the assignment-scoped SELECT rule). Worth fixing first — the
-    crew clock added a second write path into that table.
+  - ~~The punch write policies check no permission at all.~~ **FIXED on DEV by migration 0019
+    (2026-09-05); still open in PRODUCTION until the cutover.** The three write policies now
+    delegate scope to `timecards` — inheriting the assignment-scoped visibility the old
+    org-only join skipped — and require `can_edit_timecards`, OR `is_own_timecard()`, a
+    placeholder that returns false until crew logins exist so the rule is already the right
+    shape. Proven by real authenticated sessions in `scripts/test/rls.mts`, and the tests were
+    themselves proven by temporarily re-adding the old policy and watching them fail
+    (Postgres ORs policies for a command, which is why 0019 drops the old ones rather than
+    leaving them alongside).
+  - **`timecards` write policies have the SAME hole**, found while fixing the punches one and
+    NOT yet fixed. INSERT/UPDATE/DELETE test only `shows.organization_id = my_organization_id()`,
+    so a `view_only` member can still staff, unstaff, rename or delete a timecard on any show in
+    the org. Arguably worse than the punch one — deleting a timecard removes somebody from the
+    day entirely. `day_rate` is separately protected by `enforce_pay_rate_write_permission`, so
+    the money column is safe; the rest is not. Deliberately left for its own pass because the
+    right permission is less obvious: staffing is a PM's job and may not be the same permission
+    as editing times.
   - **`UnlockShowButton` needs only `can_edit_timecards`**, not admin, so the copy "an admin
     can unlock it" overstates the protection on a finalized show. Either gate it or reword it.
   - **No rate limiting anywhere in the app.** `/api/bookings/respond` is replayable and each

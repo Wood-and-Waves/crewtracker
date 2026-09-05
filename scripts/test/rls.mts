@@ -99,6 +99,13 @@ const [wdA] = await q(`insert into work_days (show_id, date, day_number) values 
 const [roomA] = await q(`insert into rooms (work_day_id, name) values ($1,'Main') returning id`, [wdA.id])
 const [tcA] = await q(`insert into timecards (room_id, crew_member_name, role, day_rate)
                        values ($1,'A Person','A1',777) returning id`, [roomA.id])
+const [punchA] = await q(`insert into punches (timecard_id, punch_type, punched_at)
+                          values ($1,'start',now()) returning id`, [tcA.id])
+// A member of company A who may see the show but must never change times.
+const carol = await makeUser(`${TAG}-carol@example.test`)
+await q(`insert into memberships (profile_id, organization_id, base_role, can_edit_timecards,
+           can_edit_all_shows, view_only)
+         values ($1,$2,'staff',false,true,true)`, [carol, orgA])
 
 try {
   console.log('\n=== one company cannot see another ===')
@@ -150,6 +157,43 @@ try {
     check('but staffing still works — a PM\'s actual job', ins.ok, ins.ok ? '' : ins.code)
   })
   await setPerm(alice, 'can_edit_pay_rates', true, orgA)
+
+  console.log('\n=== punch writes require permission, not just membership (0019) ===')
+  // The hole this closes: the old policies asked only "are you in this company?".
+  // A view_only member could rewrite the hours people get paid for, on any show
+  // in the org, including ones hidden from them. The app hid the controls; the
+  // database did not.
+  //
+  // Note the two shapes of refusal. A blocked INSERT raises 42501, but a blocked
+  // UPDATE or DELETE simply matches no rows and reports success — the
+  // silent-success trap CLAUDE.md warns about — so those assert on the row count.
+  await asUser(carol, async () => {
+    const seen = await q(`select count(*)::int n from punches where id=$1`, [punchA.id])
+    check('a view_only member can still SEE the punch', seen[0].n === 1, `${seen[0].n}`)
+
+    const ins = await probe(`insert into punches (timecard_id, punch_type, punched_at) values ($1,'end',now())`, [tcA.id])
+    check('but cannot create one', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
+
+    const upd = await probe(`update punches set punched_at=now() where id=$1`, [punchA.id])
+    check('cannot change one', !upd.ok || upd.n === 0, upd.ok ? `updated ${upd.n}` : '')
+
+    const del = await probe(`delete from punches where id=$1`, [punchA.id])
+    check('cannot delete one', !del.ok || del.n === 0, del.ok ? `deleted ${del.n}` : '')
+  })
+
+  // The same rule must not lock out the people whose job this is.
+  await asUser(alice, async () => {
+    const ins = await probe(`insert into punches (timecard_id, punch_type, punched_at) values ($1,'meal_out',now())`, [tcA.id])
+    check('a timecard editor can still punch', ins.ok && ins.n === 1, ins.ok ? '' : ins.code)
+    const upd = await probe(`update punches set punched_at=now() where id=$1`, [punchA.id])
+    check('and can still correct one', upd.ok && upd.n === 1, upd.ok ? '' : upd.code)
+  })
+
+  // The other half of the hole: writing to a show in a company you are not in.
+  await asUser(bob, async () => {
+    const ins = await probe(`insert into punches (timecard_id, punch_type, punched_at) values ($1,'end',now())`, [tcA.id])
+    check('another company cannot punch on our timecard', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
+  })
 
   console.log('\n=== removed and misdirected users get nothing ===')
   await q(`update memberships set deactivated_at=now() where profile_id=$1 and organization_id=$2`, [alice, orgA])
