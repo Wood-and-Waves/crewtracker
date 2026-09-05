@@ -474,6 +474,11 @@ initialises once, so navigating days reused the instance: the header updated fro
 cells still held the PREVIOUS day's timecard ids, and punching silently wrote to the wrong day —
 overwriting a real punch. Caught only by reading the database rather than the screen.
 
+**A travel day replaces the punch grid with a banner**, mirroring `TimecardRow`. Without it
+every cell is disabled showing "—" and the crew member sees six dead squares with nothing saying
+why. Plain `is_travel_day` only — `travel_in_day`/`travel_out_day` are HYBRID days additive to
+hours actually worked, so those still punch normally.
+
 **Which cells are tappable is `isEligibleForBatch`, the same rule the server enforces**, never
 "is this `nextPunchType`". An earlier version used the latter, which left Wrap dead until every
 meal was filled in — and plenty of days have no second meal, so crew could not go home. `next`

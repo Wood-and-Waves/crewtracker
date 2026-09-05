@@ -211,6 +211,27 @@ export default function ClockPunch({
               </div>
             )}
 
+            {/* A travel day has no punches to make, and every cell would be
+                disabled — six dead squares reading "—" with nothing saying
+                why. The desktop tracker replaces the punch strip with a
+                banner (TimecardRow.tsx); same treatment here, scaled up.
+                Note this is plain is_travel_day only: travel_in/out are
+                HYBRID days that are additive to hours actually worked, so
+                those still punch normally. */}
+            {row.isTravelDay ? (
+              <div className={RULE_MAJOR}>
+                <div className="p-3">
+                  <div className="rounded-field bg-accent/10 py-8 text-center">
+                    <p className="font-display text-xl font-bold uppercase tracking-wide text-accent">
+                      ✈ Travel Day
+                    </p>
+                    <p className="mt-1 px-6 text-sm text-muted">
+                      Nothing to clock today — your hours are handled by your PM.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className={RULE_MAJOR}>
               <div className="grid grid-cols-3 gap-2 p-3">
                 {types.map(type => {
@@ -272,6 +293,7 @@ export default function ClockPunch({
                 })}
               </div>
             </div>
+            )}
           </section>
         )
       })}
