@@ -25,6 +25,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInZone } from '@/lib/showStatus'
+import { isClockLinkExpired } from '@/lib/clockLinks'
 import type { Punch } from '@/lib/punches'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -96,7 +97,7 @@ export async function loadClockView(
     // Explicit columns: shows carries show_notes, job_number and
     // client_company, none of which are the crew member's business.
     admin.from('shows')
-      .select('id, name, venue, city_state, timezone_identifier, finalized_at')
+      .select('id, name, venue, city_state, timezone_identifier, finalized_at, end_date')
       .eq('id', link.show_id).maybeSingle(),
     admin.from('organizations')
       .select('name, timecard_rounding_minutes').eq('id', link.organization_id).maybeSingle(),
@@ -129,7 +130,8 @@ export async function loadClockView(
     days,
     roundingMinutes: org?.timecard_rounding_minutes ?? 1,
     finalized: !!show.finalized_at,
-    expired: new Date(link.expires_at) < new Date(),
+    // Derived from the show, never from link.expires_at — see isClockLinkExpired.
+    expired: isClockLinkExpired(show.end_date, timeZone),
     revoked: !!link.revoked_at,
   }
 

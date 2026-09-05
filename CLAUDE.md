@@ -512,6 +512,16 @@ Other things that are load-bearing and were each verified:
 - **The show's timezone decides "today"**, server-side, which is what stops a bookmarked link
   back-dating. `clockLinkExpiry` goes through `zonedWallTimeToUtc` for the same reason — a
   local-midnight version expires links mid-show for a Los Angeles show built on a UTC server.
+- **Expiry is DERIVED from the show (`isClockLinkExpired`), never read from
+  `clock_links.expires_at`.** The stored column goes stale the moment a show gets longer:
+  `add_show_day` extends `shows.end_date`, so links minted earlier would expire BEFORE the show
+  ends — locking the whole crew out on exactly the days they most need to clock out. Deriving it
+  cannot drift; patching `add_show_day` would fix that one path and leave a trap for the next
+  writer of `end_date`. Nothing is lost, because "stop working after the show" IS a property of
+  the show and an early kill is already `revoked_at`. `expires_at` stays as a record of intent
+  at mint time — **do not reintroduce `new Date(link.expires_at) < new Date()` as the gate.**
+  Both directions are pinned by tests and were verified on dev: a link with a lapsed stored
+  expiry still works while the show runs, and a link stops working once the show has ended.
 - **`shows.finalized_at` is pre-checked before every write.** `punches_blocked_when_finalized`
   is a TRIGGER and the service role does **not** bypass triggers, so without it a crew member
   gets a raw 500.

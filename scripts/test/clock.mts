@@ -15,7 +15,7 @@
 // must: Slack does not render markdown links, so a bare URL is the only format
 // that survives the paste.
 
-import { clockUrl, clockLinkExpiry, buildSlackList, type ClockLinkRow } from '../../lib/clockLinks.ts'
+import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow } from '../../lib/clockLinks.ts'
 import { getChronologyError, isEligibleForBatch, roundWallTime, type Punch } from '../../lib/punches.ts'
 
 let pass = 0, fail = 0
@@ -172,6 +172,35 @@ check('23:31 at a half-hour grid rolls over too',
 
 check('garbage in is returned untouched rather than becoming 00:00',
   roundWallTime('not-a-time', 15), { timeStr: 'not-a-time', dayOffset: 0 })
+
+// ---------------------------------------------------------------------------
+// Expiry is DERIVED from the show, never read from clock_links.expires_at.
+//
+// Regression test for a real bug: `add_show_day` extends shows.end_date, so a
+// link minted while the show ran Sep 4–8 kept an expiry of Sep 9 even after the
+// show grew to Sep 10. The whole crew would have been locked out on the last
+// two days — the days they most need to clock out — and told to go ask their PM.
+console.log('\nlink expiry derives from the show')
+
+const tz = 'America/Chicago'
+const during = new Date('2026-09-06T15:00:00Z')
+
+check('live while the show is running', isClockLinkExpired('2026-09-08', tz, during), false)
+check('live on the show\'s own last day',
+  isClockLinkExpired('2026-09-08', tz, new Date('2026-09-08T23:00:00Z')), false)
+check('still live at 3am after the last night (expiry is 6am the morning after)',
+  isClockLinkExpired('2026-09-08', tz, new Date('2026-09-09T08:00:00Z')), false)
+check('expired once the morning after has passed',
+  isClockLinkExpired('2026-09-08', tz, new Date('2026-09-09T12:00:00Z')), true)
+
+// The bug itself: a show that grew must keep its links alive.
+const mintedFor = '2026-09-08'          // what expires_at was computed from
+const showGrewTo = '2026-09-10'          // after add_show_day ran twice
+const lastDay = new Date('2026-09-10T20:00:00Z')
+check('the STORED expiry would already have lapsed',
+  new Date(clockLinkExpiry(mintedFor, tz)) <= lastDay, true)
+check('but the derived one is still live, because the show grew',
+  isClockLinkExpired(showGrewTo, tz, lastDay), false)
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

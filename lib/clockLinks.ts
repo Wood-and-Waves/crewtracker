@@ -53,6 +53,33 @@ export function clockLinkExpiry(endDate: string, timeZone: string): string {
 }
 
 /**
+ * Has a clock link stopped working because its show is over?
+ *
+ * DERIVED FROM THE SHOW, NOT FROM clock_links.expires_at. The stored column
+ * records what the expiry was when the link was minted, and it goes stale the
+ * moment the show gets longer: `add_show_day` extends `shows.end_date`, and
+ * links minted before that would otherwise expire BEFORE the show ends —
+ * locking the whole crew out on exactly the day they most need to clock out,
+ * with a message telling them to go and ask their PM.
+ *
+ * Deriving it cannot drift. Patching `add_show_day` to push the stored dates
+ * out would fix today's path and leave a trap for the next writer of
+ * `end_date`. Nothing is lost by deriving: a link should stop working after
+ * the show, which IS a property of the show, and a PM killing a link early is
+ * already `revoked_at`.
+ *
+ * `expires_at` stays in the table as a record of intent at mint time. It is
+ * NOT the gate — do not reintroduce `new Date(link.expires_at) < new Date()`.
+ */
+export function isClockLinkExpired(
+  endDate: string,
+  timeZone: string,
+  now: Date = new Date(),
+): boolean {
+  return now >= new Date(clockLinkExpiry(endDate, timeZone))
+}
+
+/**
  * The block a PM pastes into Slack.
  *
  * Plain text with bare URLs — Slack auto-links those. Deliberately no markdown:

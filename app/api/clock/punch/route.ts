@@ -5,6 +5,7 @@ import {
   roundWallTime, type Punch, type PunchType,
 } from '@/lib/punches'
 import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
+import { isClockLinkExpired } from '@/lib/clockLinks'
 
 // A crew member recording their own punch, with no login.
 //
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
 
   const { data: link } = await admin
     .from('clock_links')
-    .select('id, show_id, crew_member_id, expires_at, revoked_at')
+    .select('id, show_id, crew_member_id, revoked_at')
     .eq('token', token)
     .maybeSingle()
 
@@ -80,13 +81,18 @@ export async function POST(request: NextRequest) {
   if (link.revoked_at) {
     return NextResponse.json({ error: 'This link has been turned off. Ask your PM for a new one.' }, { status: 400 })
   }
-  if (new Date(link.expires_at) < new Date()) {
+  const { data: show } = await admin
+    .from('shows')
+    .select('id, organization_id, timezone_identifier, finalized_at, end_date')
+    .eq('id', link.show_id).maybeSingle()
+  if (!show) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
+
+  // Expiry comes from the SHOW, not from clock_links.expires_at, so a show
+  // that got longer does not lock its crew out — see isClockLinkExpired.
+  // Checked after the show loads, which is why it sits below the lookup.
+  if (isClockLinkExpired(show.end_date, show.timezone_identifier || 'America/Chicago')) {
     return NextResponse.json({ error: 'This link has expired. Ask your PM for a new one.' }, { status: 400 })
   }
-
-  const { data: show } = await admin
-    .from('shows').select('id, organization_id, timezone_identifier, finalized_at').eq('id', link.show_id).maybeSingle()
-  if (!show) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
 
   // Checked BEFORE writing. punches_blocked_when_finalized is a TRIGGER, and
   // the service role does not bypass triggers — so a punch on a closed-out show

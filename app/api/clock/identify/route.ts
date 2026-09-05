@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInZone } from '@/lib/showStatus'
-import { clockLinkExpiry } from '@/lib/clockLinks'
+import { clockLinkExpiry, isClockLinkExpired } from '@/lib/clockLinks'
 
 // Turning a VENUE code into somebody's own personal link.
 //
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
   const { data: link } = await admin
     .from('clock_links')
-    .select('id, show_id, crew_member_id, organization_id, expires_at, revoked_at, created_by')
+    .select('id, show_id, crew_member_id, organization_id, revoked_at, created_by')
     .eq('token', token)
     .maybeSingle()
 
@@ -45,13 +45,14 @@ export async function POST(request: NextRequest) {
   if (link.revoked_at) {
     return NextResponse.json({ error: 'This code has been turned off. Ask your PM for a new one.' }, { status: 400 })
   }
-  if (new Date(link.expires_at) < new Date()) {
-    return NextResponse.json({ error: 'This code has expired. Ask your PM for a new one.' }, { status: 400 })
-  }
-
   const { data: show } = await admin
     .from('shows').select('id, end_date, timezone_identifier').eq('id', link.show_id).maybeSingle()
   if (!show) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
+
+  // Expiry comes from the SHOW, not the stored column — see isClockLinkExpired.
+  if (isClockLinkExpired(show.end_date, show.timezone_identifier || 'America/Chicago')) {
+    return NextResponse.json({ error: 'This code has expired. Ask your PM for a new one.' }, { status: 400 })
+  }
 
   // The named person must actually be working today. Without this the venue
   // code would mint a link for any crew_member_id in the org that somebody
