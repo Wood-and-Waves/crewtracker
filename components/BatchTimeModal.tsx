@@ -109,14 +109,14 @@ export default function BatchTimeModal({
                 type="date"
                 value={dateStr}
                 onChange={e => setDateStr(e.target.value)}
-                className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                className="flex-1 min-w-0 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
               />
               <input
                 type="time"
                 value={timeStr}
                 step={roundingMinutes > 1 ? roundingMinutes * 60 : undefined}
                 onChange={e => setTimeStr(e.target.value)}
-                className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                className="flex-1 min-w-0 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
               />
             </div>
           )}

@@ -151,6 +151,13 @@ The app was fully redesigned from the original pure-black/zinc/iOS-blue look to 
 
 **The tracker console's punch table** (`TimecardRow.tsx` + the room block in `shows/[id]/page.tsx`) is a genuine ruled grid on desktop (`lg:grid-cols-[...]`, shared between the header row and every crew row via `lib/trackerLayout.ts`), collapsing to labeled per-field cards on mobile. This replaced free-floating pill buttons after Dan's first-round feedback that times weren't visually separated.
 
+**Safari gotcha, current: `input[type="time"]` has an intrinsic min-width that BEATS `w-full`.**
+Driven by font size, so the bigger the field the worse it gets — the crew clock's `text-3xl`
+picker rendered wider than its own dialog and hung off the right edge on a real iPhone while
+fitting fine in Chromium. `min-w-0` is the fix (plus `max-w-full` as a belt); every
+`input[type="time"]` in the app now carries it. Verified by measuring the field's right edge
+against its dialog's, not by eye.
+
 **Known Safari gotcha (now historical — zero native `<select>` elements remain; `components/ui/Select` replaced them all 2026-08-06, which sidesteps both bugs by construction).** Kept in case a native select is ever reintroduced: `<option>` needs explicit `className="bg-surface-2 text-ink"` or its text is invisible against a dark background in Safari, and iPad Safari has a hydration bug that duplicates `<option>` elements in a controlled `<select>` — fix is a `key` prop on the `<select>` tied to a stable identifier of the options list so React remounts instead of patching in place. Prefer just using `Select`.
 
 **Logo:** `components/Logo.tsx` now renders the **real** CrewTracker mark (dropped in 2026-07-15) — two fixed blue tones (`#6699FF` / `#3366CC`), not `currentColor`, so it's already designed to sit on both light and dark backgrounds as-is rather than needing theme-aware recoloring. It has no intrinsic width/height (the source SVG has no `width`/`height` attrs, just a `viewBox`), so the component defaults to `w-7 h-7` internally and every call site should pass `className` to override when a different size is needed (login/invite use `w-12 h-12`) — **don't render `<Logo />` bare**, it'll fall back to the browser's oversized default if the default class is ever removed. `app/icon.png` and `app/favicon.ico` are also the real assets now (Next's file-based icon convention — no manual `<link>` tags needed). A duplicate lives at `public/app-icon.png` purely so the marketing page can reference it via a normal `<img>`/`next/image` src, since `app/icon.png` isn't reliably a stable public URL.

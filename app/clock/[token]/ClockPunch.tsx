@@ -206,12 +206,18 @@ export default function ClockPunch({
                 : 'Check the time before you save.'}
             </p>
 
+            {/* min-w-0 is load-bearing, not decoration. iOS Safari gives
+                input[type=time] an intrinsic min-width driven by its font
+                size, and that min-width BEATS w-full — so at text-3xl the
+                field rendered wider than the dialog and hung off the right
+                edge on a real phone. min-w-0 lets it shrink; max-w-full stops
+                it growing past the box on any engine. */}
             <input
               type="time"
               value={timeStr}
               step={roundingMinutes > 1 ? roundingMinutes * 60 : undefined}
               onChange={e => setTimeStr(e.target.value)}
-              className="rounded-field mb-4 w-full border border-line bg-surface-2 px-4 py-4 text-center font-mono text-3xl font-bold text-ink outline-none focus:border-accent"
+              className="rounded-field mb-4 block w-full min-w-0 max-w-full box-border border border-line bg-surface-2 px-3 py-4 text-center font-mono text-2xl font-bold text-ink outline-none focus:border-accent"
             />
 
             {error && <p className="mb-3 text-sm text-danger">{error}</p>}
