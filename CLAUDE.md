@@ -524,6 +524,20 @@ act that ships to customers, and any pending migrations go through the steps abo
 
 ## Past incidents worth remembering
 
+- **`next dev` blocks cross-origin dev resources, and the failure is a page that renders
+  perfectly and does nothing.** Opening the dev server from a phone on the wifi
+  (`http://192.168.x.x:3000` instead of localhost) got `Blocked cross-origin request to Next.js
+  dev resource /_next/webpack-hmr`, which stops the dev runtime booting, so **React never
+  hydrates** — the server-rendered HTML looks completely correct and every tap is dead. Cost a
+  long session on the crew clock, where testing on a real phone is the entire point, and it
+  survived several wrong theories (viewport meta, horizontal overflow, iOS touch handling, stale
+  chunks) because the page *looked* fine and worked perfectly on localhost. `next.config.ts` now
+  computes this machine's LAN addresses via `os.networkInterfaces()` and passes them as
+  `allowedDevOrigins` — computed, not hard-coded, because DHCP changes the address and a stale
+  literal fails in exactly the same silent way. **Dev only**: production has no HMR and ignores
+  the setting entirely. If a page ever renders but nothing responds, check hydration first
+  (`Object.keys(el).some(k => k.startsWith('__react'))`) before suspecting the UI.
+
 - **The repo lives inside Dropbox, including `.git`.** Mid-session, working-tree files *and* `.git` were replaced by Dropbox sync: `git show HEAD:components/RoomActionsMenu.tsx` returned 131 lines early on and 260 lines later, with `HEAD` reported as the same commit both times. Any file read before that sync completed was stale. Practical consequences: a two-machine edit can corrupt the index or produce torn commits, `git status` can disagree with disk, and analysis done against a partly-synced tree is unreliable. **Re-read files rather than trusting an earlier read in the same session** — and this is a large part of why targeted edits beat whole-file rewrites here, since a targeted edit fails loudly on a stale read while a rewrite silently overwrites from memory. Running only one Claude session at a time avoids the worst of it.
 - Invite-seeding logic once fired twice for one org, creating duplicate `av_roles` rows — surfaced as doubled dropdown options on iPad Safari. Fixed via SQL cleanup + guarding on `existingRoleCount` before seeding.
 - `TimeEntryModal` used to default new punches to the browser's real-world "today" instead of the show-day being viewed — silently produced a 33.5-hour day and broke short-turnaround detection. Fixed (see [components/TimeEntryModal.tsx](components/TimeEntryModal.tsx)).
