@@ -60,9 +60,19 @@ function Message({ title, body }: { title: string; body: string }) {
   )
 }
 
-export default async function ClockPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function ClockPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>
+  // ?d=YYYY-MM-DD picks the show day. Validated in loadClockView against the
+  // show's actual work days, so a hand-edited value falls back to today rather
+  // than reaching anything.
+  searchParams: Promise<{ d?: string }>
+}) {
   const { token } = await params
-  const view = await loadClockView(token)
+  const { d } = await searchParams
+  const view = await loadClockView(token, d)
 
   if (!view) {
     return <Message
@@ -107,22 +117,29 @@ export default async function ClockPage({ params }: { params: Promise<{ token: s
     )
   }
 
-  if (!view.me || view.me.assignments.length === 0) {
-    return <Message
-      title={`Hi ${view.me?.name?.split(' ')[0] ?? 'there'}`}
-      body={`You’re not on the call for ${view.showName} today. This link will work again on your next day.`} />
-  }
-
+  // Not staffed on the SELECTED day. Still render the punch screen, so the day
+  // arrows remain reachable — an empty state with no way back would strand
+  // somebody who stepped onto a day off.
   return (
     <Working>
       <ClockPunch
+        // Keyed on the day, and that is load-bearing. ClockPunch seeds its
+        // punch rows into useState, which initialises ONCE — so navigating
+        // days reused the instance, refreshed the header from props, and left
+        // the cells holding the PREVIOUS day's timecard ids. Punching then
+        // silently wrote to the wrong day. The key forces a fresh mount, so
+        // state can never outlive the day it belongs to.
+        key={view.selectedDate}
         token={view.token}
         showName={view.showName}
         venue={view.venue}
-        crewName={view.me.name}
         timeZone={view.timeZone}
         roundingMinutes={view.roundingMinutes}
-        assignments={view.me.assignments}
+        crewName={view.me?.name ?? ''}
+        selectedDate={view.selectedDate}
+        today={view.today}
+        days={view.days}
+        assignments={view.me?.assignments ?? []}
       />
     </Working>
   )

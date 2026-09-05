@@ -426,9 +426,28 @@ there is no earlier time to contradict. "The previous punch must exist" is a sep
 `isEligibleForBatch` already owns it. This shipped as a real bug during the build and is now
 pinned by tests in `scripts/test/clock.mts`. The database enforces neither.
 
-**Crew pick their own time (2026-09-04), and it snaps to the company's grid.** Only a wall-clock
-HH:MM is ever sent — the DATE stays the work day the server resolved, so picking a time can move
-a punch within the day but never to another one.
+**Crew pick their own time, and it snaps to the company's grid.** The picker is TWO `Select`s
+(hour, and minutes generated from `roundingMinutes`) rather than `input[type="time"]`: iOS
+ignores that control's `step` and offers every minute, which defeats the grid — and the same
+control's intrinsic min-width overran its own dialog on a real phone. Offering only grid minutes
+makes the rule structural instead of a correction applied afterwards.
+
+**Crew can walk the show's days** (arrows in a light strip under the masthead, `?d=YYYY-MM-DD`).
+A requested day is honoured only if it is genuinely a work day OF THAT SHOW, else it falls back
+to today. The punch route takes the date from the TIMECARD's own work day and never from the
+request, so the reachable days are exactly the days that person is staffed. This deliberately
+loosens the original today-only rule (Dan, 2026-09-05 — crew need to fix a punch missed
+yesterday); finalize is still the sign-off.
+
+**`<ClockPunch key={selectedDate}>` is load-bearing.** It seeds punch rows into `useState`, which
+initialises once, so navigating days reused the instance: the header updated from props while the
+cells still held the PREVIOUS day's timecard ids, and punching silently wrote to the wrong day —
+overwriting a real punch. Caught only by reading the database rather than the screen.
+
+**Which cells are tappable is `isEligibleForBatch`, the same rule the server enforces**, never
+"is this `nextPunchType`". An earlier version used the latter, which left Wrap dead until every
+meal was filled in — and plenty of days have no second meal, so crew could not go home. `next`
+survives purely as the VISUAL lit key; other legal punches sit in the ghost register.
 
 **The crew screen is the tracker, for one person.** Same gesture (tap a punch cell → the
 TimeEntryModal-shaped editor, pre-filled, Save), same vocabulary (ink `BAND` masthead, the

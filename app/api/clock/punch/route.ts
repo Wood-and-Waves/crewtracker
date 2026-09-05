@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { todayInZone } from '@/lib/showStatus'
 import {
   PUNCH_ORDER, PUNCH_LABELS, getChronologyError, isEligibleForBatch, isWrapped,
   roundWallTime, type Punch, type PunchType,
@@ -22,10 +21,15 @@ import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
 // public page cannot be trusted to have run.
 //
 // WHAT THE TIME IS: a wall-clock HH:MM the crew member picks, read in the
-// SHOW's timezone and pinned to the work day the server resolved — never a
-// date from the browser. So somebody can correct "I actually started at 8"
-// without calling the PM, but a bookmarked link still cannot reach another
-// day. Omitting `at` means now.
+// SHOW's timezone. The DATE is never sent — it comes from the work day the
+// TIMECARD belongs to, which the server looks up. So the only reachable days
+// are days this person is genuinely staffed on this show, and a hand-edited
+// request cannot invent one. Omitting `at` means now.
+//
+// Crew may punch a day other than today (Dan, 2026-09-05 — they need to fix a
+// punch missed on an earlier day). That deliberately loosens the original
+// today-only rule. What still holds: the day must be a real work day of THIS
+// show with a timecard for THIS person, and finalize is still the sign-off.
 //
 // The picked time is snapped to organizations.timecard_rounding_minutes.
 // That is a DIFFERENT operation from the rounding calculateNetHours does to a
@@ -93,11 +97,9 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // The timecard must be THIS person's, and it must be TODAY's — today being
-  // resolved from the show's timezone, never the server's and never the
-  // caller's. This is what stops a bookmarked link back-dating yesterday.
+  // The timecard must be THIS person's and on THIS show. Its own work day
+  // supplies the date, so the caller never gets to name one.
   const timeZone = show.timezone_identifier || 'America/Chicago'
-  const today = todayInZone(timeZone)
 
   const { data: timecard } = await admin
     .from('timecards')
@@ -112,12 +114,13 @@ export async function POST(request: NextRequest) {
     !timecard ||
     timecard.crew_member_id !== link.crew_member_id ||
     workDay?.show_id !== show.id ||
-    workDay?.date !== today
+    !workDay?.date
   ) {
-    return NextResponse.json({ error: "That isn't one of today's shifts." }, { status: 400 })
+    return NextResponse.json({ error: "That isn't one of your shifts on this show." }, { status: 400 })
   }
+  const punchDate = workDay.date as string
   if (timecard.is_travel_day) {
-    return NextResponse.json({ error: 'Today is marked as a travel day, so there are no punches to record.' }, { status: 400 })
+    return NextResponse.json({ error: 'That day is marked as a travel day, so there are no punches to record.' }, { status: 400 })
   }
 
   const { data: existing } = await admin
@@ -182,7 +185,7 @@ export async function POST(request: NextRequest) {
   // input is a hint browsers let you type past, and this is the value that
   // gets paid.
   const { timeStr, dayOffset } = roundWallTime(wall, roundingMinutes)
-  const now = zonedWallTimeToUtc(addDays(today, dayOffset), timeStr, timeZone)
+  const now = zonedWallTimeToUtc(addDays(punchDate, dayOffset), timeStr, timeZone)
 
   // Chronology, re-run server-side against every OTHER punch. Excluding this
   // type matches TimeEntryModal: replacing a punch must not be blocked by the

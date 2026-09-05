@@ -1,38 +1,39 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
-  PUNCH_LABELS, formatPunchTime, nextPunchType, visiblePunchTypes, roundWallTime,
+  PUNCH_LABELS, formatPunchTime, nextPunchType, visiblePunchTypes,
+  isEligibleForBatch, roundWallTime,
   type Punch, type PunchType,
 } from '@/lib/punches'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
+import Select from '@/components/ui/Select'
 import type { ClockAssignment } from '@/lib/clockSession'
 
 // Somebody's own day. Built to read as the tracker, because it is the same job.
 //
-// THE GESTURE IS THE TRACKER'S GESTURE: tap a punch cell, an editor opens with
-// the time pre-filled, Save. Identical to TimeEntryModal. The first version
-// invented its own — a "Tap to Start" button for now plus a separate "Different
-// time" link — which Dan called unintuitive, and rightly: two affordances for
-// one action is a fork, not a shortcut.
+// THE GESTURE IS THE TRACKER'S: tap a punch cell, an editor opens with the time
+// pre-filled, Save. THE LAYOUT IS THE TRACKER'S: ink BAND masthead, the mobile
+// tracker's 3-across grid of chunky cells, RULE_MAJOR closing, scaled up
+// because the whole phone serves one person.
 //
-// THE LAYOUT IS THE TRACKER'S LAYOUT: an ink BAND masthead, then the same
-// 3-across grid of chunky punch cells the mobile tracker uses, closed by a
-// RULE_MAJOR. Scaled UP from TimecardRow's h-12, because there a cell is one of
-// fifty on a roster and here the whole phone serves one person — Dan's first
-// look at full-width rows was "a little small to read".
+// WHICH CELLS ARE TAPPABLE is `isEligibleForBatch` — the app's existing rule,
+// and the SAME one the server enforces, so the two can never disagree. That
+// matters: an earlier version only let you tap the single `nextPunchType`,
+// which meant Wrap stayed dead until every meal had been filled in. Plenty of
+// days have no second meal (Dan, 2026-09-05: "We don't always have M2"), and a
+// crew member cannot go home. Eligibility says Wrap needs only a Start, so
+// Wrap is now live from the moment the day begins.
 //
-// The one deliberate difference from TimeEntryModal: no DATE field. The server
-// pins every punch to the work day it resolved from the show's timezone, which
-// is what stops a bookmarked link reaching another day.
-//
-// Times shown come back from the SERVER after every punch, never from the
-// device clock — the server decides the instant and rounds it, so showing
-// anything else would be a lie the moment the two disagree.
+// `next` survives purely as the VISUAL lit key — one solid Crew Blue cell
+// showing the expected step. Other legal cells sit in the ghost register,
+// exactly the three-register treatment TimecardRow uses.
 
 export default function ClockPunch({
-  token, showName, venue, crewName, timeZone, roundingMinutes, assignments,
+  token, showName, venue, crewName, timeZone, roundingMinutes,
+  selectedDate, today, days, assignments,
 }: {
   token: string
   showName: string
@@ -41,28 +42,74 @@ export default function ClockPunch({
   timeZone: string
   /** The company's punch grid, from organizations.timecard_rounding_minutes. */
   roundingMinutes: number
+  /** The show day being displayed, YYYY-MM-DD. */
+  selectedDate: string
+  /** Today in the SHOW's zone, so "Today" can be labelled as such. */
+  today: string
+  /** Every work day of the show, ascending — the arrows walk this. */
+  days: string[]
   assignments: ClockAssignment[]
 }) {
+  const router = useRouter()
   const [rows, setRows] = useState(assignments)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState<{ timecardId: string; type: PunchType } | null>(null)
-  const [timeStr, setTimeStr] = useState('')
+  const [hh, setHh] = useState('09')   // 24-hour internally; the UI shows 12-hour
+  const [mm, setMm] = useState('00')
+
+  const dayIndex = days.indexOf(selectedDate)
+  const prevDay = dayIndex > 0 ? days[dayIndex - 1] : null
+  const nextDay = dayIndex >= 0 && dayIndex < days.length - 1 ? days[dayIndex + 1] : null
+
+  // Parsed as a plain date, then formatted in the SHOW's zone via a UTC noon
+  // anchor — a bare `new Date('2026-09-05')` is midnight UTC, which is the
+  // previous day anywhere west of Greenwich and would label every day wrong.
+  const dayLabel = new Date(`${selectedDate}T12:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
+  })
 
   const wallNow = (d: Date) => new Intl.DateTimeFormat('en-GB', {
     timeZone, hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(d)
 
+  // Minutes offered ON the company's grid only — the native time picker's
+  // `step` is a hint iOS ignores, and this is the value that gets paid.
+  const step = roundingMinutes > 1 ? roundingMinutes : 1
+  const minuteOptions = Array.from({ length: Math.ceil(60 / step) }, (_, i) => {
+    const v = String(i * step).padStart(2, '0')
+    return { value: v, label: v }
+  })
+  const hourOptions = Array.from({ length: 24 }, (_, h) => {
+    const v = String(h).padStart(2, '0')
+    const h12 = h % 12 === 0 ? 12 : h % 12
+    return { value: v, label: `${h12} ${h < 12 ? 'AM' : 'PM'}` }
+  })
+
   function open(timecardId: string, type: PunchType, existing?: Punch) {
     setError('')
     // A new punch opens at "now" IN THE SHOW'S ZONE — somebody on a Chicago
     // show whose phone is still on Pacific must not pre-fill two hours early —
-    // already rounded, so the field shows the time that will actually be saved
-    // rather than one the server then moves.
-    setTimeStr(existing
+    // already rounded, so the field shows the time that will actually be saved.
+    const wall = existing
       ? wallNow(new Date(existing.punched_at))
-      : roundWallTime(wallNow(new Date()), roundingMinutes).timeStr)
+      : roundWallTime(wallNow(new Date()), roundingMinutes).timeStr
+    const [h, m] = wall.split(':')
+    setHh(h)
+    // An existing off-grid time (a PM's exact minute, or a punch from before
+    // the org had a grid) is snapped to the nearest offered option rather than
+    // left unselectable.
+    setMm(minuteOptions.some(o => o.value === m)
+      ? m
+      : minuteOptions.reduce((best, o) =>
+          Math.abs(+o.value - +m) < Math.abs(+best.value - +m) ? o : best, minuteOptions[0]).value)
     setEditing({ timecardId, type })
+  }
+
+  function goToDay(date: string) {
+    // A full navigation, not client state: the server owns which day this is
+    // and what is on it, so it re-resolves everything.
+    router.push(`?d=${date}`)
   }
 
   async function save() {
@@ -73,9 +120,9 @@ export default function ClockPunch({
       const res = await fetch('/api/clock/punch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Only a wall-clock time is sent; the date is never the caller's to
-        // choose. See the header.
-        body: JSON.stringify({ token, timecardId, punchType: type, at: timeStr }),
+        // Only a wall-clock time is sent. The DATE comes from the timecard,
+        // server-side — see the route header.
+        body: JSON.stringify({ token, timecardId, punchType: type, at: `${hh}:${mm}` }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'That did not save.'); setBusy(false); return }
@@ -98,8 +145,7 @@ export default function ClockPunch({
 
   return (
     <div className="mx-auto w-full max-w-xl pb-10">
-      {/* ONE solid band per screen: this person. Room strips below are light,
-          the same rule the shows list follows. */}
+      {/* ONE solid band per screen: this person. */}
       <div className={cn(BAND, 'px-4 py-3')}>
         <p className="font-display text-[11px] font-semibold uppercase tracking-[0.15em] opacity-80">
           {showName}{venue ? ` · ${venue}` : ''}
@@ -107,8 +153,46 @@ export default function ClockPunch({
         <h1 className="font-display text-3xl font-bold uppercase tracking-tight">{crewName}</h1>
       </div>
 
+      {/* Day nav. A light strip under the band, the same weight a data table's
+          column header gets — two solid bands stacked is the top-heavy look
+          Dan called out on the list screens. */}
+      <div className="flex items-stretch border-b-2 border-ink bg-surface-2">
+        <button
+          onClick={() => prevDay && goToDay(prevDay)}
+          disabled={!prevDay}
+          aria-label="Previous day"
+          className="px-5 py-3 text-2xl font-bold leading-none text-ink disabled:opacity-25"
+        >
+          ‹
+        </button>
+        <div className="flex flex-1 flex-col items-center justify-center py-2">
+          <span className="font-display text-base font-bold uppercase tracking-wide text-ink">
+            {dayLabel}
+          </span>
+          <span className="text-[11px] uppercase tracking-wide text-muted">
+            {selectedDate === today
+              ? 'Today'
+              : `Day ${dayIndex + 1} of ${days.length}`}
+          </span>
+        </div>
+        <button
+          onClick={() => nextDay && goToDay(nextDay)}
+          disabled={!nextDay}
+          aria-label="Next day"
+          className="px-5 py-3 text-2xl font-bold leading-none text-ink disabled:opacity-25"
+        >
+          ›
+        </button>
+      </div>
+
       {!editing && error && (
         <p className="border-b border-line px-4 py-3 text-center text-sm text-danger">{error}</p>
+      )}
+
+      {rows.length === 0 && (
+        <p className="px-4 py-10 text-center text-sm text-muted">
+          You&apos;re not on the call this day. Use the arrows to find your day.
+        </p>
       )}
 
       {rows.map(row => {
@@ -136,7 +220,11 @@ export default function ClockPunch({
                   // person's — the server refuses it either way, so the cell
                   // must not look tappable and then fail.
                   const pmEntered = !!done && done.source !== 'crew'
-                  const tappable = !pmEntered && (isNext || !!done)
+                  // The app's own eligibility rule, matching the server. Wrap
+                  // needs only a Start, so a day with no second meal still ends.
+                  const legal = isEligibleForBatch(row.punches, row.isTravelDay, type)
+                  const tappable = !pmEntered && (legal || !!done)
+                  const available = !done && legal && !isNext
 
                   return (
                     <button
@@ -148,15 +236,17 @@ export default function ClockPunch({
                         'rounded-field flex h-24 flex-col items-center justify-center gap-1',
                         'px-1 text-center tabular-nums whitespace-nowrap transition-colors',
                         done && 'bg-surface-2 text-ink',
-                        // The lit next key, straight off the tracker: exactly
-                        // one solid Crew Blue cell is the step you are on.
                         isNext && 'bg-accent text-accent-ink',
-                        !done && !isNext && 'bg-surface-3 text-muted',
+                        // Legal but not the expected next step: the ghost
+                        // register, so Wrap reads as reachable without
+                        // competing with the lit key.
+                        available && 'border-2 border-accent/45 bg-transparent text-accent',
+                        !done && !legal && 'bg-surface-3 text-muted',
                       )}
                     >
                       <span className={cn(
                         'block text-[11px] font-semibold uppercase leading-none tracking-wide',
-                        done ? 'text-muted' : isNext ? 'text-accent-ink opacity-90' : 'text-muted',
+                        isNext ? 'text-accent-ink opacity-90' : available ? 'text-accent' : 'text-muted',
                       )}>
                         {PUNCH_LABELS[type]}
                       </span>
@@ -166,15 +256,13 @@ export default function ClockPunch({
                           <span className="block font-mono text-2xl font-bold leading-none">
                             {formatPunchTime(done.punched_at, timeZone)}
                           </span>
-                          {/* Says why the cell does nothing, rather than
-                              leaving a dead tap to be discovered. */}
                           {pmEntered && (
                             <span className="block text-[10px] uppercase leading-none tracking-wide text-muted">
                               set by PM
                             </span>
                           )}
                         </>
-                      ) : isNext ? (
+                      ) : legal ? (
                         <span className="block text-xl font-bold uppercase leading-none">Tap</span>
                       ) : (
                         <span className="block text-xl font-bold leading-none">—</span>
@@ -201,30 +289,30 @@ export default function ClockPunch({
               {PUNCH_LABELS[editing.type]}
             </h2>
             <p className="mb-4 mt-1 text-xs text-muted">
-              {roundingMinutes > 1
-                ? `Recorded in ${roundingMinutes}-minute steps, always rounded up.`
-                : 'Check the time before you save.'}
+              {dayLabel}
+              {roundingMinutes > 1 && ` · ${roundingMinutes}-minute steps`}
             </p>
 
-            {/* Three separate guards, because input[type="time"] on iOS is
-                sized by its own shadow DOM and ignores width:100%:
-                  appearance-none — drops the native widget sizing, which is
-                    the only thing that actually lets WebKit shrink the field;
-                  min-w-0        — an intrinsic min-width BEATS w-full, and
-                    min-width is what wins that fight;
-                  overflow-hidden on the WRAPPER — a hard backstop, so even if
-                    a future engine insists on its own width the dialog edge
-                    still holds.
-                This overran the dialog on a real iPhone at text-3xl while
-                fitting perfectly in Chromium, so it is not testable here —
-                belt and braces is deliberate. */}
-            <div className="mb-4 w-full overflow-hidden">
-              <input
-                type="time"
-                value={timeStr}
-                step={roundingMinutes > 1 ? roundingMinutes * 60 : undefined}
-                onChange={e => setTimeStr(e.target.value)}
-                className="rounded-field block w-full min-w-0 max-w-full appearance-none box-border border border-line bg-surface-2 px-3 py-4 text-center font-mono text-2xl font-bold text-ink outline-none focus:border-accent"
+            {/* Two Selects rather than input[type=time]. The native picker
+                ignores `step` on iOS and offers every minute, which is exactly
+                what Dan asked not to happen — and it was also the control that
+                overran this dialog. Offering only grid minutes makes the rule
+                structural instead of a correction applied after the fact. */}
+            <div className="mb-4 flex items-center gap-2">
+              <Select
+                value={hh}
+                options={hourOptions}
+                onChange={setHh}
+                ariaLabel="Hour"
+                className="flex-1 min-w-0"
+              />
+              <span className="font-mono text-xl font-bold text-ink">:</span>
+              <Select
+                value={mm}
+                options={minuteOptions}
+                onChange={setMm}
+                ariaLabel="Minute"
+                className="flex-1 min-w-0"
               />
             </div>
 
@@ -239,7 +327,7 @@ export default function ClockPunch({
               </button>
               <button
                 onClick={save}
-                disabled={busy || !timeStr}
+                disabled={busy}
                 className="flex-1 bg-accent py-4 text-sm font-bold uppercase tracking-wide text-accent-ink disabled:opacity-60"
               >
                 {busy ? 'Saving…' : 'Save'}

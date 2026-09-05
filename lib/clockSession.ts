@@ -49,6 +49,10 @@ export type ClockView = {
   timeZone: string
   /** Today's date IN THE SHOW'S ZONE. Never the server's — see below. */
   today: string
+  /** The day being shown. Equals `today` unless one was asked for. */
+  selectedDate: string
+  /** Every work day of the show, ascending — the day arrows walk this. */
+  days: string[]
   /** organizations.timecard_rounding_minutes: the grid crew times snap to. */
   roundingMinutes: number
   finalized: boolean
@@ -70,7 +74,10 @@ export type ClockView = {
  * control to the phone's clock; deriving it from UTC is the bug this app has
  * already shipped twice.
  */
-export async function loadClockView(token: string): Promise<ClockView | null> {
+export async function loadClockView(
+  token: string,
+  requestedDate?: string,
+): Promise<ClockView | null> {
   // Reject anything that is not a uuid before querying, so a malformed token
   // is a clean miss rather than a Postgres cast error.
   if (!UUID.test(token)) return null
@@ -99,6 +106,17 @@ export async function loadClockView(token: string): Promise<ClockView | null> {
   const timeZone = show.timezone_identifier || 'America/Chicago'
   const today = todayInZone(timeZone)
 
+  // Every work day of the show, so the arrows know where they can go.
+  const { data: allDays } = await admin
+    .from('work_days').select('date').eq('show_id', show.id).order('date')
+  const days = (allDays ?? []).map(d => d.date as string)
+
+  // A requested day is honoured only if it is genuinely a day OF THIS SHOW.
+  // Anything else — a malformed string, a date the show does not run, another
+  // show's date — silently falls back to today rather than erroring, because
+  // the only way to send one is to edit the URL by hand.
+  const selectedDate = requestedDate && days.includes(requestedDate) ? requestedDate : today
+
   const base = {
     token: link.token,
     showId: show.id,
@@ -107,19 +125,33 @@ export async function loadClockView(token: string): Promise<ClockView | null> {
     organizationName: org?.name ?? 'the production team',
     timeZone,
     today,
+    selectedDate,
+    days,
     roundingMinutes: org?.timecard_rounding_minutes ?? 1,
     finalized: !!show.finalized_at,
     expired: new Date(link.expires_at) < new Date(),
     revoked: !!link.revoked_at,
   }
 
-  // Today's work day. A show that isn't running today has none, which is a
-  // legitimate state ("nothing on today"), not an error.
+  // Resolved BEFORE the early returns below. A personal link must still know
+  // whose it is on a day they are not working — otherwise the masthead renders
+  // a blank name and the day arrows look like somebody else's screen.
+  const { data: crew } = link.crew_member_id
+    ? await admin.from('crew_members').select('full_name').eq('id', link.crew_member_id).maybeSingle()
+    : { data: null }
+  if (link.crew_member_id && !crew) return null
+
+  const emptyMe = link.crew_member_id
+    ? { crewMemberId: link.crew_member_id, name: crew!.full_name, assignments: [] as ClockAssignment[] }
+    : null
+
+  // The selected day's work day. A show that isn't running that day has none,
+  // which is a legitimate state ("nothing on"), not an error.
   const { data: workDay } = await admin
-    .from('work_days').select('id').eq('show_id', show.id).eq('date', today).maybeSingle()
+    .from('work_days').select('id').eq('show_id', show.id).eq('date', selectedDate).maybeSingle()
 
   if (!workDay) {
-    return { ...base, kind: link.crew_member_id ? 'personal' : 'venue', me: null, roster: [] }
+    return { ...base, kind: link.crew_member_id ? 'personal' : 'venue', me: emptyMe, roster: [] }
   }
 
   const { data: rooms } = await admin
@@ -127,7 +159,7 @@ export async function loadClockView(token: string): Promise<ClockView | null> {
   const roomIds = (rooms || []).map(r => r.id)
   const roomName = new Map((rooms || []).map(r => [r.id, r.name]))
   if (roomIds.length === 0) {
-    return { ...base, kind: link.crew_member_id ? 'personal' : 'venue', me: null, roster: [] }
+    return { ...base, kind: link.crew_member_id ? 'personal' : 'venue', me: emptyMe, roster: [] }
   }
 
   // ---- Venue link: the roster to pick from ------------------------------
@@ -160,10 +192,6 @@ export async function loadClockView(token: string): Promise<ClockView | null> {
   }
 
   // ---- Personal link: this person's own day -----------------------------
-  const { data: crew } = await admin
-    .from('crew_members').select('full_name').eq('id', link.crew_member_id).maybeSingle()
-  if (!crew) return null
-
   // No day_rate in the column list — see the header. Declined rows are
   // excluded for the same reason as above.
   const { data: mine } = await admin
@@ -194,7 +222,7 @@ export async function loadClockView(token: string): Promise<ClockView | null> {
   return {
     ...base,
     kind: 'personal',
-    me: { crewMemberId: link.crew_member_id, name: crew.full_name, assignments },
+    me: { crewMemberId: link.crew_member_id, name: crew!.full_name, assignments },
     roster: [],
   }
 }
