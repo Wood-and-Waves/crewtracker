@@ -398,6 +398,7 @@ export default async function ShowDetailPage({
           // search field above Directory's table.
           <div className="pb-1">
             <BatchPunchBar
+              roundingMinutes={roundingMinutes}
               authorId={user.id}
               locked={locked}
               timecards={dayTimecards}
@@ -428,6 +429,7 @@ export default async function ShowDetailPage({
 
               {crew.length > 0 && (
                 <BatchPunchBar
+                  roundingMinutes={roundingMinutes}
                   authorId={user.id}
                   timecards={crew}
                   dayDate={activeDay.date}

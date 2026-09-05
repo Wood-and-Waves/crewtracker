@@ -440,8 +440,17 @@ MINUTES; this one moves the punch itself. They give different answers, so do not
 not move. Note this is not uniformly in the crew member's favour: rounding a START up costs them
 the difference, rounding a WRAP up pays them to the next mark; that is the policy, not a bug. It
 rounds WALL CLOCK, not the instant, because a zone offset by :45 or :30 would otherwise land on
-a clean quarter in UTC and an ugly one on the clock the crew member is reading. **Crew punches
-only** — the PM's TimeEntryModal still stores the exact minute typed.
+a clean quarter in UTC and an ugly one on the clock the crew member is reading.
+
+**EVERY punch in the app goes through it** (Dan, 2026-09-04: "Every punch should land on the
+organization time rounding rules. Everywhere."). There are exactly three places that build a
+punch instant — `TimeEntryModal`, `BatchTimeModal` and `app/api/clock/punch` — and all three
+round before calling `zonedWallTimeToUtc`, honouring the `dayOffset` it returns. A fourth writer
+must do the same; `roundingMinutes` is a REQUIRED prop on the components that reach those modals
+precisely so the compiler names every call site instead of a default silently hiding one. Both PM
+modals say the rule out loud ("Recorded in 15-minute steps, always rounded up") and set the time
+input's `step`, because save() moves the time somebody just typed and a PM who enters 8:07 and
+finds 8:15 on the row deserves to have been told.
 
 Other things that are load-bearing and were each verified:
 - **The show's timezone decides "today"**, server-side, which is what stops a bookmarked link

@@ -360,6 +360,7 @@ export default function TimecardRow({
           isTravelDay={timecard.is_travel_day}
           dayDate={dayDate}
           authorId={authorId}
+          roundingMinutes={roundingMinutes}
           onClose={() => setEditingType(null)}
         />
       )}

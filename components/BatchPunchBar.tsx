@@ -29,6 +29,7 @@ export default function BatchPunchBar({
   dayDate,
   timezone,
   authorId,
+  roundingMinutes,
   label = 'Batch Actions',
   locked = false,
   gridCols,
@@ -39,6 +40,8 @@ export default function BatchPunchBar({
   timezone: string
   /** The signed-in PM. Recorded as the author of every punch this writes. */
   authorId: string
+  /** organizations.timecard_rounding_minutes — every punch lands on it. */
+  roundingMinutes: number
   /**
    * Heading above the buttons. The same component drives a room's own bar and
    * the day-level "All Rooms" bar, and those need telling apart — two
@@ -196,6 +199,7 @@ export default function BatchPunchBar({
 
       {overlay.kind === 'picker' && (
         <BatchTimeModal
+          roundingMinutes={roundingMinutes}
           type={overlay.type}
           mode={overlay.mode}
           scope={timecards}

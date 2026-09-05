@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { PunchType, PUNCH_LABELS, Punch, getChronologyError } from '@/lib/punches'
-import { zonedWallTimeToUtc, utcToZonedParts } from '@/lib/datetime'
+import { PunchType, PUNCH_LABELS, Punch, getChronologyError, roundWallTime } from '@/lib/punches'
+import { zonedWallTimeToUtc, utcToZonedParts, addDays } from '@/lib/datetime'
 import Button from '@/components/ui/Button'
 
 export default function TimeEntryModal({
@@ -17,6 +17,7 @@ export default function TimeEntryModal({
   isTravelDay,
   dayDate,
   authorId,
+  roundingMinutes,
   onClose,
 }: {
   timecardId: string
@@ -29,6 +30,8 @@ export default function TimeEntryModal({
   dayDate: string
   /** The signed-in PM. Recorded as the author of whatever this writes. */
   authorId: string
+  /** organizations.timecard_rounding_minutes — every punch lands on it. */
+  roundingMinutes: number
   onClose: () => void
 }) {
   const router = useRouter()
@@ -70,8 +73,16 @@ export default function TimeEntryModal({
 
   async function save() {
     setError('')
+    // Every punch in the app lands on the organization's grid, always rounded
+    // UP — the same rule the crew clock applies, because a time typed by a PM
+    // and a time tapped by crew must be worth the same thing.
+    //
+    // dayOffset matters: 23:58 on a quarter-hour grid rounds to 00:00 the NEXT
+    // day, which is the right answer for an overnight wrap and an invalid
+    // "24:00" if ignored.
+    const { timeStr: gridTime, dayOffset } = roundWallTime(timeStr, roundingMinutes)
     // The entered wall-clock time means the SHOW's timezone, not the browser's.
-    const combined = zonedWallTimeToUtc(dateStr, timeStr, timezone)
+    const combined = zonedWallTimeToUtc(addDays(dateStr, dayOffset), gridTime, timezone)
 
     const otherPunches = allPunches.filter(p => p.punch_type !== type)
     const chronError = getChronologyError(combined, type, otherPunches)
@@ -151,10 +162,20 @@ export default function TimeEntryModal({
               <input
                 type="time"
                 value={timeStr}
+                step={roundingMinutes > 1 ? roundingMinutes * 60 : undefined}
                 onChange={e => setTimeStr(e.target.value)}
                 className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
               />
             </div>
+
+            {/* Said out loud, because save() moves the typed time. A PM who
+                enters 8:07 and finds 8:15 on the row without being told has
+                been surprised by their own timesheet. */}
+            {roundingMinutes > 1 && (
+              <p className="-mt-2 mb-4 text-xs text-muted">
+                Recorded in {roundingMinutes}-minute steps, always rounded up.
+              </p>
+            )}
 
             {error && <p className="text-xs text-danger mb-3">{error}</p>}
 

@@ -7,8 +7,9 @@ import {
   BatchTimecard,
   isEligibleForBatch,
   ineligibilityReason,
+  roundWallTime,
 } from '@/lib/punches'
-import { zonedWallTimeToUtc } from '@/lib/datetime'
+import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
 import { cn } from '@/lib/cn'
 import Button from '@/components/ui/Button'
 
@@ -22,6 +23,7 @@ export default function BatchTimeModal({
   scope,
   dayDate,
   timezone,
+  roundingMinutes,
   onCancel,
   onConfirm,
 }: {
@@ -29,6 +31,8 @@ export default function BatchTimeModal({
   mode: 'apply' | 'change'
   scope: BatchTimecard[]
   dayDate: string
+  /** organizations.timecard_rounding_minutes — every punch lands on it. */
+  roundingMinutes: number
   timezone: string
   onCancel: () => void
   onConfirm: (when: Date, checkedIds: Set<string>, markTravel: boolean) => void
@@ -67,8 +71,10 @@ export default function BatchTimeModal({
   }
 
   function confirm() {
+    // Batch punches land on the organization's grid too — see TimeEntryModal.
+    const { timeStr: gridTime, dayOffset } = roundWallTime(timeStr, roundingMinutes)
     // The entered wall-clock time means the SHOW's timezone, not the browser's.
-    const when = zonedWallTimeToUtc(dateStr, timeStr, timezone)
+    const when = zonedWallTimeToUtc(addDays(dateStr, dayOffset), gridTime, timezone)
     onConfirm(when, checked, canMarkTravel && markTravel)
   }
 
@@ -108,10 +114,19 @@ export default function BatchTimeModal({
               <input
                 type="time"
                 value={timeStr}
+                step={roundingMinutes > 1 ? roundingMinutes * 60 : undefined}
                 onChange={e => setTimeStr(e.target.value)}
                 className="flex-1 rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink outline-none focus:border-accent"
               />
             </div>
+          )}
+
+          {/* Said out loud, because confirm() moves the typed time — see
+              TimeEntryModal. */}
+          {roundingMinutes > 1 && (
+            <p className="-mt-2 mb-4 text-xs text-muted">
+              Recorded in {roundingMinutes}-minute steps, always rounded up.
+            </p>
           )}
         </div>
 
