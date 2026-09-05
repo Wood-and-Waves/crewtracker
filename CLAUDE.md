@@ -14,6 +14,7 @@ Dan (the developer) has no professional dev background — so explain the *why* 
 - Supabase (PostgreSQL + RLS + Auth)
 - Tailwind CSS
 - `@react-pdf/renderer` for PDF export
+- `qrcode` for the crew-clock venue QR (SVG, generated in the browser from `window.location.origin`)
 - Hosting: Vercel (Hobby plan, 100 deploys/day)
 
 ## Live URLs
@@ -218,6 +219,7 @@ components/
   PayrollPresetsEditor.tsx       — named org-level payroll presets (Settings)
   ExportCSVButton.tsx / ExportPDFButton.tsx — gated by financials permission
   SendHoursButton.tsx            — per-crew timesheet via Text / Share / Copy, hours only, never dollars
+  CrewClockPanel.tsx / CrewClockSign.tsx — mint/copy/revoke crew clock links on Edit Show, and the printable venue QR
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
@@ -253,6 +255,15 @@ scripts/
   dev-set-password.mjs — sets a DEV account's password when the generated one is lost
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
+  test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
+                  helper, no framework. 256 assertions as of 2026-09-05.
+    payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
+    schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
+    clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
+                    two-check punch guard (npm run test:clock)
+    rls.mts       — real anon/authenticated sessions against DEV; the ONLY test that can
+                    catch an RLS bug, since db:sql bypasses RLS (npm run test:rls)
+    alias-loader.mjs — resolves `@/` imports so the .mts files can import from lib/
   sql/
     schema.sql       — generated baseline; the shape of the database. Do not hand-edit.
     out-of-schema.sql— generated; triggers pg_dump --schema=public can't see
@@ -325,6 +336,25 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 ## Known gaps / not yet built
 
 - **No-show / cancelled day flag** — a per-crew-member, per-day flag (alongside the existing `is_travel_day` / `pay_as_half_day` toggles on `timecards`) marking a day as a no-show or cancellation, distinct from a day with punches. The one remaining gap with real payroll consequences. **There is no iOS reference — verified 2026-07-26 that the Swift `Timecard` has only the same four flags we do**, so this is new design, not a port. Open questions for Dan, all contractual rather than technical: does a cancelled day pay anything (notice-window cancellation fees are common)? Is "crew no-showed" the same state as "we cancelled" — different fault, probably different pay? Should a flagged day count as the "previous day" for short-turnaround rest math (probably not — nobody worked)? Does it appear in reports as a $0 line or vanish?
+
+- **Security backlog — four findings, none introduced by recent work** (surfaced 2026-09-04
+  while tracing the punch guards; recorded here because they were previously only in a scratch
+  plan file). None is exploitable by a stranger; all are internal-permission or
+  denial-of-service shaped:
+  - **The punch write policies check no permission at all.** Unlike `shows` and
+    `booking_invites`, `punches` INSERT/UPDATE/DELETE only test
+    `shows.organization_id = my_organization_id()`. So a `view_only` member can write punches,
+    and a member can write punches on a show they cannot even see (the write policies join
+    `shows` directly and skip the assignment-scoped SELECT rule). Worth fixing first — the
+    crew clock added a second write path into that table.
+  - **`UnlockShowButton` needs only `can_edit_timecards`**, not admin, so the copy "an admin
+    can unlock it" overstates the protection on a finalized show. Either gate it or reword it.
+  - **No rate limiting anywhere in the app.** `/api/bookings/respond` is replayable and each
+    decline re-sends an email, making a leaked link an inbox-flood button; `/api/clock/punch`
+    and `/api/clock/identify` are public writes with the same exposure. A per-token throttle
+    is the minimum.
+  - **The decline email builds its dashboard link from `new URL(request.url).origin`** — i.e.
+    the Host header, which is attacker-controlled.
 - ~~Inviting people is manual and loses invitations.~~ **DONE 2026-07-27/28.** Invitations are emailed on creation from `noreply@contact.crewtracker.app` (`lib/inviteEmail.ts` + `app/api/invites/send/route.ts`), carrying the inviter's name and the company in subject and body. `PendingInvitesList.tsx` on the Team screen lets an org admin see every pending invite, copy the link again, change the role, resend the email, or cancel it — cancelling kills the link immediately. Authorization is the existing RLS policy: the invite is read through the caller's session, so another org's invitation returns 404.
 
 - ~~Per-control UI disabling on a locked show.~~ **DONE 2026-07-27.** A `locked` flag threads into every control that writes `timecards` or `punches` — punch cells, travel/half-day toggles, reset, batch punching, staffing, copy crew, Edit crew — in both the desktop and mobile trackers, each with a title explaining why. Room rename/delete and Add Day are deliberately left enabled: the lock covers those two tables only, so disabling them would misrepresent it.
@@ -507,6 +537,11 @@ Still open: no rate limiting on the public write endpoint (nothing in this app h
 
 This list drifted badly once and sent a session off to re-implement finished work. If something here looks missing, search the repo before believing it.
 
+- **Crew clock links (2026-09-04/05)** — the whole no-login punching workflow: `clock_links`
+  (personal links + one venue QR per show), the Crew Clock panel on Edit Show with the
+  Slack-ready list and the printable QR sheet, the public `/clock/[token]` page with day arrows,
+  the two POST-only API routes, the tracker's crew-entered mark and the Final Report's count.
+  See the dedicated section above before changing any of it.
 - **Admin UI for user privileges** — `app/dashboard/team/` + `PermissionsEditor.tsx`, gated on `can_manage_users`.
 - **`day_rate` column-level lockdown** — done, and this entry replaces a stale "not yet built" one that survived here after the work shipped. `authenticated` holds **no `SELECT` grant** on `timecards.day_rate` or `rate_cards.day_rate`; reads route through the `timecard_day_rates` / `crew_rate_cards_visible` SECURITY DEFINER views, which check the caller's permission per query. Re-verified on production 2026-07-27: a direct read returns `42501` for every account including admins, and the write side is guarded separately by `enforce_pay_rate_write_permission` (raises on UPDATE, silently drops the rate on INSERT so staffing still works). This is what makes "the PM never sees the numbers" a real boundary rather than a convention.
 - **Multi-organization data model** — one login can hold memberships in several organizations, with separate permissions in each, and switch between them from the account menu. `memberships` is the source of truth; `profiles.organization_id` and the 18 `can_*` columns still exist as a derived mirror and are due to be dropped. See migrations 0001–0006.
@@ -549,6 +584,14 @@ exists because of a specific failure mode:
 act that ships to customers, and any pending migrations go through the steps above FIRST.
 
 ## Past incidents worth remembering
+
+- **`npm run build` and `next dev` share `.next`, and building while the dev server runs makes
+  every route 404.** The production build overwrites the dev manifests, so `next dev` then serves
+  a tree it cannot resolve — the terminal still says "Ready in 331ms" and every page, including
+  `/`, returns 404. It looks like a routing or middleware fault and is neither. Fix: stop the dev
+  server, `rm -rf .next`, restart. Cost several detours in one session because the symptom
+  (everything 404s) points nowhere near the cause (a build ran). If a change needs verifying in
+  the browser AND a production build, do the browser pass first.
 
 - **`next dev` blocks cross-origin dev resources, and the failure is a page that renders
   perfectly and does nothing.** Opening the dev server from a phone on the wifi
