@@ -2,16 +2,18 @@ import AppShell from '@/components/AppShell'
 import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
 import SignOutButton from '@/components/SignOutButton'
-import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, getMyOrganizations, canUseScheduling } from '@/lib/session'
 // Read server-side and passed down as a string: importing package.json into a
 // client component would bundle the whole dependency list into the browser.
 import { version as APP_VERSION } from '@/package.json'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const user = await getCurrentUser()
-  const organizations = await getMyOrganizations()
+  // Both are React.cache()d, so the page segment rendering underneath this
+  // layout gets the same answers for free instead of re-asking the auth server.
+  // Until 2026-09-06 this layout alone made seven sequential round trips
+  // (getCurrentUser ×3, getMyOrganizations ×3, then organizations.disabled_at),
+  // and every page re-ran getCurrentUser on top — on every router.refresh().
+  const [user, organizations] = await Promise.all([getCurrentUser(), getMyOrganizations()])
 
   const canManageUsers = user?.can('can_manage_users') ?? false
   const isSuperAdmin = user?.isSuperAdmin ?? false
@@ -23,15 +25,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // land on the "Almost there" screen below, which at least has a way out.
   const hasOrg = !!user?.organizationId
 
-  let orgSuspended = false
-  if (user?.organizationId) {
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('disabled_at')
-      .eq('id', user.organizationId)
-      .single()
-    orgSuspended = !!org?.disabled_at
-  }
+  // Rides along on the membership read inside getCurrentUser — no query here.
+  const orgSuspended = user?.orgSuspended ?? false
 
   // A suspended organization is a commercial state, not a security boundary —
   // the data still belongs to the customer and an operator can lift it at any

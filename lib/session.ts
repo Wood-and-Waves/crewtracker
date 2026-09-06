@@ -19,6 +19,7 @@
 // caller -> active organization -> permissions. When the source of that answer
 // moves from profiles to memberships, it moves here, once.
 
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import type { PermissionKey, PermissionValues } from '@/lib/permissions'
 import { ALL_PERMISSION_KEYS } from '@/lib/permissions'
@@ -40,6 +41,12 @@ export type CurrentUser = {
    * call sites should almost always ask.
    */
   schedulingEnabled: boolean
+  /**
+   * The active organization has been suspended by the operator. A commercial
+   * state, not a security boundary (see app/dashboard/layout.tsx). Rides along
+   * on the membership read so the layout needs no query of its own for it.
+   */
+  orgSuspended: boolean
   permissions: PermissionValues
   /** can('can_view_pay_rates') — reads better at call sites than permissions.x */
   can: (key: PermissionKey) => boolean
@@ -52,6 +59,16 @@ const NO_PERMISSIONS = Object.fromEntries(
 /**
  * The signed-in user, or null if nobody is signed in.
  *
+ * WRAPPED IN React.cache(): one answer per server request, shared by the layout
+ * and the page. Before 2026-09-06 the dashboard layout and every page each
+ * called this independently — three sequential round trips apiece, the first a
+ * network call to the auth server — so a single tracker view validated the
+ * same session four times (proxy + layout + getMyOrganizations + page).
+ * Measured: ~20 Supabase round trips per page, re-paid on every
+ * router.refresh(), i.e. after every punch. cache() is per-request and holds
+ * nothing across requests, so a permission change still takes effect on the
+ * next navigation exactly as before.
+ *
  * Returns permissions for their ACTIVE organization. A user with no
  * organization gets every permission false rather than null, so call sites can
  * ask `user.can(...)` without a null check and always get a safe answer.
@@ -61,7 +78,7 @@ const NO_PERMISSIONS = Object.fromEntries(
  * actually refuses the write. Never treat a false here as the only thing
  * standing between a user and an action.
  */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<CurrentUser | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -97,7 +114,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     ? await supabase
         .from('memberships')
         .select(
-          `organization_id, deactivated_at, organizations(scheduling_enabled), ${ALL_PERMISSION_KEYS.join(', ')}`,
+          `organization_id, deactivated_at, organizations(scheduling_enabled, disabled_at), ${ALL_PERMISSION_KEYS.join(', ')}`,
         )
         .eq('profile_id', user.id)
         .eq('organization_id', activeOrgId)
@@ -121,13 +138,17 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   // PostgREST returns an embedded to-one relation as an object, but types it as
   // an array often enough that both shapes have to be handled — the same dance
   // every `rooms!inner(work_days!inner(...))` read in this app does.
-  const orgRel = m.organizations as { scheduling_enabled?: boolean } | { scheduling_enabled?: boolean }[] | null
+  const orgRel = m.organizations as
+    | { scheduling_enabled?: boolean; disabled_at?: string | null }
+    | { scheduling_enabled?: boolean; disabled_at?: string | null }[]
+    | null
   const org = Array.isArray(orgRel) ? orgRel[0] : orgRel
   // Default TRUE when unknown: the column is `not null default true`, so the
   // only way to read undefined here is a shape surprise, and failing OPEN on a
   // commercial entitlement is the right way round — a billing flag must never be
   // able to silently hide a feature a customer is paying for.
   const schedulingEnabled = live ? org?.scheduling_enabled !== false : false
+  const orgSuspended = live ? !!org?.disabled_at : false
 
   return {
     id: user.id,
@@ -139,10 +160,11 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     shoulderSurfer: row.shoulder_surfer_mode === true,
     deactivated,
     schedulingEnabled,
+    orgSuspended,
     permissions,
     can: (key) => permissions[key] === true,
   }
-}
+})
 
 export type MyOrganization = {
   id: string
@@ -160,22 +182,22 @@ export type MyOrganization = {
  * the ordinary case — callers should hide the switcher entirely below two, since
  * a "switch company" control offering one company is just clutter.
  */
-export async function getMyOrganizations(): Promise<MyOrganization[]> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+export const getMyOrganizations = cache(async function getMyOrganizations(): Promise<MyOrganization[]> {
+  // Reuses the request-cached user rather than re-validating the session and
+  // re-reading profiles — this used to be a second auth round trip plus two
+  // duplicate table reads on every dashboard render. "Active" is the RESOLVED
+  // organization (a live membership), matching my_organization_id(), not the
+  // raw pointer — a stale pointer must never mark a company you were removed
+  // from as the active one.
+  const user = await getCurrentUser()
   if (!user) return []
+  const supabase = await createClient()
 
   const { data } = await supabase
     .from('memberships')
     .select('organization_id, deactivated_at, organizations(id, name)')
     .eq('profile_id', user.id)
     .is('deactivated_at', null)
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('active_organization_id')
-    .eq('id', user.id)
-    .single()
 
   type Row = { organization_id: string; organizations: { id: string; name: string } | null }
 
@@ -184,10 +206,10 @@ export async function getMyOrganizations(): Promise<MyOrganization[]> {
     .map((r) => ({
       id: r.organization_id,
       name: r.organizations!.name,
-      isActive: r.organization_id === profile?.active_organization_id,
+      isActive: r.organization_id === user.organizationId,
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
-}
+})
 
 /**
  * Whether the signed-in user may see money on a given show.

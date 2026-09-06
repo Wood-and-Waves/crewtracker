@@ -73,11 +73,6 @@ export default async function ShowDetailPage({
   // does not cover rooms or work_days, so disabling them would misrepresent it.
   const locked = !!show.finalized_at
 
-  const { data: organization } = organizationId
-    ? await supabase.from('organizations').select('timecard_rounding_minutes').eq('id', organizationId).single()
-    : { data: null }
-  const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
-
   // Pay-rate visibility/edit in Edit Crew is gated by permission only — the
   // day rate lives on the timecard regardless of whether the show displays $
   // in reports (that's what show_financials controls, separately).
@@ -97,13 +92,21 @@ export default async function ShowDetailPage({
   // Fetch ALL rooms/timecards/punches across the WHOLE show (not just the
   // active day) so short-turnaround detection can look at a crew member's
   // previous day's end punch, which may be in a different room/day entirely.
-  const { data: allShowRooms } = await supabase
-    .from('rooms')
-    .select('id, name, work_day_id')
-    .in('work_day_id', workDays.map(d => d.id))
-    // Insertion order, matching iOS. Unordered, multiple rooms on a day came
-    // back arbitrarily and could reshuffle between refreshes.
-    .order('created_at')
+  // Rooms and the org's rounding setting do not depend on each other, so they
+  // go in one round trip. This page used to be nine awaits deep after its
+  // opening Promise.all; every one of those is paid again on every
+  // router.refresh(), i.e. after every punch.
+  const [{ data: allShowRooms }, { data: organization }] = await Promise.all([
+    supabase
+      .from('rooms')
+      .select('id, name, work_day_id')
+      .in('work_day_id', workDays.map(d => d.id))
+      // Insertion order, matching iOS. Unordered, multiple rooms on a day came
+      // back arbitrarily and could reshuffle between refreshes.
+      .order('created_at'),
+    supabase.from('organizations').select('timecard_rounding_minutes').eq('id', organizationId).single(),
+  ])
+  const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
 
   const allRoomIds = (allShowRooms || []).map(r => r.id)
 
@@ -113,8 +116,14 @@ export default async function ShowDetailPage({
   // Declined bookings are excluded here, once, and every derived object below
   // inherits it — the roster, the day summary counts, Copy Crew's source, and
   // everything handed to MobileRoomTracker. Someone who said no is not crew.
-  const allShowTimecards = await fetchLiveTimecards<TimecardRowMaybeRate>(supabase, allRoomIds)
-  const rateById = await fetchShowRates(supabase, id)
+  // Rates are gated on the permission, not just on the view returning nothing:
+  // the view still executed a four-table join plus its helper calls for a user
+  // who would be shown no rate anyway. Independent of the timecards read, so
+  // the two share a round trip.
+  const [allShowTimecards, rateById] = await Promise.all([
+    fetchLiveTimecards<TimecardRowMaybeRate>(supabase, allRoomIds),
+    canViewRates ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
+  ])
 
   const allTimecardIds = (allShowTimecards || []).map(t => t.id)
 

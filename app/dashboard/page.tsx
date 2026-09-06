@@ -37,11 +37,30 @@ export default async function DashboardPage({
     )
   }
 
-  const { data: allShows } = await supabase
-    .from('shows')
-    .select('*')
-    .eq('organization_id', user.organizationId)
-    .order('start_date', { ascending: false })
+  // Scheduling module: without it there are no positions to measure against, so
+  // the positions aggregation below is skipped and the Staffing column is
+  // dropped. The booked-headcount query stays — knowing how many people are on
+  // a show is core tracker information, not scheduling.
+  const schedulingOn = canUseScheduling(user)
+
+  // Three independent reads in one round trip instead of three sequential
+  // ones. (Their SCOPE — every timecard and position the org has ever created —
+  // is a separate problem, tracked as Step 6 of the speed plan.)
+  const [{ data: allShows }, { data: callRows }, { data: bookedRows }] = await Promise.all([
+    supabase
+      .from('shows')
+      .select('*')
+      .eq('organization_id', user.organizationId)
+      .order('start_date', { ascending: false }),
+    schedulingOn
+      ? supabase
+          .from('crew_call_positions')
+          .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( date, show_id ) )')
+      : Promise.resolve({ data: [] as any[] }),
+    liveBookings(supabase
+      .from('timecards')
+      .select('id, rooms!inner ( work_days!inner ( date, show_id ) )')),
+  ])
 
   const shows = (allShows || []).filter(s => !!s.archived === showingArchived)
   const archivedCount = (allShows || []).filter(s => s.archived).length
@@ -54,17 +73,6 @@ export default async function DashboardPage({
   // slow quietly. Aggregated here rather than in SQL because PostgREST cannot
   // group, and at beta size the row count is small — worth revisiting with a
   // view if an organization ever carries hundreds of live shows.
-  // Scheduling module: without it there are no positions to measure against, so
-  // the whole aggregation below is skipped and the Staffing column is dropped.
-  // The booked-headcount query underneath stays — knowing how many people are on
-  // a show is core tracker information, not scheduling.
-  const schedulingOn = canUseScheduling(user)
-
-  const { data: callRows } = schedulingOn
-    ? await supabase
-    .from('crew_call_positions')
-    .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( date, show_id ) )')
-    : { data: [] }
 
   // Dates are carried so peak-per-day can be worked out: the list must report
   // how many PEOPLE a show needs, never the position-row count. A twelve-person
@@ -111,9 +119,6 @@ export default async function DashboardPage({
   // fallback below shows the headcount that is really there.
   // Declined excluded, matching callRows above — the two counters render into
   // the same column, so one filtering and the other not would quietly disagree.
-  const { data: bookedRows } = await liveBookings(supabase
-    .from('timecards')
-    .select('id, rooms!inner ( work_days!inner ( date, show_id ) )'))
 
   const bookedByShow = new Map<string, Map<string, number>>()
   for (const row of (bookedRows ?? []) as any[]) {

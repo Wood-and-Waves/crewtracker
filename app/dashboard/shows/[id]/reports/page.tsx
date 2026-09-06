@@ -104,9 +104,18 @@ export default async function ShowReportPage({
 
   const timezone = show.timezone_identifier || 'America/Chicago'
 
-  const { data: organization } = user.organizationId
-    ? await supabase.from('organizations').select('timecard_rounding_minutes, final_report_emails').eq('id', user.organizationId).single()
-    : { data: null }
+  const workDayIds = (workDays || []).map(d => d.id)
+
+  // The org settings and the room list do not depend on each other: one round
+  // trip, not two. (This page was nine sequential awaits deep.)
+  const [{ data: organization }, { data: rooms }] = await Promise.all([
+    user.organizationId
+      ? supabase.from('organizations').select('timecard_rounding_minutes, final_report_emails').eq('id', user.organizationId).single()
+      : Promise.resolve({ data: null }),
+    workDayIds.length > 0
+      ? supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', workDayIds)
+      : Promise.resolve({ data: [] }),
+  ])
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
 
   // Recipients are only counted here so the PM can be told how many addresses
@@ -115,24 +124,19 @@ export default async function ShowReportPage({
   const recipientCount = (organization?.final_report_emails || '')
     .split(',').map((s: string) => s.trim()).filter(Boolean).length
 
-  const workDayIds = (workDays || []).map(d => d.id)
-
-  const { data: rooms } = workDayIds.length > 0
-    ? await supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', workDayIds)
-    : { data: [] }
-
   const roomIds = (rooms || []).map(r => r.id)
 
   // Declined bookings excluded: they are not crew, so they belong in neither the
   // on-screen report nor the CSV/PDF the export buttons build from these rows —
   // and they would otherwise trip the pre-send checks as "not started".
-  const rawTimecards = await fetchLiveTimecards<TimecardRowMaybeRate>(supabase, roomIds)
-
   // Rates come from the permission-checked view. Additionally gated on the
   // show's own financials flag: canSeeFinancials is the stricter test (show
   // tracks money AND this user may see rates), and every money figure on this
-  // page is already behind it.
-  const rateById = canSeeFinancials ? await fetchShowRates(supabase, id) : new Map<string, number>()
+  // page is already behind it. Independent of the timecards read, so shared.
+  const [rawTimecards, rateById] = await Promise.all([
+    fetchLiveTimecards<TimecardRowMaybeRate>(supabase, roomIds),
+    canSeeFinancials ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
+  ])
 
   // Reattach the rate here, once, so everything downstream — the payroll
   // mappings and the CSV/PDF export buttons — keeps seeing a normal timecard
@@ -141,17 +145,21 @@ export default async function ShowReportPage({
 
   const timecardIds = (timecards || []).map(t => t.id)
 
-  const { data: punches } = timecardIds.length > 0
-    ? await supabase.from('punches').select('*').in('timecard_id', timecardIds)
-    : { data: [] }
-
   // Phones for "Text Hours", keyed by crew_member_id. iOS matches the crew
   // member by NAME STRING, which breaks on duplicate names or a renamed
   // directory entry — the timecard carries the id, so join on that instead.
   const crewIdsOnShow = [...new Set((timecards || []).map(t => t.crew_member_id).filter(Boolean))]
-  const { data: crewContacts } = crewIdsOnShow.length > 0
-    ? await supabase.from('crew_members').select('id, phone').in('id', crewIdsOnShow)
-    : { data: [] }
+
+  // Punches and contact phones both hang off the timecard list and not off
+  // each other: one round trip.
+  const [{ data: punches }, { data: crewContacts }] = await Promise.all([
+    timecardIds.length > 0
+      ? supabase.from('punches').select('*').in('timecard_id', timecardIds)
+      : Promise.resolve({ data: [] }),
+    crewIdsOnShow.length > 0
+      ? supabase.from('crew_members').select('id, phone').in('id', crewIdsOnShow)
+      : Promise.resolve({ data: [] }),
+  ])
   const phoneById: Record<string, string | null> =
     Object.fromEntries((crewContacts || []).map(c => [c.id, c.phone]))
 

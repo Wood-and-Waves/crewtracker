@@ -43,15 +43,18 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
 
   // Declined bookings excluded — the dedupe below keys on (crew|role), so an
   // unreplaced decliner would otherwise appear in Crew & Rates carrying a rate.
-  const timecards = await fetchLiveTimecards<TimecardRowMaybeRate>(
-    supabase,
-    roomIds,
-    'id, crew_member_id, crew_member_name, role, room_id',
-  )
-
-  // Rates via the permission-checked view — empty for a user without
-  // can_view_pay_rates, which is also when Crew & Rates is hidden entirely.
-  const rateById = await fetchShowRates(supabase, id)
+  // Rates via the permission-checked view. Gated on the permission here as well
+  // as in the view: without it the view still ran its four-table join for a
+  // user whose Crew & Rates section is hidden anyway. Independent of the
+  // timecards read, so the two share a round trip.
+  const [timecards, rateById] = await Promise.all([
+    fetchLiveTimecards<TimecardRowMaybeRate>(
+      supabase,
+      roomIds,
+      'id, crew_member_id, crew_member_name, role, room_id',
+    ),
+    canViewRates ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
+  ])
 
   // Dedupe to unique (crew, role) combos, matching iOS crewRateEntries logic
   const seen: Record<string, any> = {}
