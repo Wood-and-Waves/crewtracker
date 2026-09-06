@@ -255,6 +255,7 @@ lib/
   phone.ts      — phone formatting/normalisation
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
   trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
+  rateLimit.ts  — the throttle for the three public write routes; counters live in the database (0025)
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
 proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, the keepalive cron, and exactly "/")
 scripts/
@@ -267,7 +268,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 296 assertions as of 2026-09-06.
+                  helper, no framework. 300 assertions as of 2026-09-06.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -300,8 +301,12 @@ scripts/
                        BEFORE triggers; every policy under a show becomes one level deep.
                        WRITES EXISTING ROWS (backfill) — backup first, then db:grants AND
                        db:schema after.
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0023 2026-09-06). Nothing is dev-only right now.
+                       · 0024 the mechanical sweep: every remaining bare helper call wrapped;
+                       positions/rulesets/rate-card write rules one level deep
+                       · 0025 rate_limits table + rate_limit_hit() for the public routes
+                       0018–0023 are on BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0023 2026-09-06). **0024 and 0025 are on DEV only** until
+                       their cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -386,10 +391,19 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
     that.
   - **`UnlockShowButton` needs only `can_edit_timecards`**, not admin, so the copy "an admin
     can unlock it" overstates the protection on a finalized show. Either gate it or reword it.
-  - **No rate limiting anywhere in the app.** `/api/bookings/respond` is replayable and each
-    decline re-sends an email, making a leaked link an inbox-flood button; `/api/clock/punch`
-    and `/api/clock/identify` are public writes with the same exposure. A per-token throttle
-    is the minimum.
+  - ~~No rate limiting anywhere in the app.~~ **DONE 2026-09-06 (migration 0025 +
+    `lib/rateLimit.ts`).** The three public write routes — `/api/bookings/respond`,
+    `/api/clock/punch`, `/api/clock/identify` — are throttled per token AND per address,
+    counted in the database because Vercel instances share no memory. Limits: punch 30/10 min
+    per link, 300/10 min per address; identify 200/10 min per venue code (a whole crew scans
+    it at call time), 20/10 min per address; respond 5/hour per link, 30/hour per address. A
+    refused call gets a plain-words 429 with `Retry-After`; if the counter itself is
+    unreachable the route fails CLOSED (503). `rate_limit_hit()` is SECURITY DEFINER and
+    revoked from anon/authenticated — a browser session must not be able to burn someone's
+    quota — and that revoke is a function privilege `db:grants` does NOT capture, so a
+    rebuild from `schema.sql` loses it (nuisance, not a leak). The keepalive cron purges
+    counters older than a day. Verified on dev: 30×404 then 429; 20 codes from one address
+    then 429.
   - **The decline email builds its dashboard link from `new URL(request.url).origin`** — i.e.
     the Host header, which is attacker-controlled.
 - **`timecard_day_rates` never learned the `scheduler_id` arm 0013 added to the shows policy**,
@@ -596,7 +610,7 @@ Other things that are load-bearing and were each verified:
   explicit column lists and **never `select('*')`** — the same convention, and the same lack of
   a lint rule, as `lib/bookingInvite.ts`.
 
-Still open: no rate limiting on the public write endpoint (nothing in this app has any).
+Rate limiting on both routes since 2026-09-06 — see the security backlog entry for the limits.
 
 ### Already built — do not rebuild these
 

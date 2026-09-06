@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInZone } from '@/lib/showStatus'
 import { clockLinkExpiry, isClockLinkExpired } from '@/lib/clockLinks'
+import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 
 // Turning a VENUE code into somebody's own personal link.
 //
@@ -29,6 +30,15 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient()
+
+  // Per venue code and per address. A whole crew scans the same code at call
+  // time — fifty people in ten minutes is normal — so the code's own limit is
+  // generous; the address limit is what stops one phone walking the roster.
+  const stop = await rateLimitOr(admin, [
+    { key: `identify:${token}`, limit: 200, windowSeconds: 600 },
+    { key: `identify-ip:${clientIp(request)}`, limit: 20, windowSeconds: 600 },
+  ])
+  if (stop) return stop
 
   const { data: link } = await admin
     .from('clock_links')

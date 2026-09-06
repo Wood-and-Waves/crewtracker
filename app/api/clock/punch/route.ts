@@ -6,6 +6,7 @@ import {
 } from '@/lib/punches'
 import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
 import { isClockLinkExpired } from '@/lib/clockLinks'
+import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 
 // A crew member recording their own punch, with no login.
 //
@@ -58,14 +59,22 @@ export async function POST(request: NextRequest) {
   }
   const type = punchType as PunchType
 
+  const admin = createAdminClient()
+  // Throttled per link and per address, before the token is even looked up.
+  // A person punches at most six times a day and corrects a few; the address
+  // limit covers a room full of phones behind one venue wifi.
+  const stop = await rateLimitOr(admin, [
+    { key: `punch:${token}`, limit: 30, windowSeconds: 600 },
+    { key: `punch-ip:${clientIp(request)}`, limit: 300, windowSeconds: 600 },
+  ])
+  if (stop) return stop
+
   // HH:MM, 24-hour. Rejected rather than coerced: a time we cannot parse must
   // never quietly become "now" and land a punch hours from where the person
   // meant it.
   if (at !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(at)) {
     return NextResponse.json({ error: 'Invalid time.' }, { status: 400 })
   }
-
-  const admin = createAdminClient()
 
   const { data: link } = await admin
     .from('clock_links')

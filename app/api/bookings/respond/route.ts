@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendDeclineNoticeEmail } from '@/lib/bookingEmail'
+import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 
 // A crew member's answer to a booking request. No login: the token is the
 // authorization, so this runs with the service role.
@@ -30,6 +31,15 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient()
+
+  // An answer changes hands a few times at most, and each decline sends an
+  // email — this is the throttle that turns a leaked link from an inbox-flood
+  // button back into a link.
+  const stop = await rateLimitOr(admin, [
+    { key: `respond:${token}`, limit: 5, windowSeconds: 3600 },
+    { key: `respond-ip:${clientIp(request)}`, limit: 30, windowSeconds: 3600 },
+  ])
+  if (stop) return stop
 
   const { data: invite } = await admin
     .from('booking_invites')

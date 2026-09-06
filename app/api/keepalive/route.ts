@@ -23,6 +23,16 @@ export async function GET(request: Request) {
     .select("id")
     .limit(1);
 
+  // Housekeeping for the rate limiter (migration 0025): counters older than a
+  // day can never matter again — no window is longer than an hour — so the
+  // table stays the size of one day's traffic. Best effort; a failure here
+  // must not turn the keepalive itself red.
+  const { error: purgeError } = await supabase
+    .from("rate_limits")
+    .delete()
+    .lt("window_start", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  if (purgeError) console.error("keepalive: rate_limits purge failed", purgeError);
+
   if (error) {
     console.error("keepalive: Supabase query failed", error);
     return NextResponse.json(

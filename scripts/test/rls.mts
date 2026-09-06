@@ -359,6 +359,25 @@ try {
   })
   await q(`update shows set finalized_at=null where id=$1`, [showA.id])
 
+  console.log('\n=== the rate limiter (0025) ===')
+  // Owner connection: the counter itself. A fresh key so reruns never collide.
+  const rlKey = `${TAG}-rl`
+  const hits: boolean[] = []
+  for (let i = 0; i < 4; i++) hits.push((await q(`select rate_limit_hit($1, 3, 600) as ok`, [rlKey]))[0].ok)
+  check('allows up to the limit, then refuses', JSON.stringify(hits) === '[true,true,true,false]', JSON.stringify(hits))
+  await q(`update rate_limits set window_start = now() - interval '11 minutes' where key = $1`, [rlKey])
+  const again = (await q(`select rate_limit_hit($1, 3, 600) as ok`, [rlKey]))[0].ok
+  check('and starts a fresh window once the old one has lapsed', again === true, `${again}`)
+  await q(`delete from rate_limits where key = $1`, [rlKey])
+  // Only the API routes (service role) may drive it. A browser session holds
+  // the anon key, and this is what stops it burning somebody else's quota.
+  await asUser(alice, async () => {
+    const r = await probe(`select rate_limit_hit($1, 3, 600)`, [rlKey])
+    check('a signed-in session cannot call it', !r.ok && r.code === '42501', r.ok ? 'it could' : r.code)
+    const t = await probe(`select count(*) from rate_limits`)
+    check('nor read the counters', !t.ok || (await q(`select count(*)::int n from rate_limits`))[0].n === 0, t.ok ? 'readable' : t.code)
+  })
+
   console.log('\n=== signed out, nothing is visible ===')
   await c.query('begin'); await c.query('set local role anon')
   for (const t of ['shows', 'crew_members', 'timecards', 'punches', 'memberships', 'profiles', 'organizations']) {
