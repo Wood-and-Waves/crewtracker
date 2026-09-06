@@ -437,6 +437,25 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 
 - ~~Per-control UI disabling on a locked show.~~ **DONE 2026-07-27.** A `locked` flag threads into every control that writes `timecards` or `punches` — punch cells, travel/half-day toggles, reset, batch punching, staffing, copy crew, Edit crew — in both the desktop and mobile trackers, each with a title explaining why. Room rename/delete and Add Day are deliberately left enabled: the lock covers those two tables only, so disabling them would misrepresent it.
 
+- **Per-person schedule grid — who works which days, with their own travel dates.** Raised
+  by Dan 2026-09-06: *"Not everyone on the show works the same dates."* **The data already
+  handles it** — a person is on a show one DAY at a time (a timecard row per person × room ×
+  day, with the travel flags on that row), so "Sam works Tue–Thu, travels in Mon and out Fri"
+  is five rows today and every reader (payroll, reports, timesheets, crew clock, booking
+  emails) already treats a person's days as the rows they have. The gap is ENTRY: staffing is
+  "add to this room, apply to all remaining days", then trim days from the room's ⋮ → Edit
+  crew, then flag travel row by row on the tracker — three screens for one sentence. Build: a
+  crew × days grid on the show (same shape as the positions grid in `CrewCallGrid`), one cell
+  per day cycling blank / work / travel in / travel out / travel; painting a cell creates or
+  removes that day's timecard and sets its flags — nothing new underneath. StaffRoomModal
+  shows the person's row of it instead of the checkbox (default: every day as work, the
+  day before/after as travel if the show has them); Edit Show shows the whole grid. Two rules
+  it must get right: a cell belongs to a ROOM on multi-room shows (default the room they were
+  staffed in, per-cell override), and un-painting a day that already has punches REFUSES, as
+  the absence flag does — never silently delete a worked day. **Design it in the PM/assignment
+  planning session**, not separately: that session is "how a show gets built and handed out"
+  and this is its staffing step.
+
 - **Change notices to a staffed show's crew — recommended, never forced.** Raised by Dan
   2026-09-06: when a show that is fully or partly staffed changes in a way the crew need to know
   — a day added or removed, the venue or city changed, times moved — the app should *offer* to
