@@ -38,3 +38,14 @@ const GRID_BY_PUNCH_COUNT: Record<number, string> = {
 export function punchGridCols(punchCount: number): string {
   return GRID_BY_PUNCH_COUNT[punchCount] ?? GRID_BY_PUNCH_COUNT[6]
 }
+
+/**
+ * Which tracker tree a browser needs — see components/LayoutCookie.tsx.
+ * The query must match Tailwind's `lg` breakpoint exactly, because the CSS
+ * (`hidden lg:grid` / `lg:hidden`) is still the fallback when the cookie is
+ * missing or stale; if the two ever disagree a viewport could see both trees
+ * or neither.
+ */
+export const LAYOUT_COOKIE = 'ct-layout'
+export const LAYOUT_QUERY = '(min-width: 1024px)'
+export type TrackerLayout = 'desktop' | 'mobile'

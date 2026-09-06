@@ -152,6 +152,16 @@ The app was fully redesigned from the original pure-black/zinc/iOS-blue look to 
 
 **The tracker console's punch table** (`TimecardRow.tsx` + the room block in `shows/[id]/page.tsx`) is a genuine ruled grid on desktop (`lg:grid-cols-[...]`, shared between the header row and every crew row via `lib/trackerLayout.ts`), collapsing to labeled per-field cards on mobile. This replaced free-floating pill buttons after Dan's first-round feedback that times weren't visually separated.
 
+**The tracker renders ONE of its two trees, chosen by a cookie (2026-09-06).** The desktop grid
+and `MobileRoomTracker` are separate trees, and until then the server rendered both on every
+request and hid one with CSS — `display:none` hides paint, not work, and two-thirds of a tracker
+response was markup for the tree the viewer could not see, hydrated on every punch's refresh.
+`components/LayoutCookie.tsx` writes `ct-layout=desktop|mobile` from `matchMedia` and the page
+renders only that side; with no cookie (first visit) it renders both, so nothing flashes. The
+`hidden lg:grid` / `lg:hidden` classes stay on both trees on purpose — they are the fallback, and
+the repair when a stale cookie names the wrong side (the component refreshes once). If the `lg`
+breakpoint ever changes, `LAYOUT_QUERY` in `lib/trackerLayout.ts` must change with it.
+
 **Safari gotcha, current: `input[type="time"]` has an intrinsic min-width that BEATS `w-full`.**
 Driven by font size, so the bigger the field the worse it gets — the crew clock's `text-3xl`
 picker rendered wider than its own dialog and hung off the right edge on a real iPhone while
@@ -212,6 +222,7 @@ components/
   TimecardRow.tsx / TimeEntryModal.tsx — punch rows + manual time entry w/ chronology validation; TimecardRow renders as a ruled grid row on desktop, a labeled card on mobile
   BatchPunchBar.tsx / BatchTimeModal.tsx — room-level batch punch actions and batch time entry
   MobileRoomTracker.tsx          — the <1024px tracker layout
+  LayoutCookie.tsx               — tells the server which tracker tree (desktop/mobile) to render, so it sends ONE
   CrewDirectoryClient.tsx / EditCrewMemberClient.tsx — Directory goes to a real data table on desktop
   TeamListClient.tsx / EditMemberClient.tsx / PermissionsEditor.tsx / InviteTeammateModal.tsx — org member admin
   EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode; two-column on desktop

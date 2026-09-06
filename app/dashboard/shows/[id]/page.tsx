@@ -2,7 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import OpenPositionRow from '@/components/OpenPositionRow'
 import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
+import LayoutCookie from '@/components/LayoutCookie'
 import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
 import TimecardRow from '@/components/TimecardRow'
@@ -14,7 +16,7 @@ import UnlockShowButton from '@/components/UnlockShowButton'
 import MobileRoomTracker from '@/components/MobileRoomTracker'
 import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
-import { punchGridCols } from '@/lib/trackerLayout'
+import { punchGridCols, LAYOUT_COOKIE } from '@/lib/trackerLayout'
 import { dayTypeBgClass, dayTypeLabel } from '@/lib/dayTypes'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
@@ -312,8 +314,21 @@ export default async function ShowDetailPage({
 
   const showMeta = [show.venue, show.city_state, show.client_company].filter(Boolean).join(' · ')
 
+  // Render ONE of the two trees when the browser has said which it needs
+  // (LayoutCookie), both when it hasn't — a first visit, or a cleared cookie —
+  // so the CSS breakpoint still decides and nothing flashes. The classes on
+  // each tree stay as they were: they are the fallback, and the repair when a
+  // stale cookie names the wrong side. Until 2026-09-06 both trees went out on
+  // every request and every punch's refresh; two-thirds of the response was
+  // markup for a tree the viewer could not see.
+  const layoutCookie = (await cookies()).get(LAYOUT_COOKIE)?.value
+  const renderDesktop = layoutCookie !== 'mobile'
+  const renderMobile = layoutCookie !== 'desktop'
+
   return (
     <div className="p-6 md:p-10 lg:mx-auto lg:max-w-[1400px]">
+      <LayoutCookie />
+      {renderDesktop && (<>
       {/* Desktop header strip. This was a 240px left rail holding the show
           name, day nav, four stat tiles and four stacked buttons — roughly a
           quarter of the width, permanently, to hold things you read rather than
@@ -572,8 +587,9 @@ export default async function ShowDetailPage({
           )
         })}
       </div>
+      </>)}
 
-      <MobileRoomTracker
+      {renderMobile && <MobileRoomTracker
         authorId={user.id}
         locked={locked}
         className="lg:hidden min-w-0"
@@ -610,7 +626,7 @@ export default async function ShowDetailPage({
         schedulingEnabled={schedulingOn}
         // Plain object, not the Map: this crosses into a Client Component.
         ratesByTimecardId={Object.fromEntries(rateById)}
-      />
+      />}
     </div>
   )
 }
