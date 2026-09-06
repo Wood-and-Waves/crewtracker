@@ -296,8 +296,12 @@ scripts/
                        above; add_show_day runs as the caller so Add Day is covered by a test)
                        · 0021 every RLS helper call wrapped as (select fn()) — the speed fix
                        · 0022 indexes on the columns the policies filter by
-                       ALL applied to BOTH databases as of 2026-09-06 (0018–0020 shipped
-                       2026-09-05, 0021–0022 2026-09-06). Nothing is dev-only right now.
+                       · 0023 show_id denormalized onto rooms/timecards/punches, kept true by
+                       BEFORE triggers; every policy under a show becomes one level deep.
+                       WRITES EXISTING ROWS (backfill) — backup first, then db:grants AND
+                       db:schema after.
+                       0018–0022 are on BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0022 2026-09-06). **0023 is on DEV only** until its cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -393,10 +397,10 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   were handed but did not create and are not assigned to. Found by the 2026-09-06 speed review;
   pre-existing; the view is SECURITY DEFINER so it carries its own copy of the visibility rule
   and must be updated by hand when the shows policy changes.
-- **`scripts/sql/schema.sql` is stale — dumped 2026-07-28, before 0011–0022.** It shows the
+- **`scripts/sql/schema.sql` is stale — dumped 2026-07-28, before 0011–0023.** It shows the
   pre-0013 shows policy, no 0018 columns, and the old org-joined write policies. Regenerate
-  with `npm run db:schema` after the next migration; until then author any policy change from
-  the migrations or `pg_policies`, never from the dump.
+  with `npm run db:schema` right after 0023 reaches production (it reads production); until
+  then author any policy change from the migrations or `pg_policies`, never from the dump.
 - ~~Inviting people is manual and loses invitations.~~ **DONE 2026-07-27/28.** Invitations are emailed on creation from `noreply@contact.crewtracker.app` (`lib/inviteEmail.ts` + `app/api/invites/send/route.ts`), carrying the inviter's name and the company in subject and body. `PendingInvitesList.tsx` on the Team screen lets an org admin see every pending invite, copy the link again, change the role, resend the email, or cancel it — cancelling kills the link immediately. Authorization is the existing RLS policy: the invite is read through the caller's session, so another org's invitation returns 404.
 
 - ~~Per-control UI disabling on a locked show.~~ **DONE 2026-07-27.** A `locked` flag threads into every control that writes `timecards` or `punches` — punch cells, travel/half-day toggles, reset, batch punching, staffing, copy crew, Edit crew — in both the desktop and mobile trackers, each with a title explaining why. Room rename/delete and Add Day are deliberately left enabled: the lock covers those two tables only, so disabling them would misrepresent it.
@@ -681,11 +685,16 @@ act that ships to customers, and any pending migrations go through the steps abo
   `InitPlan`), and `($1 OR is_own_timecard(timecard_id))` still short-circuits. 0021 did this
   for the shows root, the 0019/0020 write policies, crew_members and the two SECURITY DEFINER
   views: execution 62 → 14 ms on dev, per-row helper calls 70 → 0, same permissions
-  (`rls.mts` 45 green). **The chain DEPTH is a separate cost** (~26 SubPlans, `shows` still
-  scanned 34×) — that is what denormalizing `show_id` onto rooms/timecards/punches (the
-  planned 0023, precedent: `show_assignments.organization_id`) removes. Write any new policy
-  in the wrapped form; measure with `scripts/sql/checks/rls-cost.sql`; and read policy text
-  from `pg_policies` or the migrations, never from `schema.sql`, which is stale (pre-0013).
+  (`rls.mts` 45 green). **The chain DEPTH was a separate cost** (~26 SubPlans, `shows`
+  scanned 8× per statement) — 0023 removes it by denormalizing `show_id` onto
+  rooms/timecards/punches (precedent: `show_assignments.organization_id`), so every policy
+  under a show is `show_id in (select id from shows)`. The triggers that derive `show_id`
+  are therefore part of the security boundary: they fire on UPDATE OF the parent key AND of
+  `show_id` itself, so a client cannot choose it — pinned by seven `rls.mts` checks. Write
+  any new policy in the wrapped, one-level form; measure with
+  `scripts/sql/checks/rls-cost.sql` (note its nested query touches eight tables, so it
+  counts one `shows` scan per table — the app's flat `.in(ids)` reads pay for one); and read
+  policy text from `pg_policies` or the migrations, never from `schema.sql`.
 
 - **`npm run build` and `next dev` share `.next`, and building while the dev server runs makes
   every route 404.** The production build overwrites the dev manifests, so `next dev` then serves
