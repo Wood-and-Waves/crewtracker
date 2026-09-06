@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendBookingRequestEmail, buildBookingRequestText } from '@/lib/bookingEmail'
+import { siteOrigin } from '@/lib/siteOrigin'
 
 // Ask a crew member to confirm a booking.
 //
@@ -128,7 +129,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: inviteError?.message ?? 'Could not create the request.' }, { status: 500 })
   }
 
-  const origin = new URL(request.url).origin
+  const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
   const link = `${origin}/book/${invite.token}`
   const common = {
     crewName: crew.full_name,

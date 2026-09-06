@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendDeclineNoticeEmail } from '@/lib/bookingEmail'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
+import { siteOrigin } from '@/lib/siteOrigin'
 
 // A crew member's answer to a booking request. No login: the token is the
 // authorization, so this runs with the service role.
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
         admin.from('crew_members').select('full_name').eq('id', invite.crew_member_id).maybeSingle(),
       ])
       if (person?.email) {
-        const origin = new URL(request.url).origin
+        const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
         await sendDeclineNoticeEmail({
           to: person.email,
           recipientName: person.full_name ?? null,

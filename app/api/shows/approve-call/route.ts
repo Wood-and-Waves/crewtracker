@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { sendCallHandoffEmail } from '@/lib/callHandoffEmail'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
+import { siteOrigin } from '@/lib/siteOrigin'
 
 // Approve a show's crew call and hand it to a scheduler.
 //
@@ -150,7 +151,7 @@ export async function POST(request: Request) {
     })
   }
 
-  const origin = new URL(request.url).origin
+  const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
   const result = await sendCallHandoffEmail({
     to,
     schedulerName: (scheduler as any)?.full_name ?? null,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendInviteEmail } from '@/lib/inviteEmail'
+import { siteOrigin } from '@/lib/siteOrigin'
 
 // Emails an invitation. Used both when one is first created and when an admin
 // resends it from the Team screen.
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     supabase.from('profiles').select('full_name, email').eq('id', user.id).maybeSingle(),
   ])
 
-  const origin = new URL(request.url).origin
+  const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
   const result = await sendInviteEmail({
     to: invite.email,
     organizationName: org?.name ?? 'their team',

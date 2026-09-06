@@ -256,6 +256,7 @@ lib/
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
   trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
   rateLimit.ts  — the throttle for the three public write routes; counters live in the database (0025)
+  siteOrigin.ts — the origin for every link the app EMAILS; fixed per environment, never the Host header
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
 proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, the keepalive cron, and exactly "/")
 scripts/
@@ -268,7 +269,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 300 assertions as of 2026-09-06.
+                  helper, no framework. 302 assertions as of 2026-09-06.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -304,8 +305,9 @@ scripts/
                        · 0024 the mechanical sweep: every remaining bare helper call wrapped;
                        positions/rulesets/rate-card write rules one level deep
                        · 0025 rate_limits table + rate_limit_hit() for the public routes
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0025 2026-09-06). Nothing is dev-only right now.
+                       · 0026 timecard_day_rates learns the scheduler_id arm
+                       0018–0025 are on BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0025 2026-09-06). **0026 is on DEV only** until its cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -403,13 +405,16 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
     rebuild from `schema.sql` loses it (nuisance, not a leak). The keepalive cron purges
     counters older than a day. Verified on dev: 30×404 then 429; 20 codes from one address
     then 429.
-  - **The decline email builds its dashboard link from `new URL(request.url).origin`** — i.e.
-    the Host header, which is attacker-controlled.
-- **`timecard_day_rates` never learned the `scheduler_id` arm 0013 added to the shows policy**,
-  so a scheduler who holds `can_view_pay_rates` gets no rates through the view on a show they
-  were handed but did not create and are not assigned to. Found by the 2026-09-06 speed review;
-  pre-existing; the view is SECURITY DEFINER so it carries its own copy of the visibility rule
-  and must be updated by hand when the shows policy changes.
+  - ~~The decline email builds its dashboard link from the Host header.~~ **DONE 2026-09-06.**
+    Every emailed link — booking request, invite, scheduler handoff, decline notice — now
+    comes from `lib/siteOrigin.ts`: the real domain on production, the deployment's own URL
+    on a preview, localhost in dev; never the request. `new URL(request.url).origin` should
+    not reappear in a route that puts a link into an email.
+- ~~`timecard_day_rates` never learned the `scheduler_id` arm.~~ **DONE 2026-09-06 (migration
+  0026)**, pinned by two `rls.mts` checks (a scheduler with the permission sees the handed-over
+  show's rates; without it, nothing). The lesson stands: the view is SECURITY DEFINER, so it
+  carries its OWN copy of the shows visibility rule and must be updated by hand whenever the
+  shows policy gains an arm.
 - ~~`scripts/sql/schema.sql` is stale.~~ **Regenerated from production 2026-09-06, right after
   0023.** It now carries every migration through 0023. Still author policy changes from the
   migrations or `pg_policies` rather than the dump — a dump is a snapshot, and it goes stale

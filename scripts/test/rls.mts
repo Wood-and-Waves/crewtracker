@@ -317,9 +317,23 @@ try {
 
   // The scheduler_id arm 0013 added to the shows policy.
   await q(`update shows set scheduler_id=$2 where id=$1`, [showA2.id, dave])
+  await q(`update timecards set day_rate=321 where id=$1`, [tcA2.id])
   await asUser(dave, async () => {
     const days = await q(`select count(*)::int n from work_days where show_id=$1`, [showA2.id])
     check('a scheduler sees the show they were handed and its days', days[0].n === 1, `${days[0].n}`)
+  })
+  // 0026: the SECURITY DEFINER rates view carries its own copy of that rule,
+  // and until 2026-09-06 it lacked this arm — a scheduler with the permission
+  // got no rates on a handed-over show. Permission granted for this block only.
+  await q(`update memberships set can_view_pay_rates=true where profile_id=$1 and organization_id=$2`, [dave, orgA])
+  await asUser(dave, async () => {
+    const v = await q(`select day_rate from timecard_day_rates where timecard_id=$1`, [tcA2.id])
+    check('and, with the permission, the rates view shows that show\'s rates too', Number(v[0]?.day_rate) === 321, JSON.stringify(v))
+  })
+  await q(`update memberships set can_view_pay_rates=false where profile_id=$1 and organization_id=$2`, [dave, orgA])
+  await asUser(dave, async () => {
+    const v = await q(`select count(*)::int n from timecard_day_rates where timecard_id=$1`, [tcA2.id])
+    check('but never without it', v[0].n === 0, `${v[0].n}`)
   })
   await q(`update shows set scheduler_id=null where id=$1`, [showA2.id])
 
