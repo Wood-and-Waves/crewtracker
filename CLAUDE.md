@@ -640,6 +640,22 @@ act that ships to customers, and any pending migrations go through the steps abo
 
 ## Past incidents worth remembering
 
+- **A punch paints at write acknowledgement, not after the page re-renders — "paint first,
+  reconcile second".** Until 2026-09-06 every punch save ran `router.refresh()` and the row only
+  changed once the entire tracker had re-rendered (~20 round trips), which is what "punches are
+  the worst" meant. Now `TimeEntryModal` writes with `.select(...)` — a VERIFIED write, since an
+  UPDATE that matches no policy returns success with zero rows — and hands the returned row to
+  `TimecardRow`, which keeps a LOCAL copy of its punches and flags (seeded from props, re-seeded
+  by a `useEffect` on the prop — deliberately not a `key`, which would remount the row and
+  drop an open editor whenever a sibling's refresh landed), paints it at once, closes the modal,
+  and only then calls `router.refresh()` so day totals and the batch bar catch up in the
+  background. Flag pills flip optimistically and revert on refusal. `BatchPunchBar` writes ONE
+  bulk UPDATE plus ONE multi-row INSERT (there is no unique key on `(timecard_id, punch_type)`,
+  so no true upsert) and reports what the database actually accepted, not what was asked.
+  Measured on dev: row painted at write-ack (992 ms, the instant the modal closed) and survived
+  the refresh; "Start All" for 8 = one `/rest/v1/punches` request, 272 ms, 645 ms to summary.
+  Any new write path on the tracker follows this shape: verified write → local paint → refresh.
+
 - **Every helper call in an RLS policy MUST be wrapped as `(select fn())`. Bare calls run
   once per row and made the app 100× slower than its own queries.** Measured 2026-09-06:
   one show's punches read in 0.27 ms with RLS off and 30–62 ms with it on (50 ms on

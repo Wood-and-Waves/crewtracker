@@ -19,6 +19,8 @@ export default function TimeEntryModal({
   authorId,
   roundingMinutes,
   onClose,
+  onSaved,
+  onCleared,
 }: {
   timecardId: string
   type: PunchType
@@ -33,6 +35,15 @@ export default function TimeEntryModal({
   /** organizations.timecard_rounding_minutes — every punch lands on it. */
   roundingMinutes: number
   onClose: () => void
+  /**
+   * The written punch, straight from the database's RETURNING. The row applies
+   * it to its own state immediately, so the time appears the instant Save is
+   * pressed instead of after a full page re-render. Optional so older call
+   * sites keep working unchanged.
+   */
+  onSaved?: (punch: Punch & { source: 'staff' | 'crew' }) => void
+  /** The punch type that was cleared, for the same reason. */
+  onCleared?: (type: PunchType) => void
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -93,16 +104,22 @@ export default function TimeEntryModal({
 
     setLoading(true)
     const existing = allPunches.find(p => p.punch_type === type)
+    const written = { punched_at: combined.toISOString(), source: 'staff' as const, created_by: authorId }
+    // .select() on the write for two reasons: a verified write (an UPDATE that
+    // matches no policy returns success with zero rows — CLAUDE.md), and the
+    // returned row is what the tracker row paints immediately.
     const result = existing
       // source/created_by are stamped on the UPDATE too, not just the insert:
       // a PM correcting a crew-entered time becomes its author, which both
       // keeps the Final Report's crew-entered count honest and stops the crew
       // link overwriting the correction (see app/api/clock/punch).
       ? await supabase.from('punches')
-          .update({ punched_at: combined.toISOString(), source: 'staff', created_by: authorId })
+          .update(written)
           .eq('id', existing.id)
+          .select('id, punch_type, punched_at, source')
       : await supabase.from('punches')
-          .insert({ timecard_id: timecardId, punch_type: type, punched_at: combined.toISOString(), source: 'staff', created_by: authorId })
+          .insert({ timecard_id: timecardId, punch_type: type, ...written })
+          .select('id, punch_type, punched_at, source')
 
     setLoading(false)
 
@@ -110,9 +127,19 @@ export default function TimeEntryModal({
       setError(result.error.message)
       return
     }
+    const row = (result.data ?? [])[0]
+    if (!row) {
+      setError('That did not save — you may not have permission to edit this timecard.')
+      return
+    }
 
-    router.refresh()
+    // Paint first, reconcile second. The row updates itself from `row` and the
+    // modal closes at once; the page re-render that keeps the day totals and
+    // the batch bar honest still happens, but no longer stands between the tap
+    // and the time appearing. This is the "punches are the worst" fix.
+    onSaved?.({ id: row.id, punch_type: row.punch_type, punched_at: row.punched_at, source: row.source })
     onClose()
+    router.refresh()
   }
 
   async function clearPunch() {
@@ -121,16 +148,21 @@ export default function TimeEntryModal({
     if (!existing) return
 
     setLoading(true)
-    const { error } = await supabase.from('punches').delete().eq('id', existing.id)
+    const { data, error } = await supabase.from('punches').delete().eq('id', existing.id).select('id')
     setLoading(false)
 
     if (error) {
       setError(error.message)
       return
     }
+    if (!data || data.length === 0) {
+      setError('That did not clear — you may not have permission to edit this timecard.')
+      return
+    }
 
-    router.refresh()
+    onCleared?.(type)
     onClose()
+    router.refresh()
   }
 
   return (

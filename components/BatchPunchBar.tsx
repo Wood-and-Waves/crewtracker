@@ -112,22 +112,57 @@ export default function BatchPunchBar({
     const plan = planBatchApply(timecards, type, when, checkedIds)
     setBusy(true)
 
+    // TWO round trips, not one per person. This used to loop `await` per crew
+    // member — "Start All" for twenty people was twenty sequential writes
+    // before the page even began its re-render. A batch applies ONE time to
+    // everyone, so the rows that already have this punch take a single UPDATE
+    // ... IN (ids) and the rest take a single multi-row INSERT. punches has no
+    // unique key on (timecard_id, punch_type), so a true upsert is not
+    // available; the split is what stands in for it.
+    //
+    // Stamped source/created_by on the update as well as the insert — see
+    // TimeEntryModal for why a PM correcting a crew time becomes its author.
+    const stamp = { punched_at: when.toISOString(), source: 'staff' as const, created_by: authorId }
+    const existingIds: string[] = []
+    const inserts: { timecard_id: string; punch_type: PunchType; punched_at: string; source: 'staff'; created_by: string }[] = []
     for (const a of plan.applied) {
       const tc = timecards.find(t => t.id === a.id)
       const existing = tc?.punches.find(p => p.punch_type === type)
-      if (existing) {
-        // Stamped on update as well as insert — see TimeEntryModal for why.
-        await supabase.from('punches')
-          .update({ punched_at: when.toISOString(), source: 'staff', created_by: authorId })
-          .eq('id', existing.id)
-      } else {
-        await supabase.from('punches')
-          .insert({ timecard_id: a.id, punch_type: type, punched_at: when.toISOString(), source: 'staff', created_by: authorId })
-      }
+      if (existing) existingIds.push(existing.id)
+      else inserts.push({ timecard_id: a.id, punch_type: type, ...stamp })
     }
 
+    // Verified writes: an UPDATE or INSERT that matches no policy returns
+    // success with zero rows (CLAUDE.md), so the summary counts what the
+    // database actually accepted, not what was asked for.
+    const [upd, ins] = await Promise.all([
+      existingIds.length
+        ? supabase.from('punches').update(stamp).in('id', existingIds).select('id')
+        : Promise.resolve({ data: [] as { id: string }[], error: null }),
+      inserts.length
+        ? supabase.from('punches').insert(inserts).select('id')
+        : Promise.resolve({ data: [] as { id: string }[], error: null }),
+    ])
+
     setBusy(false)
-    setOverlay({ kind: 'summary', type, plan })
+    const written = (upd.data?.length ?? 0) + (ins.data?.length ?? 0)
+    const failed = upd.error ?? ins.error
+    if (failed || written < plan.applied.length) {
+      // Something was refused. Say so rather than showing a summary that
+      // claims everyone was punched.
+      setOverlay({
+        kind: 'summary', type,
+        plan: {
+          applied: plan.applied.slice(0, written),
+          skipped: [
+            ...plan.skipped,
+            ...plan.applied.slice(written).map(a => ({ name: a.name, reason: failed?.message ?? 'Not saved' })),
+          ],
+        },
+      })
+    } else {
+      setOverlay({ kind: 'summary', type, plan })
+    }
     router.refresh()
   }
 

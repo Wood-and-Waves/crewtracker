@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, Punch, PunchType } from '@/lib/punches'
@@ -12,8 +12,8 @@ import { punchGridCols } from '@/lib/trackerLayout'
 const LOCKED_NOTE = 'Times are locked — the final report has been sent. An admin can unlock the show.'
 
 export default function TimecardRow({
-  timecard,
-  punches,
+  timecard: timecardProp,
+  punches: punchesProp,
   timezone,
   ruleset,
   allTimecards,
@@ -45,6 +45,22 @@ export default function TimecardRow({
   const [editingType, setEditingType] = useState<PunchType | null>(null)
   const [rowError, setRowError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // PAINT FIRST, RECONCILE SECOND. The row keeps its own copy of its punches
+  // and flags, seeded from the server props and re-seeded whenever they change
+  // (a router.refresh() landing, or navigating days). A save applies the
+  // database's returned row here immediately, so the time appears the instant
+  // Save is pressed; the page re-render that keeps the day totals honest
+  // follows in the background instead of standing between tap and paint.
+  // Until 2026-09-06 every punch waited for a ~20-round-trip re-render of the
+  // whole tracker before the row changed — "punches are the worst".
+  //
+  // The re-seed is a useEffect on the PROP, not a key: the row must not
+  // remount (and lose an open editor) just because a sibling's refresh landed.
+  const [punches, setPunches] = useState<Punch[]>(punchesProp)
+  useEffect(() => { setPunches(punchesProp) }, [punchesProp])
+  const [timecard, setTimecard] = useState(timecardProp)
+  useEffect(() => { setTimecard(timecardProp) }, [timecardProp])
 
   const next = nextPunchType(punches)
   const wrapped = isWrapped(punches)
@@ -85,12 +101,20 @@ export default function TimecardRow({
 
   async function toggleFlag(field: 'travel_in_day' | 'travel_out_day' | 'pay_as_half_day') {
     setRowError('')
-    const { error } = await supabase
+    const before = timecard[field]
+    // Flip locally first; put it back if the database says no. The verified
+    // write matters here: an UPDATE that matches no policy returns success
+    // with zero rows (CLAUDE.md), which would otherwise leave the pill lit for
+    // a change that never happened.
+    setTimecard(t => ({ ...t, [field]: !before }))
+    const { data, error } = await supabase
       .from('timecards')
-      .update({ [field]: !timecard[field] })
+      .update({ [field]: !before })
       .eq('id', timecard.id)
-    if (error) {
-      setRowError(error.message)
+      .select('id')
+    if (error || !data || data.length === 0) {
+      setTimecard(t => ({ ...t, [field]: before }))
+      setRowError(error?.message ?? 'That did not save — you may not have permission to edit this timecard.')
       return
     }
     router.refresh()
@@ -133,6 +157,8 @@ export default function TimecardRow({
       setRowError(error.message)
       return
     }
+    setPunches([])
+    setTimecard(t => ({ ...t, is_travel_day: false, travel_in_day: false, travel_out_day: false, pay_as_half_day: false }))
     router.refresh()
   }
 
@@ -362,6 +388,9 @@ export default function TimecardRow({
           authorId={authorId}
           roundingMinutes={roundingMinutes}
           onClose={() => setEditingType(null)}
+          onSaved={saved => setPunches(prev => [...prev.filter(p => p.punch_type !== saved.punch_type), saved]
+            .sort((a, b) => a.punched_at.localeCompare(b.punched_at)))}
+          onCleared={type => setPunches(prev => prev.filter(p => p.punch_type !== type))}
         />
       )}
     </div>
