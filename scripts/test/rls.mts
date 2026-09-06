@@ -107,6 +107,30 @@ await q(`insert into memberships (profile_id, organization_id, base_role, can_ed
            can_edit_all_shows, view_only)
          values ($1,$2,'staff',false,true,true)`, [carol, orgA])
 
+// The assignment branch. Until 2026-09-06 nothing in this suite exercised it:
+// every fixture either saw all shows (alice, carol) or was in another company
+// (bob), so `id in (select show_id from show_assignments ...)` in the shows
+// policy — the branch a real non-admin PM lives on — was never tested. dave is
+// a PM in company A who may edit timecards but is assigned to ONE show.
+const [showA2] = await q(`insert into shows (organization_id, name, start_date, end_date)
+                          values ($1,'A Show 2','2026-09-03','2026-09-04') returning id`, [orgA])
+const [wdA2] = await q(`insert into work_days (show_id, date, day_number) values ($1,'2026-09-03',1) returning id`, [showA2.id])
+const [roomA2] = await q(`insert into rooms (work_day_id, name) values ($1,'Main') returning id`, [wdA2.id])
+const [tcA2] = await q(`insert into timecards (room_id, crew_member_name, role) values ($1,'A2 Person','A1') returning id`, [roomA2.id])
+await q(`insert into punches (timecard_id, punch_type, punched_at) values ($1,'start',now())`, [tcA2.id])
+// Company B gets a real day/room/timecard too, so "another company's timecard"
+// is a concrete row and not just an idea.
+const [wdB] = await q(`insert into work_days (show_id, date, day_number) values ($1,'2026-09-01',1) returning id`, [showB.id])
+const [roomB] = await q(`insert into rooms (work_day_id, name) values ($1,'B Main') returning id`, [wdB.id])
+const [tcB] = await q(`insert into timecards (room_id, crew_member_name, role) values ($1,'B Person','B1') returning id`, [roomB.id])
+void tcB
+const dave = await makeUser(`${TAG}-dave@example.test`)     // pm at A, assigned to showA only
+await q(`insert into memberships (profile_id, organization_id, base_role, can_edit_timecards,
+           can_edit_all_shows, can_create_shows)
+         values ($1,$2,'pm',true,false,false)`, [dave, orgA])
+await q(`update profiles set active_organization_id=$2 where id=$1`, [dave, orgA])
+await q(`insert into show_assignments (show_id, profile_id) values ($1,$2)`, [showA.id, dave])
+
 try {
   console.log('\n=== one company cannot see another ===')
   await asUser(alice, async () => {
@@ -227,6 +251,38 @@ try {
     check('and Add Day (copy crew) still works through the RPC', rpc.ok, rpc.ok ? '' : rpc.code)
   })
 
+  console.log('\n=== an assigned PM sees exactly their shows (the show_assignments branch) ===')
+  // This is the branch the performance rewrites (0021, 0023) touch most, and
+  // the one no earlier fixture exercised. Baselined against the pre-0021
+  // policies first, so a change in what dave can see is a real finding.
+  await asUser(dave, async () => {
+    const mine = await q(`select count(*)::int n from punches where id=$1`, [punchA.id])
+    check('an assigned PM sees the punches on their show', mine[0].n === 1, `${mine[0].n}`)
+
+    const rooms = await q(`select count(*)::int n from rooms where id=$1`, [roomA2.id])
+    const tcs = await q(`select count(*)::int n from timecards where id=$1`, [tcA2.id])
+    const pun = await q(`select count(*)::int n from punches where timecard_id=$1`, [tcA2.id])
+    check('and none on a same-company show they are not assigned to',
+      rooms[0].n === 0 && tcs[0].n === 0 && pun[0].n === 0, `rooms=${rooms[0].n} tcs=${tcs[0].n} punches=${pun[0].n}`)
+
+    const ins = await probe(`insert into punches (timecard_id, punch_type, punched_at) values ($1,'meal_out',now())`, [tcA.id])
+    check('an assigned PM with can_edit_timecards can punch on their show', ins.ok && ins.n === 1, ins.ok ? '' : ins.code)
+
+    // The assignment half of the 0019 hole. Until now only the cross-company
+    // half was tested.
+    const hidden = await probe(`insert into punches (timecard_id, punch_type, punched_at) values ($1,'meal_out',now())`, [tcA2.id])
+    check('but not on a show hidden from them, even with the permission',
+      !hidden.ok || hidden.n === 0, hidden.ok ? `inserted ${hidden.n}` : '')
+  })
+
+  // The scheduler_id arm 0013 added to the shows policy.
+  await q(`update shows set scheduler_id=$2 where id=$1`, [showA2.id, dave])
+  await asUser(dave, async () => {
+    const days = await q(`select count(*)::int n from work_days where show_id=$1`, [showA2.id])
+    check('a scheduler sees the show they were handed and its days', days[0].n === 1, `${days[0].n}`)
+  })
+  await q(`update shows set scheduler_id=null where id=$1`, [showA2.id])
+
   console.log('\n=== removed and misdirected users get nothing ===')
   await q(`update memberships set deactivated_at=now() where profile_id=$1 and organization_id=$2`, [alice, orgA])
   await asUser(alice, async () => {
@@ -274,6 +330,9 @@ try {
 
 } finally {
   console.log('\nTearing down fixtures…')
+  // Assignments first: dave's row points at showA, and this must not depend on
+  // whether that FK cascades.
+  await q(`delete from show_assignments where organization_id = any($1)`, [created.orgs])
   await q(`delete from shows where organization_id = any($1)`, [created.orgs])
   await q(`delete from crew_members where organization_id = any($1)`, [created.orgs])
   await q(`delete from memberships where organization_id = any($1)`, [created.orgs])
