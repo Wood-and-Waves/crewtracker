@@ -123,7 +123,6 @@ await q(`insert into punches (timecard_id, punch_type, punched_at) values ($1,'s
 const [wdB] = await q(`insert into work_days (show_id, date, day_number) values ($1,'2026-09-01',1) returning id`, [showB.id])
 const [roomB] = await q(`insert into rooms (work_day_id, name) values ($1,'B Main') returning id`, [wdB.id])
 const [tcB] = await q(`insert into timecards (room_id, crew_member_name, role) values ($1,'B Person','B1') returning id`, [roomB.id])
-void tcB
 const dave = await makeUser(`${TAG}-dave@example.test`)     // pm at A, assigned to showA only
 await q(`insert into memberships (profile_id, organization_id, base_role, can_edit_timecards,
            can_edit_all_shows, can_create_shows)
@@ -249,6 +248,47 @@ try {
     // presses Add Day on a real show.
     const rpc = await probe(`select add_show_day($1, true)`, [showA.id])
     check('and Add Day (copy crew) still works through the RPC', rpc.ok, rpc.ok ? '' : rpc.code)
+    // 0023: the RPC inserts rooms and timecards with no show_id; the triggers
+    // must stamp it, or the new day is invisible to every policy.
+    const stamped = await q(`select count(*)::int n from timecards t join rooms r on r.id=t.room_id
+                             join work_days w on w.id=r.work_day_id
+                             where w.show_id=$1 and (t.show_id is distinct from w.show_id or r.show_id is distinct from w.show_id)`, [showA.id])
+    check('and Add Day stamps the new rooms and timecards with the show', stamped[0].n === 0, `${stamped[0].n} mislabelled`)
+  })
+
+  console.log('\n=== show_id is derived, never chosen (0023) ===')
+  // The flattened policies trust show_id, so the triggers that derive it are
+  // now part of the security boundary. Each of these is a way a client could
+  // try to choose it.
+  {
+    const [p] = await q(`select show_id from punches where id=$1`, [punchA.id])
+    const [t] = await q(`select show_id from timecards where id=$1`, [tcA.id])
+    const [r] = await q(`select show_id from rooms where id=$1`, [roomA.id])
+    check('show_id is filled by the triggers and matches the chain',
+      p.show_id === showA.id && t.show_id === showA.id && r.show_id === showA.id, `${p.show_id} ${t.show_id} ${r.show_id}`)
+  }
+  await asUser(alice, async () => {
+    const relabel = await probe(`update punches set show_id=$2 where id=$1`, [punchA.id, showA2.id])
+    const [after] = await q(`select show_id from punches where id=$1`, [punchA.id])
+    check('a client cannot re-label a punch\'s show_id (the trigger overwrites it)',
+      after.show_id === showA.id, relabel.ok ? `now ${after.show_id}` : relabel.code)
+
+    const moved = await probe(`update punches set timecard_id=$2 where id=$1`, [punchA.id, tcB.id])
+    check('moving a punch onto another company\'s timecard is refused', !moved.ok || moved.n === 0, moved.ok ? `moved ${moved.n}` : '')
+
+    const movedTc = await probe(`update timecards set room_id=$2 where id=$1`, [tcA.id, roomB.id])
+    check('and so is moving a timecard into another company\'s room', !movedTc.ok || movedTc.n === 0, movedTc.ok ? `moved ${movedTc.n}` : '')
+
+    const vis = await probe(`select show_id from timecards where id=$1`, [tcA.id])
+    const rate = await probe(`select day_rate from timecards where id=$1`, [tcA.id])
+    check('timecards.show_id is readable and day_rate still is not', vis.ok && rate.code === '42501', `${vis.ok} ${rate.code}`)
+  })
+  await asUser(carol, async () => {
+    const [r] = await q(`select (select count(*) from rooms where id=$1)::int rooms,
+                                (select count(*) from timecards where id=$2)::int tcs,
+                                (select count(*) from punches where id=$3)::int punches`, [roomA.id, tcA.id, punchA.id])
+    check('a view-only member still sees rooms, timecards and punches after flattening',
+      r.rooms === 1 && r.tcs === 1 && r.punches === 1, JSON.stringify(r))
   })
 
   console.log('\n=== an assigned PM sees exactly their shows (the show_assignments branch) ===')
