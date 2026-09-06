@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict APgubXHqhJTHcv2YpgWvAWyuGIKNhJfdze6XCKTJLfDcwLPd5BKAsItcXglusuy
+\restrict HdoFGxUhlvq6OmUh5IUMCGkryuCGrUso8cCdf9LS71ESQj8JCYbhXm1eOGcmbj7
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -108,7 +108,7 @@ declare
   v_finalized timestamptz;
 begin
   -- Resolve the room, whichever table fired and whichever direction.
-  if tg_table_name = 'timecards' then
+  if tg_table_name in ('timecards', 'crew_call_positions') then
     if tg_op = 'DELETE' then v_room_id := old.room_id; else v_room_id := new.room_id; end if;
   else -- punches
     select t.room_id into v_room_id
@@ -287,9 +287,19 @@ begin
   if new.disabled_at is distinct from old.disabled_at then
     raise exception 'Organization status can only be changed by CrewTracker support.';
   end if;
+  if new.scheduling_enabled is distinct from old.scheduling_enabled then
+    raise exception 'The scheduling module can only be changed by CrewTracker support.';
+  end if;
   return new;
 end;
 $$;
+
+
+--
+-- Name: FUNCTION "guard_organization_disabled_at"(); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION "public"."guard_organization_disabled_at"() IS 'Blocks operator-only columns on organizations (disabled_at, scheduling_enabled) from being changed by an authenticated caller. Name is historical: it guards more than disabled_at.';
 
 
 --
@@ -387,6 +397,25 @@ begin
   return NEW;
 end;
 $$;
+
+
+--
+-- Name: is_own_timecard("uuid"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select false;
+$$;
+
+
+--
+-- Name: FUNCTION "is_own_timecard"("p_timecard_id" "uuid"); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") IS 'Placeholder for crew logins: is this timecard the caller''s own? Always false until crew_members gains a per-org link to an auth user. Never match on email — that leaks identity across organizations.';
 
 
 --
@@ -543,6 +572,66 @@ $$;
 
 
 --
+-- Name: set_booking_invite_organization_id(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."set_booking_invite_organization_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  select s.organization_id into new.organization_id
+  from shows s where s.id = new.show_id;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: set_clock_link_organization_id(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."set_clock_link_organization_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  select s.organization_id into new.organization_id
+  from shows s where s.id = new.show_id;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: set_punch_show_id(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."set_punch_show_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  select t.show_id into new.show_id from timecards t where t.id = new.timecard_id;
+  return new;
+end; $$;
+
+
+--
+-- Name: set_room_show_id(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."set_room_show_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  select w.show_id into new.show_id from work_days w where w.id = new.work_day_id;
+  return new;
+end; $$;
+
+
+--
 -- Name: set_show_assignment_organization_id(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -555,6 +644,20 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: set_timecard_show_id(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."set_timecard_show_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  select r.show_id into new.show_id from rooms r where r.id = new.room_id;
+  return new;
+end; $$;
 
 
 --
@@ -586,6 +689,60 @@ CREATE TABLE "public"."av_roles" (
     "name" "text" NOT NULL,
     "sort_order" integer DEFAULT 0,
     "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+--
+-- Name: booking_invites; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."booking_invites" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "token" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "show_id" "uuid" NOT NULL,
+    "crew_member_id" "uuid" NOT NULL,
+    "organization_id" "uuid" NOT NULL,
+    "email" "text",
+    "sent_by" "uuid",
+    "sent_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "expires_at" timestamp with time zone NOT NULL,
+    "responded_at" timestamp with time zone,
+    "response" "text",
+    "note" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "booking_invites_response_check" CHECK (("response" = ANY (ARRAY['confirmed'::"text", 'declined'::"text"])))
+);
+
+
+--
+-- Name: clock_links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."clock_links" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "token" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "show_id" "uuid" NOT NULL,
+    "crew_member_id" "uuid",
+    "organization_id" "uuid" NOT NULL,
+    "expires_at" timestamp with time zone NOT NULL,
+    "revoked_at" timestamp with time zone,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+--
+-- Name: crew_call_positions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."crew_call_positions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "room_id" "uuid" NOT NULL,
+    "role" "text" NOT NULL,
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "note" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "created_by" "uuid"
 );
 
 
@@ -629,7 +786,7 @@ CREATE VIEW "public"."crew_rate_cards_visible" WITH ("security_invoker"='false')
     "rc"."day_rate"
    FROM ("public"."rate_cards" "rc"
      JOIN "public"."crew_members" "cm" ON (("cm"."id" = "rc"."crew_member_id")))
-  WHERE (("cm"."organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_view_pay_rates'::"text"));
+  WHERE (("cm"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_view_pay_rates'::"text") AS "my_perm"));
 
 
 --
@@ -699,8 +856,16 @@ CREATE TABLE "public"."memberships" (
     "view_only" boolean DEFAULT false,
     "deactivated_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "can_manage_scheduling" boolean DEFAULT false NOT NULL
 );
+
+
+--
+-- Name: COLUMN "memberships"."can_manage_scheduling"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."memberships"."can_manage_scheduling" IS 'May this member use the scheduling module (positions, handoff, booking requests)? Gated additionally by organizations.scheduling_enabled — both must be true.';
 
 
 --
@@ -713,7 +878,8 @@ CREATE TABLE "public"."organizations" (
     "created_at" timestamp with time zone DEFAULT "now"(),
     "timecard_rounding_minutes" integer DEFAULT 1 NOT NULL,
     "final_report_emails" "text",
-    "disabled_at" timestamp with time zone
+    "disabled_at" timestamp with time zone,
+    "scheduling_enabled" boolean DEFAULT true NOT NULL
 );
 
 
@@ -722,6 +888,13 @@ CREATE TABLE "public"."organizations" (
 --
 
 COMMENT ON COLUMN "public"."organizations"."final_report_emails" IS 'Comma-separated recipients for the end-of-show Final Report email. Admin-managed; never supplied by the client.';
+
+
+--
+-- Name: COLUMN "organizations"."scheduling_enabled"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."organizations"."scheduling_enabled" IS 'Entitlement: may this organization use the scheduling module (positions, booking requests, the company calendar)? Operator-controlled — see guard_organization_disabled_at(). Nothing scheduling-related is deleted when this is false; the UI is hidden.';
 
 
 --
@@ -803,8 +976,27 @@ CREATE TABLE "public"."punches" (
     "punch_type" "text" NOT NULL,
     "punched_at" timestamp with time zone NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "punches_punch_type_check" CHECK (("punch_type" = ANY (ARRAY['start'::"text", 'meal_out'::"text", 'meal_in'::"text", 'meal2_out'::"text", 'meal2_in'::"text", 'meal3_out'::"text", 'meal3_in'::"text", 'end'::"text"])))
+    "source" "text" DEFAULT 'staff'::"text" NOT NULL,
+    "created_by" "uuid",
+    "source_link" "uuid",
+    "show_id" "uuid" NOT NULL,
+    CONSTRAINT "punches_punch_type_check" CHECK (("punch_type" = ANY (ARRAY['start'::"text", 'meal_out'::"text", 'meal_in'::"text", 'meal2_out'::"text", 'meal2_in'::"text", 'meal3_out'::"text", 'meal3_in'::"text", 'end'::"text"]))),
+    CONSTRAINT "punches_source_check" CHECK (("source" = ANY (ARRAY['staff'::"text", 'crew'::"text"])))
 );
+
+
+--
+-- Name: COLUMN "punches"."source"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."punches"."source" IS 'Who authored this punch: staff (a signed-in PM) or crew (a no-login clock link). lib/payroll.ts must never read this — it is attribution, not a pay input.';
+
+
+--
+-- Name: COLUMN "punches"."created_by"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."punches"."created_by" IS 'The signed-in profile that wrote this punch. NULL for crew-entered punches, which have no session.';
 
 
 --
@@ -815,7 +1007,8 @@ CREATE TABLE "public"."rooms" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "work_day_id" "uuid" NOT NULL,
     "name" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "show_id" "uuid" NOT NULL
 );
 
 
@@ -865,7 +1058,10 @@ CREATE TABLE "public"."shows" (
     "city_state" "text",
     "finalized_at" timestamp with time zone,
     "finalized_by" "uuid",
-    "final_report_recipients" "text"
+    "final_report_recipients" "text",
+    "scheduler_id" "uuid",
+    "call_approved_at" timestamp with time zone,
+    "call_approved_by" "uuid"
 );
 
 
@@ -914,7 +1110,13 @@ CREATE TABLE "public"."timecards" (
     "travel_out_day" boolean DEFAULT false,
     "pay_as_half_day" boolean DEFAULT false,
     "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"()
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "call_position_id" "uuid",
+    "booking_status" "text" DEFAULT 'pencilled'::"text" NOT NULL,
+    "booking_invited_at" timestamp with time zone,
+    "booking_responded_at" timestamp with time zone,
+    "show_id" "uuid" NOT NULL,
+    CONSTRAINT "timecards_booking_status_check" CHECK (("booking_status" = ANY (ARRAY['pencilled'::"text", 'invited'::"text", 'confirmed'::"text", 'declined'::"text"])))
 );
 
 
@@ -927,7 +1129,9 @@ CREATE TABLE "public"."work_days" (
     "show_id" "uuid" NOT NULL,
     "date" "date" NOT NULL,
     "day_number" integer NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "day_type" "text",
+    CONSTRAINT "work_days_day_type_check" CHECK ((("day_type" IS NULL) OR ("day_type" = ANY (ARRAY['travel_load_in'::"text", 'load_in'::"text", 'load_in_show'::"text", 'rehearsal'::"text", 'show'::"text", 'show_load_out'::"text", 'load_out_travel'::"text", 'travel'::"text"]))))
 );
 
 
@@ -943,9 +1147,9 @@ CREATE VIEW "public"."timecard_day_rates" WITH ("security_invoker"='false') AS
      JOIN "public"."rooms" "r" ON (("r"."id" = "t"."room_id")))
      JOIN "public"."work_days" "w" ON (("w"."id" = "r"."work_day_id")))
      JOIN "public"."shows" "s" ON (("s"."id" = "w"."show_id")))
-  WHERE (("s"."organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_view_pay_rates'::"text") AND ("public"."can_see_all_shows"() OR ("s"."created_by" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+  WHERE (("s"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_view_pay_rates'::"text") AS "my_perm") AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR (EXISTS ( SELECT 1
            FROM "public"."show_assignments" "sa"
-          WHERE (("sa"."show_id" = "s"."id") AND ("sa"."profile_id" = "auth"."uid"()))))));
+          WHERE (("sa"."show_id" = "s"."id") AND ("sa"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))))));
 
 
 --
@@ -954,6 +1158,54 @@ CREATE VIEW "public"."timecard_day_rates" WITH ("security_invoker"='false') AS
 
 ALTER TABLE ONLY "public"."av_roles"
     ADD CONSTRAINT "av_roles_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: booking_invites booking_invites_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."booking_invites"
+    ADD CONSTRAINT "booking_invites_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: booking_invites booking_invites_show_id_crew_member_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."booking_invites"
+    ADD CONSTRAINT "booking_invites_show_id_crew_member_id_key" UNIQUE ("show_id", "crew_member_id");
+
+
+--
+-- Name: booking_invites booking_invites_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."booking_invites"
+    ADD CONSTRAINT "booking_invites_token_key" UNIQUE ("token");
+
+
+--
+-- Name: clock_links clock_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."clock_links"
+    ADD CONSTRAINT "clock_links_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: clock_links clock_links_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."clock_links"
+    ADD CONSTRAINT "clock_links_token_key" UNIQUE ("token");
+
+
+--
+-- Name: crew_call_positions crew_call_positions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."crew_call_positions"
+    ADD CONSTRAINT "crew_call_positions_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -1133,6 +1385,90 @@ ALTER TABLE ONLY "public"."work_days"
 
 
 --
+-- Name: booking_invites_crew_member_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "booking_invites_crew_member_idx" ON "public"."booking_invites" USING "btree" ("crew_member_id");
+
+
+--
+-- Name: booking_invites_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "booking_invites_org_idx" ON "public"."booking_invites" USING "btree" ("organization_id");
+
+
+--
+-- Name: booking_invites_sent_by_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "booking_invites_sent_by_idx" ON "public"."booking_invites" USING "btree" ("sent_by");
+
+
+--
+-- Name: booking_invites_show_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "booking_invites_show_id_idx" ON "public"."booking_invites" USING "btree" ("show_id");
+
+
+--
+-- Name: clock_links_created_by_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "clock_links_created_by_idx" ON "public"."clock_links" USING "btree" ("created_by");
+
+
+--
+-- Name: clock_links_crew_member_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "clock_links_crew_member_idx" ON "public"."clock_links" USING "btree" ("crew_member_id");
+
+
+--
+-- Name: clock_links_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "clock_links_org_idx" ON "public"."clock_links" USING "btree" ("organization_id");
+
+
+--
+-- Name: clock_links_person_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "clock_links_person_uniq" ON "public"."clock_links" USING "btree" ("show_id", "crew_member_id") WHERE ("crew_member_id" IS NOT NULL);
+
+
+--
+-- Name: clock_links_show_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "clock_links_show_id_idx" ON "public"."clock_links" USING "btree" ("show_id");
+
+
+--
+-- Name: clock_links_venue_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "clock_links_venue_uniq" ON "public"."clock_links" USING "btree" ("show_id") WHERE ("crew_member_id" IS NULL);
+
+
+--
+-- Name: crew_call_positions_room_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "crew_call_positions_room_id_idx" ON "public"."crew_call_positions" USING "btree" ("room_id");
+
+
+--
+-- Name: crew_members_organization_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "crew_members_organization_id_idx" ON "public"."crew_members" USING "btree" ("organization_id");
+
+
+--
 -- Name: memberships_org_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1161,10 +1497,143 @@ CREATE UNIQUE INDEX "payroll_presets_org_name_uniq" ON "public"."payroll_presets
 
 
 --
+-- Name: punches_created_by_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "punches_created_by_idx" ON "public"."punches" USING "btree" ("created_by");
+
+
+--
+-- Name: punches_show_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "punches_show_id_idx" ON "public"."punches" USING "btree" ("show_id");
+
+
+--
+-- Name: punches_source_link_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "punches_source_link_idx" ON "public"."punches" USING "btree" ("source_link");
+
+
+--
+-- Name: punches_timecard_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "punches_timecard_id_idx" ON "public"."punches" USING "btree" ("timecard_id");
+
+
+--
+-- Name: rate_cards_crew_member_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "rate_cards_crew_member_idx" ON "public"."rate_cards" USING "btree" ("crew_member_id");
+
+
+--
+-- Name: rooms_show_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "rooms_show_id_idx" ON "public"."rooms" USING "btree" ("show_id");
+
+
+--
+-- Name: rooms_work_day_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "rooms_work_day_id_idx" ON "public"."rooms" USING "btree" ("work_day_id");
+
+
+--
+-- Name: show_assignments_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "show_assignments_org_idx" ON "public"."show_assignments" USING "btree" ("organization_id");
+
+
+--
+-- Name: show_assignments_profile_show_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "show_assignments_profile_show_idx" ON "public"."show_assignments" USING "btree" ("profile_id", "show_id");
+
+
+--
+-- Name: shows_created_by_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "shows_created_by_idx" ON "public"."shows" USING "btree" ("created_by");
+
+
+--
+-- Name: shows_organization_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "shows_organization_id_idx" ON "public"."shows" USING "btree" ("organization_id");
+
+
+--
+-- Name: shows_scheduler_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "shows_scheduler_id_idx" ON "public"."shows" USING "btree" ("scheduler_id") WHERE ("scheduler_id" IS NOT NULL);
+
+
+--
+-- Name: timecards_call_position_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "timecards_call_position_idx" ON "public"."timecards" USING "btree" ("call_position_id");
+
+
+--
+-- Name: timecards_crew_member_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "timecards_crew_member_idx" ON "public"."timecards" USING "btree" ("crew_member_id");
+
+
+--
+-- Name: timecards_one_live_fill_per_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "timecards_one_live_fill_per_position" ON "public"."timecards" USING "btree" ("call_position_id") WHERE (("call_position_id" IS NOT NULL) AND ("booking_status" <> 'declined'::"text"));
+
+
+--
 -- Name: timecards_room_crew_uniq; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX "timecards_room_crew_uniq" ON "public"."timecards" USING "btree" ("room_id", "crew_member_id") WHERE ("crew_member_id" IS NOT NULL);
+
+
+--
+-- Name: timecards_room_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "timecards_room_id_idx" ON "public"."timecards" USING "btree" ("room_id");
+
+
+--
+-- Name: timecards_show_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "timecards_show_id_idx" ON "public"."timecards" USING "btree" ("show_id");
+
+
+--
+-- Name: work_days_date_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "work_days_date_idx" ON "public"."work_days" USING "btree" ("date");
+
+
+--
+-- Name: crew_call_positions block_call_positions_when_finalized; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "block_call_positions_when_finalized" BEFORE INSERT OR DELETE OR UPDATE ON "public"."crew_call_positions" FOR EACH ROW EXECUTE FUNCTION "public"."block_writes_when_finalized"();
 
 
 --
@@ -1210,10 +1679,45 @@ CREATE TRIGGER "rate_cards_check_pay_rate_permission" BEFORE INSERT OR UPDATE ON
 
 
 --
+-- Name: booking_invites set_booking_invite_org; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "set_booking_invite_org" BEFORE INSERT ON "public"."booking_invites" FOR EACH ROW EXECUTE FUNCTION "public"."set_booking_invite_organization_id"();
+
+
+--
+-- Name: clock_links set_clock_link_org; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "set_clock_link_org" BEFORE INSERT ON "public"."clock_links" FOR EACH ROW EXECUTE FUNCTION "public"."set_clock_link_organization_id"();
+
+
+--
+-- Name: punches set_punch_show_id; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "set_punch_show_id" BEFORE INSERT OR UPDATE OF "timecard_id", "show_id" ON "public"."punches" FOR EACH ROW EXECUTE FUNCTION "public"."set_punch_show_id"();
+
+
+--
+-- Name: rooms set_room_show_id; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "set_room_show_id" BEFORE INSERT OR UPDATE OF "work_day_id", "show_id" ON "public"."rooms" FOR EACH ROW EXECUTE FUNCTION "public"."set_room_show_id"();
+
+
+--
 -- Name: show_assignments set_show_assignment_organization_id_trigger; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER "set_show_assignment_organization_id_trigger" BEFORE INSERT ON "public"."show_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."set_show_assignment_organization_id"();
+
+
+--
+-- Name: timecards set_timecard_show_id; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "set_timecard_show_id" BEFORE INSERT OR UPDATE OF "room_id", "show_id" ON "public"."timecards" FOR EACH ROW EXECUTE FUNCTION "public"."set_timecard_show_id"();
 
 
 --
@@ -1250,6 +1754,86 @@ CREATE TRIGGER "timecards_propagate_show_day_rate" AFTER UPDATE OF "day_rate" ON
 
 ALTER TABLE ONLY "public"."av_roles"
     ADD CONSTRAINT "av_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id");
+
+
+--
+-- Name: booking_invites booking_invites_crew_member_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."booking_invites"
+    ADD CONSTRAINT "booking_invites_crew_member_id_fkey" FOREIGN KEY ("crew_member_id") REFERENCES "public"."crew_members"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: booking_invites booking_invites_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."booking_invites"
+    ADD CONSTRAINT "booking_invites_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id");
+
+
+--
+-- Name: booking_invites booking_invites_sent_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."booking_invites"
+    ADD CONSTRAINT "booking_invites_sent_by_fkey" FOREIGN KEY ("sent_by") REFERENCES "public"."profiles"("id");
+
+
+--
+-- Name: booking_invites booking_invites_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."booking_invites"
+    ADD CONSTRAINT "booking_invites_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: clock_links clock_links_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."clock_links"
+    ADD CONSTRAINT "clock_links_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."profiles"("id");
+
+
+--
+-- Name: clock_links clock_links_crew_member_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."clock_links"
+    ADD CONSTRAINT "clock_links_crew_member_id_fkey" FOREIGN KEY ("crew_member_id") REFERENCES "public"."crew_members"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: clock_links clock_links_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."clock_links"
+    ADD CONSTRAINT "clock_links_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id");
+
+
+--
+-- Name: clock_links clock_links_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."clock_links"
+    ADD CONSTRAINT "clock_links_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: crew_call_positions crew_call_positions_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."crew_call_positions"
+    ADD CONSTRAINT "crew_call_positions_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."profiles"("id");
+
+
+--
+-- Name: crew_call_positions crew_call_positions_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."crew_call_positions"
+    ADD CONSTRAINT "crew_call_positions_room_id_fkey" FOREIGN KEY ("room_id") REFERENCES "public"."rooms"("id") ON DELETE CASCADE;
 
 
 --
@@ -1325,6 +1909,30 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 --
+-- Name: punches punches_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."punches"
+    ADD CONSTRAINT "punches_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."profiles"("id");
+
+
+--
+-- Name: punches punches_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."punches"
+    ADD CONSTRAINT "punches_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: punches punches_source_link_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."punches"
+    ADD CONSTRAINT "punches_source_link_fkey" FOREIGN KEY ("source_link") REFERENCES "public"."clock_links"("id") ON DELETE SET NULL;
+
+
+--
 -- Name: punches punches_timecard_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1338,6 +1946,14 @@ ALTER TABLE ONLY "public"."punches"
 
 ALTER TABLE ONLY "public"."rate_cards"
     ADD CONSTRAINT "rate_cards_crew_member_id_fkey" FOREIGN KEY ("crew_member_id") REFERENCES "public"."crew_members"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: rooms rooms_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."rooms"
+    ADD CONSTRAINT "rooms_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
 
 
 --
@@ -1373,6 +1989,14 @@ ALTER TABLE ONLY "public"."show_assignments"
 
 
 --
+-- Name: shows shows_call_approved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."shows"
+    ADD CONSTRAINT "shows_call_approved_by_fkey" FOREIGN KEY ("call_approved_by") REFERENCES "public"."profiles"("id");
+
+
+--
 -- Name: shows shows_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1397,11 +2021,27 @@ ALTER TABLE ONLY "public"."shows"
 
 
 --
+-- Name: shows shows_scheduler_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."shows"
+    ADD CONSTRAINT "shows_scheduler_id_fkey" FOREIGN KEY ("scheduler_id") REFERENCES "public"."profiles"("id");
+
+
+--
 -- Name: subscriptions subscriptions_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY "public"."subscriptions"
     ADD CONSTRAINT "subscriptions_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: timecards timecards_call_position_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."timecards"
+    ADD CONSTRAINT "timecards_call_position_id_fkey" FOREIGN KEY ("call_position_id") REFERENCES "public"."crew_call_positions"("id") ON DELETE SET NULL;
 
 
 --
@@ -1418,6 +2058,14 @@ ALTER TABLE ONLY "public"."timecards"
 
 ALTER TABLE ONLY "public"."timecards"
     ADD CONSTRAINT "timecards_room_id_fkey" FOREIGN KEY ("room_id") REFERENCES "public"."rooms"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: timecards timecards_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."timecards"
+    ADD CONSTRAINT "timecards_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
 
 
 --
@@ -1477,6 +2125,20 @@ CREATE POLICY "Admins revoke member show access" ON "public"."show_assignments" 
 
 
 --
+-- Name: booking_invites Members see booking invites in their org; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Members see booking invites in their org" ON "public"."booking_invites" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+
+
+--
+-- Name: clock_links Members see clock links in their org; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Members see clock links in their org" ON "public"."clock_links" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+
+
+--
 -- Name: memberships Members see their org, admins see everyone; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1498,26 +2160,116 @@ CREATE POLICY "Org members can see their subscription" ON "public"."subscription
 
 
 --
+-- Name: booking_invites Timecard editors create booking invites; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors create booking invites" ON "public"."booking_invites" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+
+
+--
+-- Name: clock_links Timecard editors create clock links; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors create clock links" ON "public"."clock_links" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+
+
+--
+-- Name: punches Timecard editors create punches; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors create punches" ON "public"."punches" FOR INSERT WITH CHECK ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND (( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm") OR "public"."is_own_timecard"("timecard_id"))));
+
+
+--
+-- Name: timecards Timecard editors create timecards; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors create timecards" ON "public"."timecards" FOR INSERT WITH CHECK ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
+
+
+--
+-- Name: booking_invites Timecard editors delete booking invites; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors delete booking invites" ON "public"."booking_invites" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+
+
+--
+-- Name: clock_links Timecard editors delete clock links; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors delete clock links" ON "public"."clock_links" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+
+
+--
+-- Name: punches Timecard editors delete punches; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors delete punches" ON "public"."punches" FOR DELETE USING ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND (( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm") OR "public"."is_own_timecard"("timecard_id"))));
+
+
+--
+-- Name: timecards Timecard editors delete timecards; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors delete timecards" ON "public"."timecards" FOR DELETE USING ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
+
+
+--
+-- Name: booking_invites Timecard editors update booking invites; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors update booking invites" ON "public"."booking_invites" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+
+
+--
+-- Name: clock_links Timecard editors update clock links; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors update clock links" ON "public"."clock_links" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+
+
+--
+-- Name: punches Timecard editors update punches; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors update punches" ON "public"."punches" FOR UPDATE USING ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND (( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm") OR "public"."is_own_timecard"("timecard_id"))));
+
+
+--
+-- Name: timecards Timecard editors update timecards; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Timecard editors update timecards" ON "public"."timecards" FOR UPDATE USING ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
+
+
+--
 -- Name: shows Users can create shows if permitted; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can create shows if permitted" ON "public"."shows" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_create_shows'::"text")));
+CREATE POLICY "Users can create shows if permitted" ON "public"."shows" FOR INSERT WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_create_shows'::"text") AS "my_perm")));
 
 
 --
 -- Name: crew_members Users can manage crew if permitted; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can manage crew if permitted" ON "public"."crew_members" USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_crew_directory'::"text")));
+CREATE POLICY "Users can manage crew if permitted" ON "public"."crew_members" USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_crew_directory'::"text") AS "my_perm")));
 
 
 --
 -- Name: shows Users can update shows they can see; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can update shows they can see" ON "public"."shows" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text") AND ("public"."can_see_all_shows"() OR ("id" IN ( SELECT "show_assignments"."show_id"
+CREATE POLICY "Users can update shows they can see" ON "public"."shows" FOR UPDATE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm") AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("id" IN ( SELECT "show_assignments"."show_id"
    FROM "public"."show_assignments"
-  WHERE ("show_assignments"."profile_id" = "auth"."uid"()))) OR ("created_by" = "auth"."uid"())))) WITH CHECK (("organization_id" = "public"."my_organization_id"()));
+  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("created_by" = ( SELECT "auth"."uid"() AS "uid"))))) WITH CHECK (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
@@ -1528,12 +2280,11 @@ CREATE POLICY "Users can update their own profile" ON "public"."profiles" FOR UP
 
 
 --
--- Name: punches Users create punches for their org timecards; Type: POLICY; Schema: public; Owner: -
+-- Name: crew_call_positions Users create call positions for their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users create punches for their org timecards" ON "public"."punches" FOR INSERT WITH CHECK (("timecard_id" IN ( SELECT "t"."id"
-   FROM ((("public"."timecards" "t"
-     JOIN "public"."rooms" "r" ON (("r"."id" = "t"."room_id")))
+CREATE POLICY "Users create call positions for their org shows" ON "public"."crew_call_positions" FOR INSERT WITH CHECK (("room_id" IN ( SELECT "r"."id"
+   FROM (("public"."rooms" "r"
      JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
      JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
   WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
@@ -1552,10 +2303,8 @@ CREATE POLICY "Users create rate cards for their org crew" ON "public"."rate_car
 -- Name: rooms Users create rooms for their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users create rooms for their org shows" ON "public"."rooms" FOR INSERT WITH CHECK (("work_day_id" IN ( SELECT "wd"."id"
-   FROM ("public"."work_days" "wd"
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
+CREATE POLICY "Users create rooms for their org shows" ON "public"."rooms" FOR INSERT WITH CHECK (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
@@ -1568,32 +2317,19 @@ CREATE POLICY "Users create rulesets for their org shows" ON "public"."payroll_r
 
 
 --
--- Name: timecards Users create timecards for their org shows; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Users create timecards for their org shows" ON "public"."timecards" FOR INSERT WITH CHECK (("room_id" IN ( SELECT "r"."id"
-   FROM (("public"."rooms" "r"
-     JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
-
-
---
 -- Name: work_days Users create work days for their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Users create work days for their org shows" ON "public"."work_days" FOR INSERT WITH CHECK (("show_id" IN ( SELECT "shows"."id"
-   FROM "public"."shows"
-  WHERE ("shows"."organization_id" = "public"."my_organization_id"()))));
+   FROM "public"."shows")));
 
 
 --
--- Name: punches Users delete punches for their org timecards; Type: POLICY; Schema: public; Owner: -
+-- Name: crew_call_positions Users delete call positions for their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users delete punches for their org timecards" ON "public"."punches" FOR DELETE USING (("timecard_id" IN ( SELECT "t"."id"
-   FROM ((("public"."timecards" "t"
-     JOIN "public"."rooms" "r" ON (("r"."id" = "t"."room_id")))
+CREATE POLICY "Users delete call positions for their org shows" ON "public"."crew_call_positions" FOR DELETE USING (("room_id" IN ( SELECT "r"."id"
+   FROM (("public"."rooms" "r"
      JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
      JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
   WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
@@ -1609,17 +2345,6 @@ CREATE POLICY "Users delete rate cards for their org crew" ON "public"."rate_car
 
 
 --
--- Name: timecards Users delete timecards for their org shows; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Users delete timecards for their org shows" ON "public"."timecards" FOR DELETE USING (("room_id" IN ( SELECT "r"."id"
-   FROM (("public"."rooms" "r"
-     JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
-
-
---
 -- Name: av_roles Users manage roles in their org; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1627,10 +2352,18 @@ CREATE POLICY "Users manage roles in their org" ON "public"."av_roles" USING (("
 
 
 --
+-- Name: crew_call_positions Users see call positions for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users see call positions for their shows" ON "public"."crew_call_positions" FOR SELECT USING (("room_id" IN ( SELECT "rooms"."id"
+   FROM "public"."rooms")));
+
+
+--
 -- Name: crew_members Users see crew in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see crew in their org" ON "public"."crew_members" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "Users see crew in their org" ON "public"."crew_members" FOR SELECT USING (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
@@ -1655,8 +2388,8 @@ CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELEC
 -- Name: punches Users see punches for their timecards; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see punches for their timecards" ON "public"."punches" FOR SELECT USING (("timecard_id" IN ( SELECT "timecards"."id"
-   FROM "public"."timecards")));
+CREATE POLICY "Users see punches for their timecards" ON "public"."punches" FOR SELECT USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
@@ -1678,8 +2411,8 @@ CREATE POLICY "Users see roles in their org" ON "public"."av_roles" FOR SELECT U
 -- Name: rooms Users see rooms for their shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see rooms for their shows" ON "public"."rooms" FOR SELECT USING (("work_day_id" IN ( SELECT "work_days"."id"
-   FROM "public"."work_days")));
+CREATE POLICY "Users see rooms for their shows" ON "public"."rooms" FOR SELECT USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
@@ -1694,24 +2427,24 @@ CREATE POLICY "Users see rulesets for their shows" ON "public"."payroll_rulesets
 -- Name: shows Users see their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see their org shows" ON "public"."shows" FOR SELECT USING ((("organization_id" = "public"."my_organization_id"()) AND ("public"."can_see_all_shows"() OR ("id" IN ( SELECT "show_assignments"."show_id"
+CREATE POLICY "Users see their org shows" ON "public"."shows" FOR SELECT USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("id" IN ( SELECT "show_assignments"."show_id"
    FROM "public"."show_assignments"
-  WHERE ("show_assignments"."profile_id" = "auth"."uid"()))) OR ("created_by" = "auth"."uid"()))));
+  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("scheduler_id" = ( SELECT "auth"."uid"() AS "uid")))));
 
 
 --
 -- Name: show_assignments Users see their own assignments; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see their own assignments" ON "public"."show_assignments" FOR SELECT USING ((("organization_id" = "public"."my_organization_id"()) AND (("profile_id" = "auth"."uid"()) OR "public"."can_see_all_shows"())));
+CREATE POLICY "Users see their own assignments" ON "public"."show_assignments" FOR SELECT USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND (("profile_id" = ( SELECT "auth"."uid"() AS "uid")) OR ( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows"))));
 
 
 --
 -- Name: timecards Users see timecards for their shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see timecards for their shows" ON "public"."timecards" FOR SELECT USING (("room_id" IN ( SELECT "rooms"."id"
-   FROM "public"."rooms")));
+CREATE POLICY "Users see timecards for their shows" ON "public"."timecards" FOR SELECT USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
@@ -1723,12 +2456,20 @@ CREATE POLICY "Users see work days for their shows" ON "public"."work_days" FOR 
 
 
 --
--- Name: punches Users update punches for their org timecards; Type: POLICY; Schema: public; Owner: -
+-- Name: work_days Users set day type on their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users update punches for their org timecards" ON "public"."punches" FOR UPDATE USING (("timecard_id" IN ( SELECT "t"."id"
-   FROM ((("public"."timecards" "t"
-     JOIN "public"."rooms" "r" ON (("r"."id" = "t"."room_id")))
+CREATE POLICY "Users set day type on their org shows" ON "public"."work_days" FOR UPDATE USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"))) WITH CHECK (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
+
+
+--
+-- Name: crew_call_positions Users update call positions for their org shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users update call positions for their org shows" ON "public"."crew_call_positions" FOR UPDATE USING (("room_id" IN ( SELECT "r"."id"
+   FROM (("public"."rooms" "r"
      JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
      JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
   WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
@@ -1753,21 +2494,28 @@ CREATE POLICY "Users update rulesets for their org shows" ON "public"."payroll_r
 
 
 --
--- Name: timecards Users update timecards for their org shows; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Users update timecards for their org shows" ON "public"."timecards" FOR UPDATE USING (("room_id" IN ( SELECT "r"."id"
-   FROM (("public"."rooms" "r"
-     JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
-
-
---
 -- Name: av_roles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE "public"."av_roles" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: booking_invites; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."booking_invites" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: clock_links; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."clock_links" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: crew_call_positions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."crew_call_positions" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: crew_members; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1868,23 +2616,17 @@ ALTER TABLE "public"."rooms" ENABLE ROW LEVEL SECURITY;
 -- Name: rooms rooms_delete_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "rooms_delete_own_org" ON "public"."rooms" FOR DELETE USING (("work_day_id" IN ( SELECT "wd"."id"
-   FROM ("public"."work_days" "wd"
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
+CREATE POLICY "rooms_delete_own_org" ON "public"."rooms" FOR DELETE USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
 -- Name: rooms rooms_update_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "rooms_update_own_org" ON "public"."rooms" FOR UPDATE USING (("work_day_id" IN ( SELECT "wd"."id"
-   FROM ("public"."work_days" "wd"
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"())))) WITH CHECK (("work_day_id" IN ( SELECT "wd"."id"
-   FROM ("public"."work_days" "wd"
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
+CREATE POLICY "rooms_update_own_org" ON "public"."rooms" FOR UPDATE USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"))) WITH CHECK (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
@@ -2033,6 +2775,15 @@ GRANT ALL ON FUNCTION "public"."inherit_show_day_rate"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "is_own_timecard"("p_timecard_id" "uuid"); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") TO "service_role";
+
+
+--
 -- Name: FUNCTION "my_organization_id"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2078,12 +2829,57 @@ GRANT ALL ON FUNCTION "public"."set_active_organization"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "set_booking_invite_organization_id"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."set_booking_invite_organization_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_booking_invite_organization_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_booking_invite_organization_id"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "set_clock_link_organization_id"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."set_clock_link_organization_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_clock_link_organization_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_clock_link_organization_id"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "set_punch_show_id"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."set_punch_show_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_punch_show_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_punch_show_id"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "set_room_show_id"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."set_room_show_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_room_show_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_room_show_id"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "set_show_assignment_organization_id"(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION "public"."set_show_assignment_organization_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."set_show_assignment_organization_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."set_show_assignment_organization_id"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "set_timecard_show_id"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."set_timecard_show_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_timecard_show_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_timecard_show_id"() TO "service_role";
 
 
 --
@@ -2102,6 +2898,33 @@ GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "servic
 GRANT ALL ON TABLE "public"."av_roles" TO "anon";
 GRANT ALL ON TABLE "public"."av_roles" TO "authenticated";
 GRANT ALL ON TABLE "public"."av_roles" TO "service_role";
+
+
+--
+-- Name: TABLE "booking_invites"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."booking_invites" TO "anon";
+GRANT ALL ON TABLE "public"."booking_invites" TO "authenticated";
+GRANT ALL ON TABLE "public"."booking_invites" TO "service_role";
+
+
+--
+-- Name: TABLE "clock_links"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."clock_links" TO "anon";
+GRANT ALL ON TABLE "public"."clock_links" TO "authenticated";
+GRANT ALL ON TABLE "public"."clock_links" TO "service_role";
+
+
+--
+-- Name: TABLE "crew_call_positions"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."crew_call_positions" TO "anon";
+GRANT ALL ON TABLE "public"."crew_call_positions" TO "authenticated";
+GRANT ALL ON TABLE "public"."crew_call_positions" TO "service_role";
 
 
 --
@@ -2175,12 +2998,26 @@ GRANT SELECT,INSERT,UPDATE ON TABLE "public"."memberships" TO "authenticated";
 
 
 --
+-- Name: COLUMN "memberships"."can_manage_scheduling"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("can_manage_scheduling"),UPDATE("can_manage_scheduling") ON TABLE "public"."memberships" TO "authenticated";
+
+
+--
 -- Name: TABLE "organizations"; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE "public"."organizations" TO "anon";
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."organizations" TO "authenticated";
 GRANT ALL ON TABLE "public"."organizations" TO "service_role";
+
+
+--
+-- Name: COLUMN "organizations"."scheduling_enabled"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("scheduling_enabled") ON TABLE "public"."organizations" TO "authenticated";
 
 
 --
@@ -2348,12 +3185,54 @@ GRANT SELECT("updated_at") ON TABLE "public"."timecards" TO "authenticated";
 
 
 --
+-- Name: COLUMN "timecards"."call_position_id"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("call_position_id"),INSERT("call_position_id"),UPDATE("call_position_id") ON TABLE "public"."timecards" TO "authenticated";
+
+
+--
+-- Name: COLUMN "timecards"."booking_status"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("booking_status"),INSERT("booking_status"),UPDATE("booking_status") ON TABLE "public"."timecards" TO "authenticated";
+
+
+--
+-- Name: COLUMN "timecards"."booking_invited_at"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("booking_invited_at"),INSERT("booking_invited_at"),UPDATE("booking_invited_at") ON TABLE "public"."timecards" TO "authenticated";
+
+
+--
+-- Name: COLUMN "timecards"."booking_responded_at"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("booking_responded_at"),INSERT("booking_responded_at"),UPDATE("booking_responded_at") ON TABLE "public"."timecards" TO "authenticated";
+
+
+--
+-- Name: COLUMN "timecards"."show_id"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("show_id") ON TABLE "public"."timecards" TO "authenticated";
+
+
+--
 -- Name: TABLE "work_days"; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE "public"."work_days" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."work_days" TO "authenticated";
 GRANT ALL ON TABLE "public"."work_days" TO "service_role";
+
+
+--
+-- Name: COLUMN "work_days"."day_type"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE("day_type") ON TABLE "public"."work_days" TO "authenticated";
 
 
 --
@@ -2428,5 +3307,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict APgubXHqhJTHcv2YpgWvAWyuGIKNhJfdze6XCKTJLfDcwLPd5BKAsItcXglusuy
+\unrestrict HdoFGxUhlvq6OmUh5IUMCGkryuCGrUso8cCdf9LS71ESQj8JCYbhXm1eOGcmbj7
 

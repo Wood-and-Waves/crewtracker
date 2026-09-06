@@ -91,4 +91,5 @@ grant INSERT("call_position_id"), SELECT("call_position_id"), UPDATE("call_posit
 grant INSERT("booking_status"), SELECT("booking_status"), UPDATE("booking_status") on table "public"."timecards" to authenticated;
 grant INSERT("booking_invited_at"), SELECT("booking_invited_at"), UPDATE("booking_invited_at") on table "public"."timecards" to authenticated;
 grant INSERT("booking_responded_at"), SELECT("booking_responded_at"), UPDATE("booking_responded_at") on table "public"."timecards" to authenticated;
+grant SELECT("show_id") on table "public"."timecards" to authenticated;
 grant UPDATE("day_type") on table "public"."work_days" to authenticated;

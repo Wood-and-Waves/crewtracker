@@ -267,7 +267,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 256 assertions as of 2026-09-05.
+                  helper, no framework. 296 assertions as of 2026-09-06.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -300,8 +300,8 @@ scripts/
                        BEFORE triggers; every policy under a show becomes one level deep.
                        WRITES EXISTING ROWS (backfill) — backup first, then db:grants AND
                        db:schema after.
-                       0018–0022 are on BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0022 2026-09-06). **0023 is on DEV only** until its cutover.
+                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0023 2026-09-06). Nothing is dev-only right now.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -367,8 +367,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   while tracing the punch guards; recorded here because they were previously only in a scratch
   plan file). None is exploitable by a stranger; all are internal-permission or
   denial-of-service shaped:
-  - ~~The punch write policies check no permission at all.~~ **FIXED on DEV by migration 0019
-    (2026-09-05); still open in PRODUCTION until the cutover.** The three write policies now
+  - ~~The punch write policies check no permission at all.~~ **FIXED by migration 0019
+    (on production since 2026-09-05).** The three write policies now
     delegate scope to `timecards` — inheriting the assignment-scoped visibility the old
     org-only join skipped — and require `can_edit_timecards`, OR `is_own_timecard()`, a
     placeholder that returns false until crew logins exist so the rule is already the right
@@ -376,8 +376,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
     themselves proven by temporarily re-adding the old policy and watching them fail
     (Postgres ORs policies for a command, which is why 0019 drops the old ones rather than
     leaving them alongside).
-  - ~~`timecards` write policies have the SAME hole.~~ **FIXED on DEV by migration 0020
-    (2026-09-05); still open in PRODUCTION until the cutover.** Same shape as 0019 — scope
+  - ~~`timecards` write policies have the SAME hole.~~ **FIXED by migration 0020
+    (on production since 2026-09-05).** Same shape as 0019 — scope
     delegated to `rooms`, gated on `can_edit_timecards` — but with NO `is_own_timecard` door,
     because staffing is a PM's decision and a crew member should never create or delete their
     own booking. The trap here is that **`add_show_day` is not SECURITY DEFINER**, so it runs
@@ -397,10 +397,10 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   were handed but did not create and are not assigned to. Found by the 2026-09-06 speed review;
   pre-existing; the view is SECURITY DEFINER so it carries its own copy of the visibility rule
   and must be updated by hand when the shows policy changes.
-- **`scripts/sql/schema.sql` is stale — dumped 2026-07-28, before 0011–0023.** It shows the
-  pre-0013 shows policy, no 0018 columns, and the old org-joined write policies. Regenerate
-  with `npm run db:schema` right after 0023 reaches production (it reads production); until
-  then author any policy change from the migrations or `pg_policies`, never from the dump.
+- ~~`scripts/sql/schema.sql` is stale.~~ **Regenerated from production 2026-09-06, right after
+  0023.** It now carries every migration through 0023. Still author policy changes from the
+  migrations or `pg_policies` rather than the dump — a dump is a snapshot, and it goes stale
+  again the moment the next migration runs without `npm run db:schema` after it.
 - ~~Inviting people is manual and loses invitations.~~ **DONE 2026-07-27/28.** Invitations are emailed on creation from `noreply@contact.crewtracker.app` (`lib/inviteEmail.ts` + `app/api/invites/send/route.ts`), carrying the inviter's name and the company in subject and body. `PendingInvitesList.tsx` on the Team screen lets an org admin see every pending invite, copy the link again, change the role, resend the email, or cancel it — cancelling kills the link immediately. Authorization is the existing RLS policy: the invite is read through the caller's session, so another org's invitation returns 404.
 
 - ~~Per-control UI disabling on a locked show.~~ **DONE 2026-07-27.** A `locked` flag threads into every control that writes `timecards` or `punches` — punch cells, travel/half-day toggles, reset, batch punching, staffing, copy crew, Edit crew — in both the desktop and mobile trackers, each with a title explaining why. Room rename/delete and Add Day are deliberately left enabled: the lock covers those two tables only, so disabling them would misrepresent it.
@@ -694,7 +694,9 @@ act that ships to customers, and any pending migrations go through the steps abo
   any new policy in the wrapped, one-level form; measure with
   `scripts/sql/checks/rls-cost.sql` (note its nested query touches eight tables, so it
   counts one `shows` scan per table — the app's flat `.in(ids)` reads pay for one); and read
-  policy text from `pg_policies` or the migrations, never from `schema.sql`.
+  policy text from `pg_policies` or the migrations, never from `schema.sql`. 0023 reached
+  production 2026-09-06 (470 punches backfilled, 0 null, 0 mismatched; the app's punch read
+  went from ~14 ms to ~1.5 ms on dev).
 
 - **`npm run build` and `next dev` share `.next`, and building while the dev server runs makes
   every route 404.** The production build overwrites the dev manifests, so `next dev` then serves
