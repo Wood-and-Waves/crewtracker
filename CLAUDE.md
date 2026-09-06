@@ -557,7 +557,9 @@ must do the same; `roundingMinutes` is a REQUIRED prop on the components that re
 precisely so the compiler names every call site instead of a default silently hiding one. Both PM
 modals say the rule out loud ("Recorded in 15-minute steps, always rounded up") and set the time
 input's `step`, because save() moves the time somebody just typed and a PM who enters 8:07 and
-finds 8:15 on the row deserves to have been told.
+finds 8:15 on the row deserves to have been told. **The pre-filled "now" is rounded too**
+(2026-09-06): both modals used to open on the raw clock (5:02) and only round at Save, which
+Dan read as the rounding setting not working. `step` never touches the initial value.
 
 Other things that are load-bearing and were each verified:
 - **The show's timezone decides "today"**, server-side, which is what stops a bookmarked link

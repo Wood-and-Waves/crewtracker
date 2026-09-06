@@ -45,11 +45,14 @@ export default function BatchTimeModal({
   // Default the time to the current wall-clock time in the show's timezone
   // (live punching), keeping the DATE on the show-day being viewed — never the
   // browser's real "today". Mirrors TimeEntryModal.
+  // Pre-filled ALREADY on the company's grid, for the same reason as
+  // TimeEntryModal: what the dialog shows is what save() will write.
   const nowInTz = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date())
-  const [dateStr, setDateStr] = useState(dayDate)
-  const [timeStr, setTimeStr] = useState(nowInTz)
+  const nowOnGrid = roundWallTime(nowInTz, roundingMinutes)
+  const [dateStr, setDateStr] = useState(addDays(dayDate, nowOnGrid.dayOffset))
+  const [timeStr, setTimeStr] = useState(nowOnGrid.timeStr)
 
   function initialChecked(tc: BatchTimecard): boolean {
     return mode === 'change'

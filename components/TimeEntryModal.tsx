@@ -61,12 +61,20 @@ export default function TimeEntryModal({
   // conversion. Taking the date from UTC and the time from the browser's clock
   // (as this used to) makes them disagree for any punch after ~7 PM Central,
   // so re-saving an untouched form moved the punch forward a full day.
+  //
+  // The pre-filled "now" is ALREADY on the company's grid. save() rounds
+  // whatever is in the field anyway, but showing 5:02 and then writing 5:15
+  // read as "the rounding setting does not work" (Dan, 2026-09-06). What the
+  // dialog shows is what will be saved. dayOffset is honoured here too: 23:58
+  // on a quarter-hour grid pre-fills as 00:00 on the NEXT date, which is also
+  // what save() would have written.
   const nowInTz = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date())
+  const nowOnGrid = roundWallTime(nowInTz, roundingMinutes)
   const initial = existingTime
     ? utcToZonedParts(new Date(existingTime), timezone)
-    : { dateStr: dayDate, timeStr: nowInTz }
+    : { dateStr: addDays(dayDate, nowOnGrid.dayOffset), timeStr: nowOnGrid.timeStr }
   const [dateStr, setDateStr] = useState(initial.dateStr)
   const [timeStr, setTimeStr] = useState(initial.timeStr)
 
