@@ -19,6 +19,7 @@ revoke all on table "public"."payroll_rulesets" from anon, authenticated;
 revoke all on table "public"."profiles" from anon, authenticated;
 revoke all on table "public"."punches" from anon, authenticated;
 revoke all on table "public"."rate_cards" from anon, authenticated;
+revoke all on table "public"."rate_limits" from anon, authenticated;
 revoke all on table "public"."rooms" from anon, authenticated;
 revoke all on table "public"."schema_migrations" from anon, authenticated;
 revoke all on table "public"."show_assignments" from anon, authenticated;
@@ -54,6 +55,8 @@ grant SELECT, UPDATE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public".
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."punches" to anon;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."punches" to authenticated;
 grant INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."rate_cards" to authenticated;
+grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."rate_limits" to anon;
+grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."rate_limits" to authenticated;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."rooms" to anon;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."rooms" to authenticated;
 grant INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN on table "public"."show_assignments" to anon;

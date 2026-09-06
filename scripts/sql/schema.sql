@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict HdoFGxUhlvq6OmUh5IUMCGkryuCGrUso8cCdf9LS71ESQj8JCYbhXm1eOGcmbj7
+\restrict BAuDiego6A47kA1e7xFZxBtswLix35D65WzqXAZ3a1033SydRI1n7WOnBakxof4
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -520,6 +520,34 @@ $$;
 
 
 --
+-- Name: rate_limit_hit("text", integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."rate_limit_hit"("p_key" "text", "p_limit" integer, "p_window_seconds" integer) RETURNS boolean
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_count integer;
+begin
+  insert into rate_limits as r (key, window_start, count)
+  values (p_key, now(), 1)
+  on conflict (key) do update
+    set count = case
+                  when r.window_start < now() - make_interval(secs => p_window_seconds) then 1
+                  else r.count + 1
+                end,
+        window_start = case
+                  when r.window_start < now() - make_interval(secs => p_window_seconds) then now()
+                  else r.window_start
+                end
+  returning count into v_count;
+  return v_count <= p_limit;
+end;
+$$;
+
+
+--
 -- Name: rls_auto_enable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1000,6 +1028,19 @@ COMMENT ON COLUMN "public"."punches"."created_by" IS 'The signed-in profile that
 
 
 --
+-- Name: rate_limits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."rate_limits" (
+    "key" "text" NOT NULL,
+    "window_start" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "count" integer DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE ONLY "public"."rate_limits" FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: rooms; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1302,6 +1343,14 @@ ALTER TABLE ONLY "public"."punches"
 
 ALTER TABLE ONLY "public"."rate_cards"
     ADD CONSTRAINT "rate_cards_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: rate_limits rate_limits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."rate_limits"
+    ADD CONSTRAINT "rate_limits_pkey" PRIMARY KEY ("key");
 
 
 --
@@ -2080,97 +2129,97 @@ ALTER TABLE ONLY "public"."work_days"
 -- Name: memberships Admins add members; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins add members" ON "public"."memberships" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
+CREATE POLICY "Admins add members" ON "public"."memberships" FOR INSERT WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm")));
 
 
 --
 -- Name: show_assignments Admins assign members to shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins assign members to shows" ON "public"."show_assignments" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text") AND (EXISTS ( SELECT 1
+CREATE POLICY "Admins assign members to shows" ON "public"."show_assignments" FOR INSERT WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm") AND (EXISTS ( SELECT 1
    FROM "public"."memberships" "m"
-  WHERE (("m"."profile_id" = "show_assignments"."profile_id") AND ("m"."organization_id" = "public"."my_organization_id"()))))));
+  WHERE (("m"."profile_id" = "show_assignments"."profile_id") AND ("m"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")))))));
 
 
 --
 -- Name: invitations Admins can manage invitations; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can manage invitations" ON "public"."invitations" USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
+CREATE POLICY "Admins can manage invitations" ON "public"."invitations" USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm")));
 
 
 --
 -- Name: profiles Admins can manage org member permissions; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins can manage org member permissions" ON "public"."profiles" FOR UPDATE USING (("public"."my_perm"('can_manage_users'::"text") AND (EXISTS ( SELECT 1
+CREATE POLICY "Admins can manage org member permissions" ON "public"."profiles" FOR UPDATE USING ((( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm") AND (EXISTS ( SELECT 1
    FROM "public"."memberships" "m"
-  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = "public"."my_organization_id"())))))) WITH CHECK (("public"."my_perm"('can_manage_users'::"text") AND (EXISTS ( SELECT 1
+  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id"))))))) WITH CHECK ((( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm") AND (EXISTS ( SELECT 1
    FROM "public"."memberships" "m"
-  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = "public"."my_organization_id"()))))));
+  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")))))));
 
 
 --
 -- Name: memberships Admins change members; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins change members" ON "public"."memberships" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text"))) WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
+CREATE POLICY "Admins change members" ON "public"."memberships" FOR UPDATE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm"))) WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm")));
 
 
 --
 -- Name: show_assignments Admins revoke member show access; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Admins revoke member show access" ON "public"."show_assignments" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
+CREATE POLICY "Admins revoke member show access" ON "public"."show_assignments" FOR DELETE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm")));
 
 
 --
 -- Name: booking_invites Members see booking invites in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Members see booking invites in their org" ON "public"."booking_invites" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "Members see booking invites in their org" ON "public"."booking_invites" FOR SELECT USING (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
 -- Name: clock_links Members see clock links in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Members see clock links in their org" ON "public"."clock_links" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "Members see clock links in their org" ON "public"."clock_links" FOR SELECT USING (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
 -- Name: memberships Members see their org, admins see everyone; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Members see their org, admins see everyone" ON "public"."memberships" FOR SELECT USING ((("profile_id" = "auth"."uid"()) OR (("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text"))));
+CREATE POLICY "Members see their org, admins see everyone" ON "public"."memberships" FOR SELECT USING ((("profile_id" = ( SELECT "auth"."uid"() AS "uid")) OR (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm"))));
 
 
 --
 -- Name: subscriptions Only admins can update subscription; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Only admins can update subscription" ON "public"."subscriptions" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_billing'::"text")));
+CREATE POLICY "Only admins can update subscription" ON "public"."subscriptions" FOR UPDATE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_billing'::"text") AS "my_perm")));
 
 
 --
 -- Name: subscriptions Org members can see their subscription; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Org members can see their subscription" ON "public"."subscriptions" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "Org members can see their subscription" ON "public"."subscriptions" FOR SELECT USING (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
 -- Name: booking_invites Timecard editors create booking invites; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Timecard editors create booking invites" ON "public"."booking_invites" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+CREATE POLICY "Timecard editors create booking invites" ON "public"."booking_invites" FOR INSERT WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
 
 
 --
 -- Name: clock_links Timecard editors create clock links; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Timecard editors create clock links" ON "public"."clock_links" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+CREATE POLICY "Timecard editors create clock links" ON "public"."clock_links" FOR INSERT WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
 
 
 --
@@ -2193,14 +2242,14 @@ CREATE POLICY "Timecard editors create timecards" ON "public"."timecards" FOR IN
 -- Name: booking_invites Timecard editors delete booking invites; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Timecard editors delete booking invites" ON "public"."booking_invites" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+CREATE POLICY "Timecard editors delete booking invites" ON "public"."booking_invites" FOR DELETE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
 
 
 --
 -- Name: clock_links Timecard editors delete clock links; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Timecard editors delete clock links" ON "public"."clock_links" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+CREATE POLICY "Timecard editors delete clock links" ON "public"."clock_links" FOR DELETE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
 
 
 --
@@ -2223,14 +2272,14 @@ CREATE POLICY "Timecard editors delete timecards" ON "public"."timecards" FOR DE
 -- Name: booking_invites Timecard editors update booking invites; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Timecard editors update booking invites" ON "public"."booking_invites" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+CREATE POLICY "Timecard editors update booking invites" ON "public"."booking_invites" FOR UPDATE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
 
 
 --
 -- Name: clock_links Timecard editors update clock links; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Timecard editors update clock links" ON "public"."clock_links" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_edit_timecards'::"text")));
+CREATE POLICY "Timecard editors update clock links" ON "public"."clock_links" FOR UPDATE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
 
 
 --
@@ -2276,18 +2325,15 @@ CREATE POLICY "Users can update shows they can see" ON "public"."shows" FOR UPDA
 -- Name: profiles Users can update their own profile; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users can update their own profile" ON "public"."profiles" FOR UPDATE USING (("id" = "auth"."uid"()));
+CREATE POLICY "Users can update their own profile" ON "public"."profiles" FOR UPDATE USING (("id" = ( SELECT "auth"."uid"() AS "uid")));
 
 
 --
 -- Name: crew_call_positions Users create call positions for their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users create call positions for their org shows" ON "public"."crew_call_positions" FOR INSERT WITH CHECK (("room_id" IN ( SELECT "r"."id"
-   FROM (("public"."rooms" "r"
-     JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
+CREATE POLICY "Users create call positions for their org shows" ON "public"."crew_call_positions" FOR INSERT WITH CHECK (("room_id" IN ( SELECT "rooms"."id"
+   FROM "public"."rooms")));
 
 
 --
@@ -2295,8 +2341,7 @@ CREATE POLICY "Users create call positions for their org shows" ON "public"."cre
 --
 
 CREATE POLICY "Users create rate cards for their org crew" ON "public"."rate_cards" FOR INSERT WITH CHECK (("crew_member_id" IN ( SELECT "crew_members"."id"
-   FROM "public"."crew_members"
-  WHERE ("crew_members"."organization_id" = "public"."my_organization_id"()))));
+   FROM "public"."crew_members")));
 
 
 --
@@ -2312,8 +2357,7 @@ CREATE POLICY "Users create rooms for their org shows" ON "public"."rooms" FOR I
 --
 
 CREATE POLICY "Users create rulesets for their org shows" ON "public"."payroll_rulesets" FOR INSERT WITH CHECK (("show_id" IN ( SELECT "shows"."id"
-   FROM "public"."shows"
-  WHERE ("shows"."organization_id" = "public"."my_organization_id"()))));
+   FROM "public"."shows")));
 
 
 --
@@ -2328,11 +2372,8 @@ CREATE POLICY "Users create work days for their org shows" ON "public"."work_day
 -- Name: crew_call_positions Users delete call positions for their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users delete call positions for their org shows" ON "public"."crew_call_positions" FOR DELETE USING (("room_id" IN ( SELECT "r"."id"
-   FROM (("public"."rooms" "r"
-     JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
+CREATE POLICY "Users delete call positions for their org shows" ON "public"."crew_call_positions" FOR DELETE USING (("room_id" IN ( SELECT "rooms"."id"
+   FROM "public"."rooms")));
 
 
 --
@@ -2340,15 +2381,14 @@ CREATE POLICY "Users delete call positions for their org shows" ON "public"."cre
 --
 
 CREATE POLICY "Users delete rate cards for their org crew" ON "public"."rate_cards" FOR DELETE USING (("crew_member_id" IN ( SELECT "crew_members"."id"
-   FROM "public"."crew_members"
-  WHERE ("crew_members"."organization_id" = "public"."my_organization_id"()))));
+   FROM "public"."crew_members")));
 
 
 --
 -- Name: av_roles Users manage roles in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users manage roles in their org" ON "public"."av_roles" USING (("organization_id" = "public"."my_organization_id"())) WITH CHECK (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "Users manage roles in their org" ON "public"."av_roles" USING (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id"))) WITH CHECK (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
@@ -2372,16 +2412,16 @@ CREATE POLICY "Users see crew in their org" ON "public"."crew_members" FOR SELEC
 
 CREATE POLICY "Users see organizations they belong to" ON "public"."organizations" FOR SELECT USING ((EXISTS ( SELECT 1
    FROM "public"."memberships" "m"
-  WHERE (("m"."profile_id" = "auth"."uid"()) AND ("m"."organization_id" = "organizations"."id") AND ("m"."deactivated_at" IS NULL)))));
+  WHERE (("m"."profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND ("m"."organization_id" = "organizations"."id") AND ("m"."deactivated_at" IS NULL)))));
 
 
 --
 -- Name: profiles Users see profiles in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELECT USING ((("id" = "auth"."uid"()) OR (EXISTS ( SELECT 1
+CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELECT USING ((("id" = ( SELECT "auth"."uid"() AS "uid")) OR (EXISTS ( SELECT 1
    FROM "public"."memberships" "m"
-  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = "public"."my_organization_id"()))))));
+  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")))))));
 
 
 --
@@ -2404,7 +2444,7 @@ CREATE POLICY "Users see rate cards for their org crew" ON "public"."rate_cards"
 -- Name: av_roles Users see roles in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see roles in their org" ON "public"."av_roles" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "Users see roles in their org" ON "public"."av_roles" FOR SELECT USING (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
@@ -2468,11 +2508,8 @@ CREATE POLICY "Users set day type on their org shows" ON "public"."work_days" FO
 -- Name: crew_call_positions Users update call positions for their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users update call positions for their org shows" ON "public"."crew_call_positions" FOR UPDATE USING (("room_id" IN ( SELECT "r"."id"
-   FROM (("public"."rooms" "r"
-     JOIN "public"."work_days" "wd" ON (("wd"."id" = "r"."work_day_id")))
-     JOIN "public"."shows" "s" ON (("s"."id" = "wd"."show_id")))
-  WHERE ("s"."organization_id" = "public"."my_organization_id"()))));
+CREATE POLICY "Users update call positions for their org shows" ON "public"."crew_call_positions" FOR UPDATE USING (("room_id" IN ( SELECT "rooms"."id"
+   FROM "public"."rooms")));
 
 
 --
@@ -2480,8 +2517,7 @@ CREATE POLICY "Users update call positions for their org shows" ON "public"."cre
 --
 
 CREATE POLICY "Users update rate cards for their org crew" ON "public"."rate_cards" FOR UPDATE USING (("crew_member_id" IN ( SELECT "crew_members"."id"
-   FROM "public"."crew_members"
-  WHERE ("crew_members"."organization_id" = "public"."my_organization_id"()))));
+   FROM "public"."crew_members")));
 
 
 --
@@ -2489,8 +2525,7 @@ CREATE POLICY "Users update rate cards for their org crew" ON "public"."rate_car
 --
 
 CREATE POLICY "Users update rulesets for their org shows" ON "public"."payroll_rulesets" FOR UPDATE USING (("show_id" IN ( SELECT "shows"."id"
-   FROM "public"."shows"
-  WHERE ("shows"."organization_id" = "public"."my_organization_id"()))));
+   FROM "public"."shows")));
 
 
 --
@@ -2539,7 +2574,7 @@ ALTER TABLE "public"."memberships" ENABLE ROW LEVEL SECURITY;
 -- Name: organizations org_admins_update_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "org_admins_update_own_org" ON "public"."organizations" FOR UPDATE USING ((("id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text"))) WITH CHECK ((("id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_users'::"text")));
+CREATE POLICY "org_admins_update_own_org" ON "public"."organizations" FOR UPDATE USING ((("id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm"))) WITH CHECK ((("id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_users'::"text") AS "my_perm")));
 
 
 --
@@ -2564,28 +2599,28 @@ ALTER TABLE "public"."payroll_rulesets" ENABLE ROW LEVEL SECURITY;
 -- Name: payroll_presets presets_delete_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "presets_delete_own_org" ON "public"."payroll_presets" FOR DELETE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text")));
+CREATE POLICY "presets_delete_own_org" ON "public"."payroll_presets" FOR DELETE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_rulesets'::"text") AS "my_perm")));
 
 
 --
 -- Name: payroll_presets presets_insert_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "presets_insert_own_org" ON "public"."payroll_presets" FOR INSERT WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text")));
+CREATE POLICY "presets_insert_own_org" ON "public"."payroll_presets" FOR INSERT WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_rulesets'::"text") AS "my_perm")));
 
 
 --
 -- Name: payroll_presets presets_select_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "presets_select_own_org" ON "public"."payroll_presets" FOR SELECT USING (("organization_id" = "public"."my_organization_id"()));
+CREATE POLICY "presets_select_own_org" ON "public"."payroll_presets" FOR SELECT USING (("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")));
 
 
 --
 -- Name: payroll_presets presets_update_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "presets_update_own_org" ON "public"."payroll_presets" FOR UPDATE USING ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text"))) WITH CHECK ((("organization_id" = "public"."my_organization_id"()) AND "public"."my_perm"('can_manage_rulesets'::"text")));
+CREATE POLICY "presets_update_own_org" ON "public"."payroll_presets" FOR UPDATE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_rulesets'::"text") AS "my_perm"))) WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_manage_rulesets'::"text") AS "my_perm")));
 
 
 --
@@ -2605,6 +2640,12 @@ ALTER TABLE "public"."punches" ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE "public"."rate_cards" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rate_limits; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."rate_limits" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: rooms; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2808,6 +2849,14 @@ GRANT ALL ON FUNCTION "public"."my_perm"("p" "text") TO "service_role";
 GRANT ALL ON FUNCTION "public"."propagate_show_day_rate"() TO "anon";
 GRANT ALL ON FUNCTION "public"."propagate_show_day_rate"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."propagate_show_day_rate"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "rate_limit_hit"("p_key" "text", "p_limit" integer, "p_window_seconds" integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION "public"."rate_limit_hit"("p_key" "text", "p_limit" integer, "p_window_seconds" integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."rate_limit_hit"("p_key" "text", "p_limit" integer, "p_window_seconds" integer) TO "service_role";
 
 
 --
@@ -3054,6 +3103,15 @@ GRANT ALL ON TABLE "public"."profiles" TO "service_role";
 GRANT ALL ON TABLE "public"."punches" TO "anon";
 GRANT ALL ON TABLE "public"."punches" TO "authenticated";
 GRANT ALL ON TABLE "public"."punches" TO "service_role";
+
+
+--
+-- Name: TABLE "rate_limits"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."rate_limits" TO "anon";
+GRANT ALL ON TABLE "public"."rate_limits" TO "authenticated";
+GRANT ALL ON TABLE "public"."rate_limits" TO "service_role";
 
 
 --
@@ -3307,5 +3365,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict HdoFGxUhlvq6OmUh5IUMCGkryuCGrUso8cCdf9LS71ESQj8JCYbhXm1eOGcmbj7
+\unrestrict BAuDiego6A47kA1e7xFZxBtswLix35D65WzqXAZ3a1033SydRI1n7WOnBakxof4
 
