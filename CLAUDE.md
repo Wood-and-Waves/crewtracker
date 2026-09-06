@@ -306,8 +306,8 @@ scripts/
                        positions/rulesets/rate-card write rules one level deep
                        · 0025 rate_limits table + rate_limit_hit() for the public routes
                        · 0026 timecard_day_rates learns the scheduler_id arm
-                       0018–0025 are on BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0025 2026-09-06). **0026 is on DEV only** until its cutover.
+                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0026 2026-09-06). Nothing is dev-only right now.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A

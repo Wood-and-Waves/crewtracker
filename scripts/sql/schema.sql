@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict BAuDiego6A47kA1e7xFZxBtswLix35D65WzqXAZ3a1033SydRI1n7WOnBakxof4
+\restrict 07gZ3SROLs8hppKDQYm816C12Lklq34m5grik9oFWeutE6x0pbIn0Nwa8mihSX3
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -1188,9 +1188,9 @@ CREATE VIEW "public"."timecard_day_rates" WITH ("security_invoker"='false') AS
      JOIN "public"."rooms" "r" ON (("r"."id" = "t"."room_id")))
      JOIN "public"."work_days" "w" ON (("w"."id" = "r"."work_day_id")))
      JOIN "public"."shows" "s" ON (("s"."id" = "w"."show_id")))
-  WHERE (("s"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_view_pay_rates'::"text") AS "my_perm") AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR (EXISTS ( SELECT 1
+  WHERE (("s"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_view_pay_rates'::"text") AS "my_perm") AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR (EXISTS ( SELECT 1
            FROM "public"."show_assignments" "sa"
-          WHERE (("sa"."show_id" = "s"."id") AND ("sa"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))))));
+          WHERE (("sa"."show_id" = "s"."id") AND ("sa"."profile_id" = ( SELECT "auth"."uid"() AS "uid"))))) OR ("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("s"."scheduler_id" = ( SELECT "auth"."uid"() AS "uid"))));
 
 
 --
@@ -3365,5 +3365,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict BAuDiego6A47kA1e7xFZxBtswLix35D65WzqXAZ3a1033SydRI1n7WOnBakxof4
+\unrestrict 07gZ3SROLs8hppKDQYm816C12Lklq34m5grik9oFWeutE6x0pbIn0Nwa8mihSX3
 
