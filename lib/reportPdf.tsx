@@ -292,6 +292,26 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
                   const p = (type: string) =>
                     punches.find((pp: any) => pp.timecard_id === rawTc.id && pp.punch_type === type)?.punched_at
 
+                  if (rawTc.absence) {
+                    // Booked, did not work (0027). Hours are nil by
+                    // definition; the pay (a cancellation fee, or nothing)
+                    // is already in the person's total.
+                    return (
+                      <View key={rawTc.id} style={styles.entryBox}>
+                        <View style={styles.entryRow}>
+                          <Text style={styles.entryText}>
+                            {dateLabel(wd?.date)} — {rawTc.absence === 'cancelled' ? 'Cancelled' : 'No-show'}
+                          </Text>
+                          <Text style={styles.mealText}>
+                            {rawTc.absence === 'cancelled' && showEntryRate
+                              ? money(totalPay(toTc(rawTc), allTimecards, ruleset, roundingMinutes))
+                              : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    )
+                  }
+
                   if (rawTc.is_travel_day) {
                     return (
                       <View key={rawTc.id} style={styles.entryBox}>

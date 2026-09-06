@@ -36,6 +36,8 @@ export type TimecardRowMaybeRate = {
   travel_in_day: boolean
   travel_out_day: boolean
   pay_as_half_day: boolean
+  /** no_show | cancelled | null — see lib/payroll.ts Absence. */
+  absence?: 'no_show' | 'cancelled' | null
   day_rate?: number | null
   /** Optional because a few call sites select a deliberately narrower list. */
   booking_status?: BookingStatus
@@ -55,6 +57,7 @@ export const TIMECARD_FIELDS_NO_RATE = [
   'travel_in_day',
   'travel_out_day',
   'pay_as_half_day',
+  'absence',
   'booking_status',
 ] as const
 

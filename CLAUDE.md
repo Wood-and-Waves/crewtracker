@@ -269,7 +269,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 302 assertions as of 2026-09-06.
+                  helper, no framework. 310 assertions as of 2026-09-06.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -306,8 +306,10 @@ scripts/
                        positions/rulesets/rate-card write rules one level deep
                        · 0025 rate_limits table + rate_limit_hit() for the public routes
                        · 0026 timecard_day_rates learns the scheduler_id arm
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0026 2026-09-06). Nothing is dev-only right now.
+                       · 0027 timecards.absence (no_show|cancelled) + cancellation_pay_percent
+                       on payroll_rulesets/payroll_presets; column grant on timecards
+                       0018–0026 are on BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0026 2026-09-06). **0027 is on DEV only** until its cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -327,7 +329,7 @@ scripts/
 - `payroll_presets` — org-level named rule sets (one flagged `is_default`), **copied** into a show's `payroll_rulesets` at creation. Never a live link — a live link would retroactively rewrite closed shows. Writes gated on `can_manage_rulesets`.
 - `work_days` — id, show_id, date, day_number
 - `rooms` — id, work_day_id, name (scoped to a day, not persistent across the show). Has full SELECT/INSERT/UPDATE/DELETE policies (UPDATE/DELETE added when room rename/delete UI was built).
-- `timecards` — id, room_id, crew_member_id, crew_member_name, role, day_rate, is_travel_day, travel_in_day, travel_out_day, pay_as_half_day. Partial unique index on `(room_id, crew_member_id) where crew_member_id is not null`. Four triggers: the finalized-show write block, and the two that keep `day_rate` show-wide (see Payroll business logic).
+- `timecards` — id, room_id, crew_member_id, crew_member_name, role, day_rate, is_travel_day, travel_in_day, travel_out_day, pay_as_half_day, `absence` (`no_show|cancelled|null`, 0027), `show_id` (0023, trigger-derived). Partial unique index on `(room_id, crew_member_id) where crew_member_id is not null`. Four triggers: the finalized-show write block, and the two that keep `day_rate` show-wide (see Payroll business logic).
 - `punches` — id, timecard_id, punch_type (`start|meal_out|meal_in|meal2_out|meal2_in|end`), punched_at,
   plus the attribution trio from 0018: `source` (`staff|crew`, default `staff` so every pre-existing
   row is correct), `created_by` (null for crew-entered — nobody is signed in), `source_link`.
@@ -361,13 +363,25 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - Short turnaround: rest between shifts < `short_turn_rest_hours` (default 10hr) → next day is all DT, with a minimum-guarantee floor. Detection needs the **whole show's** timecards (not just current room/day) to find a crew member's previous day's end punch across rooms/days.
 - Travel hybrid days: `travel_in_day`/`travel_out_day` are additive to that day's worked hours (crew can travel in AND work a full day). Plain `is_travel_day` (no work) is a separate state.
 - Pay As Half Day: manual PM toggle, only shown for ≤5hr days — not automatic, since it's a negotiated/contractual call.
+- **Absent days (0027):** `absence = 'no_show'` pays nothing; `'cancelled'` pays `day_rate × cancellation_pay_percent / 100` — checked in `totalPay` BEFORE the travel branch, so an absence wins over any other flag on the day. Both are zero hours and excluded from short-turnaround detection in both directions. `cancellation_pay_percent` is optional on `PayrollRuleset` (absent = 0) so older callers and fixtures keep working.
 - **Worked vs Paid**: Worked = raw hours actually clocked. Paid = per-day ceiling-rounded hours (each day's net hours rounded up before summing across days) — this is what's billed. Example: 0.25hr OT Monday + 0.25hr OT Tuesday = 2hr billable OT, not 0.5hr. Validated against a real client payroll spreadsheet.
 - Display convention: on-screen By Day/By Crew reports show raw **Worked** hours; Master Summary totals and PDF/CSV show **Paid** (ceiling-rounded); PDF/CSV show both explicitly.
 - Timecard rounding is org-wide (`organizations.timecard_rounding_minutes`, set on the Settings page), unlike iOS's per-device `timeRounding` UserDefaults toggle. Every payroll function that calls `calculateNetHours` takes a `roundingMinutes` param (default 1 = exact minute); every call site across the app threads the org's value through explicitly. If you add a new call site, don't let it silently fall back to the default — fetch and pass the real value.
 
 ## Known gaps / not yet built
 
-- **No-show / cancelled day flag** — a per-crew-member, per-day flag (alongside the existing `is_travel_day` / `pay_as_half_day` toggles on `timecards`) marking a day as a no-show or cancellation, distinct from a day with punches. The one remaining gap with real payroll consequences. **There is no iOS reference — verified 2026-07-26 that the Swift `Timecard` has only the same four flags we do**, so this is new design, not a port. Open questions for Dan, all contractual rather than technical: does a cancelled day pay anything (notice-window cancellation fees are common)? Is "crew no-showed" the same state as "we cancelled" — different fault, probably different pay? Should a flagged day count as the "previous day" for short-turnaround rest math (probably not — nobody worked)? Does it appear in reports as a $0 line or vanish?
+- ~~No-show / cancelled day flag.~~ **DONE 2026-09-06 (migration 0027).** Dan's answers, which
+  are the design: **two different things** — `timecards.absence` is `no_show` (their fault,
+  pays nothing) or `cancelled` (our call, pays `cancellation_pay_percent` of the day rate, a
+  payroll rule per show and per preset, default 0 so no existing show changes); one column so a
+  day can never be both. Zero hours either way, so an absent day is never the "previous day"
+  for short-turnaround rest (pinned in `payroll.mts`, including a stray punch on an absent
+  card). **Shown, labelled** everywhere: tracker (the punch strip becomes a muted
+  NO-SHOW/CANCELLED label, like the travel banner; flagging refuses while punches exist rather
+  than deleting them), Reports (both views, with the cancellation pay where money is shown),
+  CSV (an `Absence` column), PDF, the crew timesheet (label only, no dollars), and the crew
+  clock (banner + the route refuses). The Final Report pre-send checks no longer count an
+  absent day as "not started". No iOS reference — new design, not a port.
 
 - **Security backlog — four findings, none introduced by recent work** (surfaced 2026-09-04
   while tracing the punch guards; recorded here because they were previously only in a scratch

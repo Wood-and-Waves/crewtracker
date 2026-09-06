@@ -19,6 +19,8 @@ export type RulesetValues = {
   meal_break_deduction_cap: number
   short_turn_penalty_enabled: boolean
   short_turn_rest_hours: number
+  /** What a cancelled day pays, % of day rate (0–100). 0027. */
+  cancellation_pay_percent: number
 }
 
 // Single source of truth for which columns make up a rule set. Used to build
@@ -38,6 +40,7 @@ export const RULESET_FIELDS = [
   'meal_break_deduction_cap',
   'short_turn_penalty_enabled',
   'short_turn_rest_hours',
+  'cancellation_pay_percent',
 ] as const satisfies readonly (keyof RulesetValues)[]
 
 /**
@@ -64,6 +67,7 @@ export const DEFAULT_RULESET_VALUES: RulesetValues = {
   meal_break_deduction_cap: 60,
   short_turn_penalty_enabled: false,
   short_turn_rest_hours: 10,
+  cancellation_pay_percent: 0,
 }
 
 /** Picks just the rule columns off any row that carries them. */

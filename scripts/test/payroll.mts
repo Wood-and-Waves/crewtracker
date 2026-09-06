@@ -159,6 +159,29 @@ check('a previous-day card carrying only its wrap, in another room, still trips 
 check('and a previous-day card with NO wrap does not',
   isShortTurnaround(day2, [card([['start', at('08:00', '2026-08-01')]]), day2], RULES), false)
 
+console.log('\n=== no-show and cancelled days (0027) ===')
+// Booked, did not work. Both are zero hours; only the pay differs, and only
+// for a cancellation, by the show's own percentage.
+const noShow = card([], { absence: 'no_show' })
+const cancelled = card([], { absence: 'cancelled' })
+check('a no-show pays nothing', totalPay(noShow, [noShow], RULES), 0)
+check('a cancelled day pays nothing when the show sets no cancellation pay', totalPay(cancelled, [cancelled], RULES), 0)
+check('a cancelled day pays the show\'s percentage of the day rate',
+  totalPay(cancelled, [cancelled], { ...RULES, cancellation_pay_percent: 50 }), 250)
+check('at 100% it pays the whole day rate',
+  totalPay(cancelled, [cancelled], { ...RULES, cancellation_pay_percent: 100 }), 500)
+check('an absent day has no hours',
+  straightTimeHours(cancelled, [cancelled], RULES) + overtimeHours(cancelled, [cancelled], RULES) + doubleTimeHours(cancelled, [cancelled], RULES), 0)
+// A stray punch on an absent card must never make it "the previous day" —
+// nobody worked, so there is no rest to measure from.
+const absentWithStrayWrap = card([['end', at('23:00', '2026-08-01')]], { absence: 'cancelled' })
+check('an absent previous day never triggers short turnaround',
+  isShortTurnaround(day2, [absentWithStrayWrap, day2], RULES), false)
+check('and an absent day itself is never a short turnaround',
+  isShortTurnaround(card([['start', at('06:00', '2026-08-02')]], { absence: 'no_show' }), [day1], RULES), false)
+check('absence beats travel: a cancelled travel day pays cancellation pay, not travel pay',
+  totalPay(card([], { absence: 'cancelled', is_travel_day: true }), [], { ...RULES, cancellation_pay_percent: 0 }), 0)
+
 console.log('\n=== break display ===')
 check('a 90-min break displays as the 60-min cap', displayMealBreakMinutes(90 * 60, RULES), 60)
 check('a 20-min break displays in full (under the minimum, nothing deducted)',

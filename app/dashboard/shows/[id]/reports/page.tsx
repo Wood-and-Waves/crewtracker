@@ -199,6 +199,7 @@ export default async function ShowReportPage({
     travel_in_day: tc.travel_in_day,
     travel_out_day: tc.travel_out_day,
     pay_as_half_day: tc.pay_as_half_day,
+    absence: tc.absence ?? null,
     punches: punchesByTimecard.get(tc.id) ?? [],
   }))
   const tcLikeById = new Map(allTimecards.map(tc => [tc.id, tc]))
@@ -255,9 +256,9 @@ export default async function ShowReportPage({
     const punchesFor = (tcId: string) => punchesByTimecard.get(tcId) ?? []
 
     const noStart = (timecards || []).filter(t =>
-      !t.is_travel_day && !punchesFor(t.id).some(p => p.punch_type === 'start'))
+      !t.is_travel_day && !t.absence && !punchesFor(t.id).some(p => p.punch_type === 'start'))
     const noWrap = (timecards || []).filter(t =>
-      !t.is_travel_day &&
+      !t.is_travel_day && !t.absence &&
       punchesFor(t.id).some(p => p.punch_type === 'start') &&
       !punchesFor(t.id).some(p => p.punch_type === 'end'))
 
@@ -504,6 +505,28 @@ export default async function ShowReportPage({
 
                 <div className={RULE_MAJOR}>
                 {dayTimecards.map(tc => {
+                  if (tc.absence) {
+                    const b = breakdownString(tc)
+                    return (
+                      <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
+                        <div className={CELL_LABEL}>
+                          <p className="truncate text-sm text-ink">{tc.crew_member_name}</p>
+                          <p className="truncate text-xs text-muted">{tc.role}</p>
+                        </div>
+                        <div className={CELL_BREAKDOWN}>
+                          <span className="text-sm font-semibold uppercase tracking-wide text-muted">
+                            {tc.absence === 'cancelled' ? 'Cancelled' : 'No-show'}
+                          </span>
+                          {canSeeFinancials && b.pay > 0 && (
+                            <p className="text-xs text-muted">Cancellation pay {money(b.pay)}</p>
+                          )}
+                        </div>
+                        <div className={CELL_HOURS}>
+                          <span className="text-sm text-muted tabular-nums">—</span>
+                        </div>
+                      </div>
+                    )
+                  }
                   if (tc.is_travel_day) {
                     return (
                       <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
@@ -628,10 +651,35 @@ export default async function ShowReportPage({
                         const wd = workDayOf(tc)
 
                         // Resolved before the travel-day branch: a pure travel day
-                        // contributes no hours but does contribute pay.
+                        // contributes no hours but does contribute pay. Same for a
+                        // cancelled day (0027).
                         const b = breakdownString(tc)
                         crewPay += b.pay
                         crewMP += b.mpTotal
+
+                        if (tc.absence) {
+                          return (
+                            <div key={tc.id} className={cn('grid items-center gap-3 border-b border-line px-4 py-3 last:border-b-0', REPORT_COLS)}>
+                              <div className={CELL_LABEL}>
+                                <span className="truncate text-sm text-ink">{wd ? dayLabel(wd.date) : ''}</span>
+                                {crew.roles.length > 1 && tc.role && (
+                                  <span className="shrink-0 font-mono text-[10.5px] uppercase tracking-wide text-muted">{tc.role}</span>
+                                )}
+                              </div>
+                              <div className={CELL_BREAKDOWN}>
+                                <span className="text-sm font-semibold uppercase tracking-wide text-muted">
+                                  {tc.absence === 'cancelled' ? 'Cancelled' : 'No-show'}
+                                </span>
+                                {canSeeFinancials && b.pay > 0 && (
+                                  <p className="text-xs text-muted">Cancellation pay {money(b.pay)}</p>
+                                )}
+                              </div>
+                              <div className={CELL_HOURS}>
+                                <span className="text-sm text-muted tabular-nums">—</span>
+                              </div>
+                            </div>
+                          )
+                        }
 
                         if (tc.is_travel_day) {
                           return (

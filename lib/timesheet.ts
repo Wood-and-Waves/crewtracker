@@ -96,6 +96,13 @@ export function buildTimesheetText({
   for (const { date, timecard: tc } of sorted) {
     out += `- ${dayHeading(date)} -\n`
 
+    // Booked but not worked (0027). No hours, so nothing else to report; the
+    // pay (if any) is deliberately not here — this text carries no dollars.
+    if (tc.absence) {
+      out += tc.absence === 'cancelled' ? '• Cancelled\n\n' : '• No-show\n\n'
+      continue
+    }
+
     // Pure travel day: flat pay, no punches, nothing else to report.
     if (tc.is_travel_day) {
       travelDays++

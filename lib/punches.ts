@@ -214,6 +214,7 @@ export type BatchTimecard = {
   crew_member_name: string
   role: string
   is_travel_day: boolean
+  absence?: 'no_show' | 'cancelled' | null
   punches: Punch[]
 }
 
@@ -226,8 +227,8 @@ function has(punches: Punch[], type: PunchType): boolean {
 // punches) the day not yet wrapped. Travel-day crew are never eligible.
 //
 // Derived from PUNCH_ORDER, so a new meal needs no case added here.
-export function isEligibleForBatch(punches: Punch[], isTravelDay: boolean, type: PunchType): boolean {
-  if (isTravelDay) return false
+export function isEligibleForBatch(punches: Punch[], isTravelDay: boolean, type: PunchType, absence?: string | null): boolean {
+  if (isTravelDay || absence) return false
   if (has(punches, type)) return false          // already punched
   if (type === 'start') return true
   if (type === 'end') return has(punches, 'start')
@@ -265,12 +266,14 @@ export function clearBlockedReason(punches: Punch[], type: PunchType): string | 
 // A batch button is "active" (highlighted) if at least one crew member in
 // scope is eligible. Multiple buttons can be active at once.
 export function canApplyBatch(timecards: BatchTimecard[], type: PunchType): boolean {
-  return timecards.some(tc => isEligibleForBatch(tc.punches, tc.is_travel_day, type))
+  return timecards.some(tc => isEligibleForBatch(tc.punches, tc.is_travel_day, type, tc.absence))
 }
 
 // Human-readable reason a crew member was skipped, for the post-action
 // summary. Only meaningful for crew who did NOT receive the punch.
-export function ineligibilityReason(punches: Punch[], isTravelDay: boolean, type: PunchType): string {
+export function ineligibilityReason(punches: Punch[], isTravelDay: boolean, type: PunchType, absence?: string | null): string {
+  if (absence === 'no_show') return 'No-show'
+  if (absence === 'cancelled') return 'Cancelled'
   if (isTravelDay) return 'Travel Day'
 
   if (type === 'start') {
@@ -321,9 +324,9 @@ export function planBatchApply(
         applied.push({ id: tc.id, name: tc.crew_member_name })
       }
     } else {
-      const reason = isEligibleForBatch(tc.punches, tc.is_travel_day, type)
+      const reason = isEligibleForBatch(tc.punches, tc.is_travel_day, type, tc.absence)
         ? 'Excluded'
-        : ineligibilityReason(tc.punches, tc.is_travel_day, type)
+        : ineligibilityReason(tc.punches, tc.is_travel_day, type, tc.absence)
       skipped.push({ name: tc.crew_member_name, reason })
     }
   }

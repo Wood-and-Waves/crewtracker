@@ -57,7 +57,7 @@ export default function BatchTimeModal({
   function initialChecked(tc: BatchTimecard): boolean {
     return mode === 'change'
       ? tc.punches.some(p => p.punch_type === type)
-      : isEligibleForBatch(tc.punches, tc.is_travel_day, type)
+      : isEligibleForBatch(tc.punches, tc.is_travel_day, type, tc.absence)
   }
 
   const [checked, setChecked] = useState<Set<string>>(
@@ -136,8 +136,8 @@ export default function BatchTimeModal({
         <div className="overflow-y-auto px-6 border-t border-line divide-y divide-line">
           {scope.map(tc => {
             const isChecked = checked.has(tc.id)
-            const eligible = isEligibleForBatch(tc.punches, tc.is_travel_day, type)
-            const reason = eligible ? null : ineligibilityReason(tc.punches, tc.is_travel_day, type)
+            const eligible = isEligibleForBatch(tc.punches, tc.is_travel_day, type, tc.absence)
+            const reason = eligible ? null : ineligibilityReason(tc.punches, tc.is_travel_day, type, tc.absence)
             return (
               <label
                 key={tc.id}

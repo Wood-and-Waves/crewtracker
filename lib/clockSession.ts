@@ -36,6 +36,8 @@ export type ClockAssignment = {
   room: string
   role: string | null
   isTravelDay: boolean
+  /** no_show | cancelled | null — the day was booked but not worked (0027). */
+  absence: 'no_show' | 'cancelled' | null
   /**
    * `source` is REQUIRED on this path, unlike the shared Punch type where it is
    * optional. The crew screen gates editing and clearing on it, so a query that
@@ -204,7 +206,7 @@ export async function loadClockView(
   // excluded for the same reason as above.
   const { data: mine } = await admin
     .from('timecards')
-    .select('id, role, is_travel_day, room_id')
+    .select('id, role, is_travel_day, absence, room_id')
     .eq('crew_member_id', link.crew_member_id)
     .in('room_id', roomIds)
     .neq('booking_status', 'declined')
@@ -226,6 +228,7 @@ export async function loadClockView(
     room: roomName.get(t.room_id) || 'Room',
     role: t.role ?? null,
     isTravelDay: t.is_travel_day === true,
+    absence: t.absence === 'no_show' || t.absence === 'cancelled' ? t.absence : null,
     punches: (punches || [])
       .filter((p: any) => p.timecard_id === t.id)
       .map((p: any) => ({

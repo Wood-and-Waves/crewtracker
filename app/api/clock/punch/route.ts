@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
 
   const { data: timecard } = await admin
     .from('timecards')
-    .select('id, crew_member_id, is_travel_day, rooms!inner ( work_days!inner ( date, show_id ) )')
+    .select('id, crew_member_id, is_travel_day, absence, rooms!inner ( work_days!inner ( date, show_id ) )')
     .eq('id', timecardId)
     .maybeSingle()
 
@@ -134,6 +134,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "That isn't one of your shifts on this show." }, { status: 400 })
   }
   const punchDate = workDay.date as string
+  if (timecard.absence) {
+    return NextResponse.json({
+      error: timecard.absence === 'cancelled'
+        ? 'That day was cancelled, so there are no punches to record. Talk to your PM if that is wrong.'
+        : 'That day is marked as a no-show. Talk to your PM if that is wrong.',
+    }, { status: 400 })
+  }
   if (timecard.is_travel_day) {
     return NextResponse.json({ error: 'That day is marked as a travel day, so there are no punches to record.' }, { status: 400 })
   }
@@ -190,7 +197,7 @@ export async function POST(request: NextRequest) {
   // Skipped when somebody is correcting a punch they made themselves: the
   // punch already exists, so eligibility would reject it and chronology is the
   // right judge instead.
-  if (!mine && !isEligibleForBatch(all, timecard.is_travel_day, type)) {
+  if (!mine && !isEligibleForBatch(all, timecard.is_travel_day, type, timecard.absence)) {
     // 'end' needs a start, not the meal before it — everything else needs its
     // immediate predecessor.
     const requirement: PunchType | null =

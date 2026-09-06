@@ -247,7 +247,24 @@ export default function ClockPunch({
                 Note this is plain is_travel_day only: travel_in/out are
                 HYBRID days that are additive to hours actually worked, so
                 those still punch normally. */}
-            {row.isTravelDay ? (
+            {row.absence ? (
+              // Booked but not worked (0027). Same shape as the travel banner
+              // below; the route refuses a punch on such a day regardless.
+              <div className={RULE_MAJOR}>
+                <div className="p-3">
+                  <div className="rounded-field bg-surface-3 py-8 text-center">
+                    <p className="font-display text-xl font-bold uppercase tracking-wide text-muted">
+                      {row.absence === 'cancelled' ? 'Cancelled' : 'No-show'}
+                    </p>
+                    <p className="mt-1 px-6 text-sm text-muted">
+                      {row.absence === 'cancelled'
+                        ? 'This day was cancelled, so there is nothing to clock. Talk to your PM if that is wrong.'
+                        : 'This day is marked as a no-show. Talk to your PM if that is wrong.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : row.isTravelDay ? (
               <div className={RULE_MAJOR}>
                 <div className="p-3">
                   <div className="rounded-field bg-accent/10 py-8 text-center">
@@ -272,7 +289,7 @@ export default function ClockPunch({
                   const pmEntered = !!done && done.source !== 'crew'
                   // The app's own eligibility rule, matching the server. Wrap
                   // needs only a Start, so a day with no second meal still ends.
-                  const legal = isEligibleForBatch(row.punches, row.isTravelDay, type)
+                  const legal = isEligibleForBatch(row.punches, row.isTravelDay, type, row.absence)
                   const tappable = !pmEntered && (legal || !!done)
                   const available = !done && legal && !isNext
 

@@ -72,6 +72,25 @@ export default function RulesetFields({
           />
         </div>
 
+        {/* What a day the company CANCELLED pays, as a share of the day rate.
+            0 means nothing — the default, so no existing show changes. A
+            no-show has no setting: it pays nothing. (0027) */}
+        <FieldRow label="Cancellation Pay">
+          <span className="flex items-center gap-1.5 text-sm text-ink">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={values.cancellation_pay_percent ?? 0}
+              onChange={e => onChange('cancellation_pay_percent', Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+              className="w-20 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-right text-sm text-ink tabular-nums outline-none focus:border-accent"
+              aria-label="Cancellation pay, percent of day rate"
+            />
+            % of day rate
+          </span>
+        </FieldRow>
+
         <FieldRow label="Overtime Starts After">
           <div className="flex items-center gap-2">
             <input

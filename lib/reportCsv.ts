@@ -38,7 +38,7 @@ const fmt2 = (n: number) => n.toFixed(2)
 // means whoever imports this file never has to cope with the shape changing
 // between shows. They sit empty on the vast majority of days.
 export const CSV_HEADER =
-  'Name,Role,Day Rate,Date,Room,Travel Day,Travel In,Travel Out,Half Day,Start Time,' +
+  'Name,Role,Day Rate,Date,Room,Absence,Travel Day,Travel In,Travel Out,Half Day,Start Time,' +
   'Meal 1 Out,Meal 1 In,Meal 2 Out,Meal 2 In,Meal 3 Out,Meal 3 In,Wrap Time,' +
   'ST Hours,OT Hours,DT Hours,' +
   'ST Paid,OT Paid,DT Paid,Meal Penalties,Meal Penalty Total,Short Turnaround,Travel Pay,Total Pay'
@@ -53,6 +53,7 @@ export function toTimecardLike(rawTc: any, punches: any[]): TimecardLike {
     travel_in_day: rawTc.travel_in_day,
     travel_out_day: rawTc.travel_out_day,
     pay_as_half_day: rawTc.pay_as_half_day,
+    absence: rawTc.absence ?? null,
     punches: punches.filter((p: any) => p.timecard_id === rawTc.id),
   }
 }
@@ -131,6 +132,8 @@ export function buildReportCsv({
       csvField(showFinancials ? fmt2(rawTc.day_rate ?? 0) : ''),
       csvField(dateLabel(wd?.date)),
       csvField(room?.name || ''),
+      // No-show / Cancelled (0027); blank on a worked day.
+      csvField(rawTc.absence === 'no_show' ? 'No-show' : rawTc.absence === 'cancelled' ? 'Cancelled' : ''),
       csvField(rawTc.is_travel_day ? 'Yes' : 'No'),
       csvField(rawTc.travel_in_day ? 'Yes' : 'No'),
       csvField(rawTc.travel_out_day ? 'Yes' : 'No'),

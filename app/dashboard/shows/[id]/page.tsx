@@ -183,6 +183,7 @@ export default async function ShowDetailPage({
     travel_in_day: tc.travel_in_day,
     travel_out_day: tc.travel_out_day,
     pay_as_half_day: tc.pay_as_half_day,
+    absence: tc.absence ?? null,
     punches: punchesByTimecard.get(tc.id) ?? [],
   }))
 

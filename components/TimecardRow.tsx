@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, Punch, PunchType } from '@/lib/punches'
-import { calculateNetHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
+import { calculateNetHours, PayrollRuleset, TimecardLike, type Absence } from '@/lib/payroll'
 import TimeEntryModal from '@/components/TimeEntryModal'
 import { cn } from '@/lib/cn'
 import { punchGridCols } from '@/lib/trackerLayout'
@@ -24,7 +24,7 @@ export default function TimecardRow({
   authorId,
   locked = false,
 }: {
-  timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean }
+  timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean; absence?: Absence | null }
   punches: Punch[]
   timezone: string
   ruleset: PayrollRuleset
@@ -83,6 +83,7 @@ export default function TimecardRow({
     travel_in_day: timecard.travel_in_day,
     travel_out_day: timecard.travel_out_day,
     pay_as_half_day: timecard.pay_as_half_day,
+    absence: timecard.absence ?? null,
     punches,
   }
 
@@ -95,6 +96,7 @@ export default function TimecardRow({
   const started = punches.some(p => p.punch_type === 'start')
   const showHalfDay =
     !timecard.is_travel_day &&
+    !timecard.absence &&
     started &&
     wrapped &&
     calculateNetHours(timecardInput, ruleset, roundingMinutes) <= 5
@@ -102,6 +104,7 @@ export default function TimecardRow({
   // Anything to clear? Drives whether the reset control is offered at all.
   const hasAnything =
     punches.length > 0 ||
+    !!timecard.absence ||
     timecard.is_travel_day ||
     timecard.travel_in_day ||
     timecard.travel_out_day ||
@@ -122,6 +125,32 @@ export default function TimecardRow({
       .select('id')
     if (error || !data || data.length === 0) {
       setTimecard(t => ({ ...t, [field]: before }))
+      setRowError(error?.message ?? 'That did not save — you may not have permission to edit this timecard.')
+      return
+    }
+    router.refresh()
+  }
+
+  // No-show / Cancelled: booked, did not work. One value, two buttons — a day
+  // cannot be both. Refused while punches exist rather than deleting them: a
+  // flag that silently threw away times would be the wrong kind of helpful.
+  // Tapping the lit button clears it. Verified write, optimistic, reverted on
+  // refusal — the same shape as toggleFlag.
+  async function setAbsence(next: Absence | null) {
+    setRowError('')
+    if (next && punches.length > 0) {
+      setRowError(`Clear ${timecard.crew_member_name}'s punches first — a ${next === 'no_show' ? 'no-show' : 'cancelled'} day has no times.`)
+      return
+    }
+    const before = timecard.absence ?? null
+    setTimecard(t => ({ ...t, absence: next }))
+    const { data, error } = await supabase
+      .from('timecards')
+      .update({ absence: next })
+      .eq('id', timecard.id)
+      .select('id')
+    if (error || !data || data.length === 0) {
+      setTimecard(t => ({ ...t, absence: before }))
       setRowError(error?.message ?? 'That did not save — you may not have permission to edit this timecard.')
       return
     }
@@ -157,6 +186,7 @@ export default function TimecardRow({
         travel_in_day: false,
         travel_out_day: false,
         pay_as_half_day: false,
+        absence: null,
       })
       .eq('id', timecard.id)
 
@@ -166,7 +196,7 @@ export default function TimecardRow({
       return
     }
     setPunches([])
-    setTimecard(t => ({ ...t, is_travel_day: false, travel_in_day: false, travel_out_day: false, pay_as_half_day: false }))
+    setTimecard(t => ({ ...t, is_travel_day: false, travel_in_day: false, travel_out_day: false, pay_as_half_day: false, absence: null }))
     router.refresh()
   }
 
@@ -270,7 +300,19 @@ export default function TimecardRow({
           <p className="hidden lg:block text-xs text-muted">{timecard.role}</p>
         </div>
 
-        {timecard.is_travel_day ? (
+        {timecard.absence ? (
+          // Booked, did not work: the whole punch strip becomes one label, the
+          // same treatment as a travel day. Muted rather than accent — this is
+          // an absence, not an action.
+          <div className={cn(
+            'col-span-3 rounded-field bg-surface-3 text-muted text-center py-3 text-sm font-semibold uppercase tracking-wide',
+            visibleTypes.length === 7 ? 'lg:col-span-7'
+              : visibleTypes.length === 8 ? 'lg:col-span-8'
+              : 'lg:col-span-6',
+          )}>
+            {timecard.absence === 'cancelled' ? 'Cancelled' : 'No-show'}
+          </div>
+        ) : timecard.is_travel_day ? (
           // Spans exactly the punch columns this room is showing. Literal class
           // names so Tailwind generates them.
           <div className={cn(
@@ -332,7 +374,7 @@ export default function TimecardRow({
         </div>
       </div>
 
-      <div className={cn('flex flex-wrap gap-1.5 px-4 pb-3', showHalfDay ? '' : 'lg:hidden')}>
+      <div className="flex flex-wrap gap-1.5 px-4 pb-3">
         <button
           onClick={() => toggleFlag('travel_in_day')}
           disabled={locked}
@@ -355,6 +397,24 @@ export default function TimecardRow({
         >
           ✈ Travel Out
         </button>
+        {/* No-show / Cancelled. Offered on every row (mobile and desktop):
+            a decision the PM makes on site, like the travel flags. */}
+        {(['no_show', 'cancelled'] as const).map(kind => (
+          <button
+            key={kind}
+            onClick={() => setAbsence(timecard.absence === kind ? null : kind)}
+            disabled={locked}
+            title={locked ? LOCKED_NOTE
+              : kind === 'no_show' ? 'Booked but did not show up — pays nothing'
+              : 'Cancelled by us — pays the show\'s cancellation rate'}
+            className={cn(
+              'rounded-pill px-3 py-1 text-xs transition-colors',
+              timecard.absence === kind ? 'bg-ink text-bg' : 'bg-surface-3 text-muted',
+            )}
+          >
+            {kind === 'no_show' ? '✕ No-show' : '⊘ Cancelled'}
+          </button>
+        ))}
         {showHalfDay && (
           <button
             onClick={() => toggleFlag('pay_as_half_day')}

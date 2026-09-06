@@ -35,7 +35,16 @@ export type PayrollRuleset = {
   meal_break_deduction_cap: number
   short_turn_penalty_enabled: boolean
   short_turn_rest_hours: number
+  /**
+   * What a CANCELLED day pays, as a percentage of the day rate (0–100). Not
+   * in iOS — new design, 2026-09-06 (migration 0027). Optional so older
+   * callers and fixtures keep working; absent means 0.
+   */
+  cancellation_pay_percent?: number
 }
+
+/** A booked day that was not worked. NULL/undefined is the everyday case. */
+export type Absence = 'no_show' | 'cancelled'
 
 export type TimecardLike = {
   id: string
@@ -45,6 +54,13 @@ export type TimecardLike = {
   travel_in_day: boolean
   travel_out_day: boolean
   pay_as_half_day: boolean
+  /**
+   * no_show: their fault, pays nothing. cancelled: our call, pays
+   * cancellation_pay_percent of the day rate. Either way ZERO hours, so an
+   * absent day is never the "previous day" for the short-turnaround rule.
+   * Optional so the existing fixtures and callers need no change.
+   */
+  absence?: Absence | null
   punches: PunchRecord[]
 }
 
@@ -123,11 +139,13 @@ export function displayMealBreakMinutes(durationSeconds: number, ruleset: Payrol
 
 export function isShortTurnaround(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset): boolean {
   if (!ruleset.short_turn_penalty_enabled) return false
+  if (tc.absence) return false
   const start = getPunchTime(tc.punches, 'start')
   if (!start || !tc.crew_member_id) return false
 
   const previousCards = allTimecards.filter(o => {
     if (o.crew_member_id !== tc.crew_member_id || o.id === tc.id) return false
+    if (o.absence) return false   // nobody worked that day, so no rest to measure from
     const end = getPunchTime(o.punches, 'end') ?? DISTANT_PAST
     return end < start
   })
@@ -285,6 +303,11 @@ export function travelLegPay(tc: TimecardLike, ruleset: PayrollRuleset): number 
 // MARK: Total Pay
 
 export function totalPay(tc: TimecardLike, allTimecards: TimecardLike[], ruleset: PayrollRuleset, roundingMinutes = 1): number {
+  // Booked but not worked. Checked before travel: an absent day is absent
+  // whatever else was flagged on it.
+  if (tc.absence === 'no_show') return 0
+  if (tc.absence === 'cancelled') return tc.day_rate * ((ruleset.cancellation_pay_percent ?? 0) / 100)
+
   // Pure travel day (no work)
   if (tc.is_travel_day) {
     return ruleset.travel_rate === 'fullDay' ? tc.day_rate : tc.day_rate / 2
