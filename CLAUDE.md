@@ -308,8 +308,8 @@ scripts/
                        · 0026 timecard_day_rates learns the scheduler_id arm
                        · 0027 timecards.absence (no_show|cancelled) + cancellation_pay_percent
                        on payroll_rulesets/payroll_presets; column grant on timecards
-                       0018–0026 are on BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0026 2026-09-06). **0027 is on DEV only** until its cutover.
+                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06). Nothing is dev-only right now.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A

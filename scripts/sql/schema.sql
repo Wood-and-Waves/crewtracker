@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 07gZ3SROLs8hppKDQYm816C12Lklq34m5grik9oFWeutE6x0pbIn0Nwa8mihSX3
+\restrict AUTQEcr3vUuExA82zQmPAbDjofkia8eJEugVIfXBu4wlztnaTubvYX525EHi9RM
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -948,7 +948,9 @@ CREATE TABLE "public"."payroll_presets" (
     "meal_break_deduction_cap" numeric DEFAULT 60.0 NOT NULL,
     "short_turn_penalty_enabled" boolean DEFAULT false NOT NULL,
     "short_turn_rest_hours" numeric DEFAULT 10.0 NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "cancellation_pay_percent" numeric DEFAULT 0 NOT NULL,
+    CONSTRAINT "payroll_presets_cancellation_pay_percent_check" CHECK ((("cancellation_pay_percent" >= (0)::numeric) AND ("cancellation_pay_percent" <= (100)::numeric)))
 );
 
 
@@ -973,6 +975,8 @@ CREATE TABLE "public"."payroll_rulesets" (
     "short_turn_rest_hours" numeric DEFAULT 10.0,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "continuous_time_enabled" boolean DEFAULT false NOT NULL,
+    "cancellation_pay_percent" numeric DEFAULT 0 NOT NULL,
+    CONSTRAINT "payroll_rulesets_cancellation_pay_percent_check" CHECK ((("cancellation_pay_percent" >= (0)::numeric) AND ("cancellation_pay_percent" <= (100)::numeric))),
     CONSTRAINT "payroll_rulesets_travel_rate_check" CHECK (("travel_rate" = ANY (ARRAY['halfDay'::"text", 'fullDay'::"text"])))
 );
 
@@ -1157,6 +1161,8 @@ CREATE TABLE "public"."timecards" (
     "booking_invited_at" timestamp with time zone,
     "booking_responded_at" timestamp with time zone,
     "show_id" "uuid" NOT NULL,
+    "absence" "text",
+    CONSTRAINT "timecards_absence_check" CHECK (("absence" = ANY (ARRAY['no_show'::"text", 'cancelled'::"text"]))),
     CONSTRAINT "timecards_booking_status_check" CHECK (("booking_status" = ANY (ARRAY['pencilled'::"text", 'invited'::"text", 'confirmed'::"text", 'declined'::"text"])))
 );
 
@@ -3278,6 +3284,13 @@ GRANT SELECT("show_id") ON TABLE "public"."timecards" TO "authenticated";
 
 
 --
+-- Name: COLUMN "timecards"."absence"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT("absence"),INSERT("absence"),UPDATE("absence") ON TABLE "public"."timecards" TO "authenticated";
+
+
+--
 -- Name: TABLE "work_days"; Type: ACL; Schema: public; Owner: -
 --
 
@@ -3365,5 +3378,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 07gZ3SROLs8hppKDQYm816C12Lklq34m5grik9oFWeutE6x0pbIn0Nwa8mihSX3
+\unrestrict AUTQEcr3vUuExA82zQmPAbDjofkia8eJEugVIfXBu4wlztnaTubvYX525EHi9RM
 
