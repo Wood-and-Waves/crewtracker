@@ -15,6 +15,8 @@ import { cn } from '@/lib/cn'
 
 type CopySource = { roomId: string; count: number; dayNumber: number } | null
 
+const ZERO_HOURS = { st: 0, ot: 0, dt: 0 }
+
 type Room = { id: string; name: string }
 
 export default function MobileRoomTracker({
@@ -37,7 +39,7 @@ export default function MobileRoomTracker({
   dayCrew,
   timezone,
   ruleset,
-  allTimecards,
+  hoursById,
   dayDate,
   use24Hour,
   roundingMinutes,
@@ -74,7 +76,8 @@ export default function MobileRoomTracker({
   dayCrew: any[]
   timezone: string
   ruleset: any
-  allTimecards: any[]
+  /** ST/OT/DT per timecard id, computed once on the server — see TimecardRow. */
+  hoursById: Record<string, { st: number; ot: number; dt: number }>
   dayDate: string
   use24Hour: boolean
   roundingMinutes: number
@@ -153,7 +156,7 @@ export default function MobileRoomTracker({
         punches={tc.punches}
         timezone={timezone}
         ruleset={ruleset}
-        allTimecards={allTimecards}
+        hours={hoursById[tc.id] ?? ZERO_HOURS}
         dayDate={dayDate}
         use24Hour={use24Hour}
         roundingMinutes={roundingMinutes}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, Punch, PunchType } from '@/lib/punches'
-import { straightTimeHours, overtimeHours, doubleTimeHours, calculateNetHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
+import { calculateNetHours, PayrollRuleset, TimecardLike } from '@/lib/payroll'
 import TimeEntryModal from '@/components/TimeEntryModal'
 import { cn } from '@/lib/cn'
 import { punchGridCols } from '@/lib/trackerLayout'
@@ -16,7 +16,7 @@ export default function TimecardRow({
   punches: punchesProp,
   timezone,
   ruleset,
-  allTimecards,
+  hours,
   dayDate,
   use24Hour = false,
   roundingMinutes = 1,
@@ -28,7 +28,17 @@ export default function TimecardRow({
   punches: Punch[]
   timezone: string
   ruleset: PayrollRuleset
-  allTimecards: TimecardLike[]
+  /**
+   * ST/OT/DT for this row, computed ONCE on the server. Each of those three
+   * numbers needs isShortTurnaround, which scans every card on the show — so
+   * until 2026-09-06 every row recomputed them in the browser from a copy of
+   * the entire show's cards, in both the desktop and the mobile tree. Now the
+   * page computes them once and the whole-show list never leaves the server.
+   * After an optimistic punch (Step 3) these are the server's numbers until
+   * the background refresh lands ~half a second later; the wrap itself paints
+   * immediately, the totals catch up.
+   */
+  hours: { st: number; ot: number; dt: number }
   dayDate: string
   use24Hour?: boolean
   /** Show is finalized: the database refuses punch and timecard writes. */
@@ -76,9 +86,7 @@ export default function TimecardRow({
     punches,
   }
 
-  const st = wrapped ? straightTimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
-  const ot = wrapped ? overtimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
-  const dt = wrapped ? doubleTimeHours(timecardInput, allTimecards, ruleset, roundingMinutes) : 0
+  const { st, ot, dt } = wrapped ? hours : { st: 0, ot: 0, dt: 0 }
 
   // Pay as Half Day is only offered on a completed work day of 5 net hours or
   // less — a negotiated call the PM makes on site. Days over 5 hours always get

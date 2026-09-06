@@ -125,11 +125,51 @@ export default async function ShowDetailPage({
     canViewRates ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
   ])
 
-  const allTimecardIds = (allShowTimecards || []).map(t => t.id)
+  // Compute "today" in the show's timezone, not UTC/device time — using
+  // toISOString() here rolls to tomorrow's date in the evening for any
+  // timezone behind UTC, which silently opens the wrong day.
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date())
+  const requestedIndex = day ? workDays.findIndex(d => d.day_number === parseInt(day)) : -1
+  const todayIndex = workDays.findIndex(d => d.date === todayStr)
+  const activeIndex = requestedIndex >= 0 ? requestedIndex : (todayIndex >= 0 ? todayIndex : 0)
+  const activeDay = workDays[activeIndex]
 
-  const { data: allShowPunches } = allTimecardIds.length > 0
-    ? await supabase.from('punches').select('*').in('timecard_id', allTimecardIds)
-    : { data: [] }
+  const roomsList = (allShowRooms || []).filter(r => r.work_day_id === activeDay.id)
+
+  // PUNCHES: the active day's in full, earlier days' WRAPS only, later days'
+  // not at all. Until 2026-09-06 every punch on the whole show was fetched
+  // (select('*')) to render one day, on the grounds that short-turnaround
+  // detection needs the previous day. It does — but isShortTurnaround
+  // (lib/payroll.ts) reads exactly one thing from other cards: the `end` punch
+  // of this crew member's earlier days. So that is all that is fetched for them.
+  // punches is the table that grows with every shift worked; timecards are
+  // bounded by days × crew and stay whole-show because copy-crew, the last-day
+  // check and the duplicate-staffing guard read them across days.
+  const earlierDayIds = new Set(workDays.slice(0, activeIndex).map(d => d.id))
+  const dayRoomIdSet = new Set(roomsList.map(r => r.id))
+  const earlierRoomIdSet = new Set((allShowRooms || []).filter(r => earlierDayIds.has(r.work_day_id)).map(r => r.id))
+  const dayTimecardIds = (allShowTimecards || []).filter(t => dayRoomIdSet.has(t.room_id)).map(t => t.id)
+  const earlierTimecardIds = (allShowTimecards || []).filter(t => earlierRoomIdSet.has(t.room_id)).map(t => t.id)
+
+  const PUNCH_COLS = 'id, timecard_id, punch_type, punched_at, source'
+  const [{ data: dayPunches }, { data: earlierWraps }] = await Promise.all([
+    dayTimecardIds.length > 0
+      ? supabase.from('punches').select(PUNCH_COLS).in('timecard_id', dayTimecardIds)
+      : Promise.resolve({ data: [] as any[] }),
+    earlierTimecardIds.length > 0
+      ? supabase.from('punches').select(PUNCH_COLS).in('timecard_id', earlierTimecardIds).eq('punch_type', 'end')
+      : Promise.resolve({ data: [] as any[] }),
+  ])
+  const allShowPunches = [...(dayPunches || []), ...(earlierWraps || [])]
+
+  // Grouped once, not filtered per card — the old .filter-inside-.map was
+  // O(timecards × punches) and ran twice.
+  const punchesByTimecard = new Map<string, any[]>()
+  for (const p of allShowPunches) {
+    const list = punchesByTimecard.get(p.timecard_id) ?? []
+    list.push(p)
+    punchesByTimecard.set(p.timecard_id, list)
+  }
 
   const allTimecardsWithPunches = (allShowTimecards || []).map(tc => ({
     id: tc.id,
@@ -141,19 +181,8 @@ export default async function ShowDetailPage({
     travel_in_day: tc.travel_in_day,
     travel_out_day: tc.travel_out_day,
     pay_as_half_day: tc.pay_as_half_day,
-    punches: (allShowPunches || []).filter(p => p.timecard_id === tc.id),
+    punches: punchesByTimecard.get(tc.id) ?? [],
   }))
-
-  // Compute "today" in the show's timezone, not UTC/device time — using
-  // toISOString() here rolls to tomorrow's date in the evening for any
-  // timezone behind UTC, which silently opens the wrong day.
-  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date())
-  const requestedIndex = day ? workDays.findIndex(d => d.day_number === parseInt(day)) : -1
-  const todayIndex = workDays.findIndex(d => d.date === todayStr)
-  const activeIndex = requestedIndex >= 0 ? requestedIndex : (todayIndex >= 0 ? todayIndex : 0)
-  const activeDay = workDays[activeIndex]
-
-  const roomsList = (allShowRooms || []).filter(r => r.work_day_id === activeDay.id)
 
   // Stable sort so toggling travel / refetching never reorders the cards:
   // by first name, then full name, then id as a final tiebreaker.
@@ -190,7 +219,7 @@ export default async function ShowDetailPage({
       .filter(t => t.room_id === room.id)
       .map(tc => ({
         ...tc,
-        punches: (allShowPunches || []).filter(p => p.timecard_id === tc.id),
+        punches: punchesByTimecard.get(tc.id) ?? [],
       }))
       .sort(byFirstName)
   }
@@ -253,13 +282,25 @@ export default async function ShowDetailPage({
   const dayAssignments = (allShowTimecards || [])
     .filter(t => t.crew_member_id && roomNameById[t.room_id])
     .map(t => ({ crewMemberId: t.crew_member_id as string, roomId: t.room_id as string, roomName: roomNameById[t.room_id] }))
+  // ST/OT/DT per row, computed ONCE, here. Each of these three calls runs
+  // isShortTurnaround, a scan of every card on the show — until 2026-09-06 the
+  // server did it for the summary and then every TimecardRow did it again in
+  // the browser, in both the desktop and the mobile tree: 2 × crew × 3 × cards
+  // scans per render, on hydration and after every punch. The rows now receive
+  // the numbers; the whole-show card list never leaves the server.
+  const ZERO_HOURS = { st: 0, ot: 0, dt: 0 }
+  const hoursById: Record<string, { st: number; ot: number; dt: number }> = {}
   let sumST = 0, sumOT = 0, sumDT = 0
   if (ruleset) {
     for (const tc of dayTimecards) {
       if (!isWrapped(tc.punches)) continue
-      sumST += straightTimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes)
-      sumOT += overtimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes)
-      sumDT += doubleTimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes)
+      const h = {
+        st: straightTimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes),
+        ot: overtimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes),
+        dt: doubleTimeHours(tc, allTimecardsWithPunches, ruleset, roundingMinutes),
+      }
+      hoursById[tc.id] = h
+      sumST += h.st; sumOT += h.ot; sumDT += h.dt
     }
   }
   const summary = {
@@ -493,7 +534,7 @@ export default async function ShowDetailPage({
                     punches={tc.punches}
                     timezone={timezone}
                     ruleset={ruleset}
-                    allTimecards={allTimecardsWithPunches}
+                    hours={hoursById[tc.id] ?? ZERO_HOURS}
                     dayDate={activeDay.date}
                     use24Hour={user.use24Hour}
                     roundingMinutes={roundingMinutes}
@@ -553,7 +594,7 @@ export default async function ShowDetailPage({
         dayCrew={dayTimecards}
         timezone={timezone}
         ruleset={ruleset}
-        allTimecards={allTimecardsWithPunches}
+        hoursById={hoursById}
         dayDate={activeDay.date}
         use24Hour={user.use24Hour}
         roundingMinutes={roundingMinutes}

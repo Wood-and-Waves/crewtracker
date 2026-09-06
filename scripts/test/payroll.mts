@@ -148,6 +148,16 @@ check('a short turnaround pays every hour at double time',
   doubleTimeHours(day2, [day1, day2], RULES), 10)
 check('but never below the day-rate guarantee',
   totalPay(day2, [day1, day2], RULES) >= 500, true)
+// The tracker (shows/[id]/page.tsx) fetches earlier days as END punches ONLY —
+// that is all this rule reads from a previous card. Pinned so a future "tidy"
+// that also filters on start, or on the room, cannot silently switch the rule
+// off. The previous card is in a different room on purpose: rest is per
+// person, not per room.
+const wrapOnly = card([['end', at('23:00', '2026-08-01')]], { room_id: 'room-other' } as any)
+check('a previous-day card carrying only its wrap, in another room, still trips the rule',
+  isShortTurnaround(day2, [wrapOnly, day2], RULES), true)
+check('and a previous-day card with NO wrap does not',
+  isShortTurnaround(day2, [card([['start', at('08:00', '2026-08-01')]]), day2], RULES), false)
 
 console.log('\n=== break display ===')
 check('a 90-min break displays as the 60-min cap', displayMealBreakMinutes(90 * 60, RULES), 60)
