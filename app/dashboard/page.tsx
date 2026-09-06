@@ -8,7 +8,6 @@ import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import { showStatus, SHOW_STATUS_META } from '@/lib/showStatus'
 import { summarizeCall } from '@/lib/crewCall'
-import { addDays } from '@/lib/datetime'
 import { liveBookings } from '@/lib/timecardFields'
 import Link from 'next/link'
 
@@ -44,8 +43,13 @@ export default async function DashboardPage({
   const schedulingOn = canUseScheduling(user)
 
   // Three independent reads in one round trip instead of three sequential
-  // ones. (Their SCOPE — every timecard and position the org has ever created —
-  // is a separate problem, tracked as Step 6 of the speed plan.)
+  // ones. The positions and headcount reads are scoped to the TAB on screen
+  // (current or archived) in SQL, through the show's `archived` flag — until
+  // 2026-09-06 both fetched every timecard and position the organization had
+  // ever created and threw most of it away here, a cost that grew with every
+  // show ever run. `shows!inner` makes the embedded filter a real WHERE, not a
+  // null-out of the embed. The shows read itself stays whole: the tab needs
+  // the archived count.
   const [{ data: allShows }, { data: callRows }, { data: bookedRows }] = await Promise.all([
     supabase
       .from('shows')
@@ -55,11 +59,13 @@ export default async function DashboardPage({
     schedulingOn
       ? supabase
           .from('crew_call_positions')
-          .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( date, show_id ) )')
+          .select('id, timecards(booking_status), rooms!inner ( work_days!inner ( date, show_id, shows!inner ( archived ) ) )')
+          .eq('rooms.work_days.shows.archived', showingArchived)
       : Promise.resolve({ data: [] as any[] }),
     liveBookings(supabase
       .from('timecards')
-      .select('id, rooms!inner ( work_days!inner ( date, show_id ) )')),
+      .select('id, rooms!inner ( work_days!inner ( date, show_id, shows!inner ( archived ) ) )')
+      .eq('rooms.work_days.shows.archived', showingArchived)),
   ])
 
   const shows = (allShows || []).filter(s => !!s.archived === showingArchived)
@@ -152,9 +158,12 @@ export default async function DashboardPage({
     })
     const meta = SHOW_STATUS_META[status]
     // Inclusive day count, from the dates themselves rather than a work_days
-    // query — one round trip saved on the first screen anyone sees.
-    let dayCount = 1
-    for (let d = show.start_date; d < show.end_date; d = addDays(d, 1)) dayCount++
+    // query — one round trip saved on the first screen anyone sees. Arithmetic
+    // rather than a day-by-day walk: the dates are plain YYYY-MM-DD, so UTC
+    // midnight-to-midnight is exact, no DST anywhere in it.
+    const dayCount = Math.max(1, Math.round(
+      (Date.parse(`${show.end_date}T00:00:00Z`) - Date.parse(`${show.start_date}T00:00:00Z`)) / 86_400_000,
+    ) + 1)
     return {
       id: show.id,
       name: show.name,

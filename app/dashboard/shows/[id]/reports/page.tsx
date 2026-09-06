@@ -174,6 +174,21 @@ export default async function ShowReportPage({
   }
   const ruleset: PayrollRuleset = rulesetRow
 
+  // Grouped ONCE. Every per-timecard lookup below used to `.filter` the whole
+  // punch list again — for the calculator input, the pre-send checks and each
+  // report row — which is punches × timecards work on a page that already does
+  // timecards² inside the calculator.
+  const punchesByTimecard = new Map<string, any[]>()
+  for (const p of punches || []) {
+    const list = punchesByTimecard.get(p.timecard_id)
+    if (list) list.push(p); else punchesByTimecard.set(p.timecard_id, [p])
+  }
+  const roomById = new Map((rooms || []).map(r => [r.id, r]))
+  const workDayById = new Map((workDays || []).map(d => [d.id, d]))
+  // The work day a timecard belongs to, through its room. Both views sort and
+  // label rows by this; each used to run two nested `.find`s per comparison.
+  const workDayOf = (tc: { room_id: string }) => workDayById.get(roomById.get(tc.room_id)?.work_day_id)
+
   const allTimecards: TimecardLike[] = (timecards || []).map(tc => ({
     id: tc.id,
     crew_member_id: tc.crew_member_id,
@@ -184,16 +199,51 @@ export default async function ShowReportPage({
     travel_in_day: tc.travel_in_day,
     travel_out_day: tc.travel_out_day,
     pay_as_half_day: tc.pay_as_half_day,
-    punches: (punches || []).filter(p => p.timecard_id === tc.id),
+    punches: punchesByTimecard.get(tc.id) ?? [],
   }))
+  const tcLikeById = new Map(allTimecards.map(tc => [tc.id, tc]))
 
+  // Every figure a timecard contributes, computed ONCE per timecard, in one
+  // pass. The Master Summary and both views read from this map; until
+  // 2026-09-06 the summary loop and then every rendered row each called the
+  // calculator afresh (ten calls per timecard, each rescanning the show for
+  // the short-turnaround check). Same functions, same arguments, same numbers
+  // — verified to the cent against the previous render.
+  type Breakdown = {
+    text: string
+    dayTotal: number
+    shortTurn: boolean
+    mpCount: number
+    mpTotal: number
+    pay: number
+  }
+  const breakdownById = new Map<string, Breakdown>()
   // Master Summary: PAID (ceiling-rounded) totals across the whole show.
   let totalPaidST = 0, totalPaidOT = 0, totalPaidDT = 0, totalLaborCost = 0
   for (const tc of allTimecards) {
     totalPaidST += paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
     totalPaidOT += paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
     totalPaidDT += paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
-    totalLaborCost += totalPay(tc, allTimecards, ruleset, roundingMinutes)
+    const pay = totalPay(tc, allTimecards, ruleset, roundingMinutes)
+    totalLaborCost += pay
+
+    // Matches iOS breakdownString(for:) exactly: raw ST/OT/DT + meal penalty count.
+    const st = straightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    const ot = overtimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    const dt = doubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    const mp = mealPenaltyCount(tc, ruleset)
+    const parts = [`${fmt(st)} ST`]
+    if (ot > 0) parts.push(`${fmt(ot)} OT`)
+    if (dt > 0) parts.push(`${fmt(dt)} DT`)
+    if (mp > 0) parts.push(`${mp} MP`)
+    breakdownById.set(tc.id, {
+      text: parts.join(' | '),
+      dayTotal: st + ot + dt,
+      shortTurn: isShortTurnaround(tc, allTimecards, ruleset),
+      mpCount: mp,
+      mpTotal: mealPenaltyTotal(tc, ruleset),
+      pay,
+    })
   }
   const totalPaidHours = totalPaidST + totalPaidOT + totalPaidDT
 
@@ -202,7 +252,7 @@ export default async function ShowReportPage({
   // amount.
   const preSendIssues: PreSendIssue[] = (() => {
     const out: PreSendIssue[] = []
-    const punchesFor = (tcId: string) => (punches || []).filter(p => p.timecard_id === tcId)
+    const punchesFor = (tcId: string) => punchesByTimecard.get(tcId) ?? []
 
     const noStart = (timecards || []).filter(t =>
       !t.is_travel_day && !punchesFor(t.id).some(p => p.punch_type === 'start'))
@@ -265,39 +315,12 @@ export default async function ShowReportPage({
     })
   }
 
-  function findTc(rawTc: any): TimecardLike {
-    return {
-      id: rawTc.id,
-      crew_member_id: rawTc.crew_member_id,
-      day_rate: rawTc.day_rate ?? 0,
-      is_travel_day: rawTc.is_travel_day,
-      travel_in_day: rawTc.travel_in_day,
-      travel_out_day: rawTc.travel_out_day,
-      pay_as_half_day: rawTc.pay_as_half_day,
-      punches: (punches || []).filter(p => p.timecard_id === rawTc.id),
-    }
-  }
+  // The calculator's view of a timecard — built once above, looked up here.
+  const findTc = (rawTc: any): TimecardLike => tcLikeById.get(rawTc.id)!
 
-  // Matches iOS breakdownString(for:) exactly: raw ST/OT/DT + meal penalty count.
-  function breakdownString(rawTc: any) {
-    const tc = findTc(rawTc)
-    const st = straightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
-    const ot = overtimeHours(tc, allTimecards, ruleset, roundingMinutes)
-    const dt = doubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
-    const mp = mealPenaltyCount(tc, ruleset)
-    const parts = [`${fmt(st)} ST`]
-    if (ot > 0) parts.push(`${fmt(ot)} OT`)
-    if (dt > 0) parts.push(`${fmt(dt)} DT`)
-    if (mp > 0) parts.push(`${mp} MP`)
-    return {
-      text: parts.join(' | '),
-      dayTotal: st + ot + dt,
-      shortTurn: isShortTurnaround(tc, allTimecards, ruleset),
-      mpCount: mp,
-      mpTotal: mealPenaltyTotal(tc, ruleset),
-      pay: totalPay(tc, allTimecards, ruleset, roundingMinutes),
-    }
-  }
+  // A row's figures, from the single pass above. The name survives from when
+  // this did the arithmetic itself, so the render code reads as it always did.
+  const breakdownString = (rawTc: any): Breakdown => breakdownById.get(rawTc.id)!
 
   // Builds a crew member's own timesheet, server-side. Deliberately carries no
   // dollar figures, so it's always safe to hand to the crew member themselves.
@@ -307,8 +330,8 @@ export default async function ShowReportPage({
     const roomNames: string[] = []
     const entries = crew.entries
       .map((rawTc: any) => {
-        const room = (rooms || []).find(r => r.id === rawTc.room_id)
-        const wd = (workDays || []).find(d => d.id === room?.work_day_id)
+        const room = roomById.get(rawTc.room_id)
+        const wd = workDayOf(rawTc)
         if (room?.name && !roomNames.includes(room.name)) roomNames.push(room.name)
         return { date: wd?.date as string, timecard: findTc(rawTc) }
       })
@@ -599,16 +622,10 @@ export default async function ShowReportPage({
                   <div className={RULE_MAJOR}>
                   {crew.entries
                       .slice()
-                      .sort((a: any, b: any) => {
-                        const wdA = (workDays || []).find(d => (rooms || []).find(r => r.id === a.room_id)?.work_day_id === d.id)
-                        const wdB = (workDays || []).find(d => (rooms || []).find(r => r.id === b.room_id)?.work_day_id === d.id)
-                        return (wdA?.date || '').localeCompare(wdB?.date || '')
-                      })
+                      .sort((a: any, b: any) =>
+                        (workDayOf(a)?.date || '').localeCompare(workDayOf(b)?.date || ''))
                       .map((tc: any) => {
-                        const wd = (workDays || []).find(d => {
-                          const r = (rooms || []).find(rr => rr.id === tc.room_id)
-                          return r?.work_day_id === d.id
-                        })
+                        const wd = workDayOf(tc)
 
                         // Resolved before the travel-day branch: a pure travel day
                         // contributes no hours but does contribute pay.
