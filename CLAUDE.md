@@ -262,7 +262,10 @@ scripts/
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
                     two-check punch guard (npm run test:clock)
     rls.mts       — real anon/authenticated sessions against DEV; the ONLY test that can
-                    catch an RLS bug, since db:sql bypasses RLS (npm run test:rls)
+                    catch an RLS bug, since db:sql bypasses RLS (npm run test:rls). Since
+                    2026-09-06 it has a non-admin ASSIGNED PM fixture (dave) — before that,
+                    every fixture either saw all shows or was in another company, so the
+                    show_assignments branch of the shows policy was never exercised.
     alias-loader.mjs — resolves `@/` imports so the .mts files can import from lib/
   sql/
     schema.sql       — generated baseline; the shape of the database. Do not hand-edit.
@@ -280,11 +283,15 @@ scripts/
                        the placeholder second door for future crew logins)
                        · 0020 timecard writes require can_edit_timecards (same hole, table
                        above; add_show_day runs as the caller so Add Day is covered by a test)
-                       Applied to BOTH databases — production caught up from 0010 to 0016
-                       during the 2026-08-06 cutover. 0017–0020 are on DEV only until
-                       their cutover.
+                       · 0021 every RLS helper call wrapped as (select fn()) — the speed fix
+                       · 0022 indexes on the columns the policies filter by
+                       ALL applied to BOTH databases as of 2026-09-06 (0018–0020 shipped
+                       2026-09-05, 0021–0022 2026-09-06). Nothing is dev-only right now.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
+                       rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
+                       SIGNED-IN ROLE (`set local role authenticated` + a JWT claim), on dev or
+                       --prod. It is the before/after instrument for any RLS or index change.
 ```
 
 ## Database schema
@@ -370,6 +377,15 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
     is the minimum.
   - **The decline email builds its dashboard link from `new URL(request.url).origin`** — i.e.
     the Host header, which is attacker-controlled.
+- **`timecard_day_rates` never learned the `scheduler_id` arm 0013 added to the shows policy**,
+  so a scheduler who holds `can_view_pay_rates` gets no rates through the view on a show they
+  were handed but did not create and are not assigned to. Found by the 2026-09-06 speed review;
+  pre-existing; the view is SECURITY DEFINER so it carries its own copy of the visibility rule
+  and must be updated by hand when the shows policy changes.
+- **`scripts/sql/schema.sql` is stale — dumped 2026-07-28, before 0011–0022.** It shows the
+  pre-0013 shows policy, no 0018 columns, and the old org-joined write policies. Regenerate
+  with `npm run db:schema` after the next migration; until then author any policy change from
+  the migrations or `pg_policies`, never from the dump.
 - ~~Inviting people is manual and loses invitations.~~ **DONE 2026-07-27/28.** Invitations are emailed on creation from `noreply@contact.crewtracker.app` (`lib/inviteEmail.ts` + `app/api/invites/send/route.ts`), carrying the inviter's name and the company in subject and body. `PendingInvitesList.tsx` on the Team screen lets an org admin see every pending invite, copy the link again, change the role, resend the email, or cancel it — cancelling kills the link immediately. Authorization is the existing RLS policy: the invite is read through the caller's session, so another org's invitation returns 404.
 
 - ~~Per-control UI disabling on a locked show.~~ **DONE 2026-07-27.** A `locked` flag threads into every control that writes `timecards` or `punches` — punch cells, travel/half-day toggles, reset, batch punching, staffing, copy crew, Edit crew — in both the desktop and mobile trackers, each with a title explaining why. Room rename/delete and Add Day are deliberately left enabled: the lock covers those two tables only, so disabling them would misrepresent it.
@@ -623,6 +639,26 @@ exists because of a specific failure mode:
 act that ships to customers, and any pending migrations go through the steps above FIRST.
 
 ## Past incidents worth remembering
+
+- **Every helper call in an RLS policy MUST be wrapped as `(select fn())`. Bare calls run
+  once per row and made the app 100× slower than its own queries.** Measured 2026-09-06:
+  one show's punches read in 0.27 ms with RLS off and 30–62 ms with it on (50 ms on
+  production), with `shows` scanned five times and `my_organization_id()` invoked ~70 times
+  per statement — because a policy term that contains a column reference is a per-row filter,
+  and every level of the chain punches → timecards → rooms → work_days → shows → show_assignments
+  re-derives "which shows can I see" from scratch. Worse, 0019's `my_perm('…') OR
+  is_own_timecard(timecard_id)` made `my_perm` per-row too, and a single punch UPDATE walked
+  the whole chain three times — the day it shipped, Dan reported punching had got "much
+  slower". Wrapping a call as `(select my_perm('…'))` makes Postgres hoist it into an InitPlan
+  evaluated ONCE (verified by EXPLAIN on Postgres 17.6: the call moves from `Filter:` to
+  `InitPlan`), and `($1 OR is_own_timecard(timecard_id))` still short-circuits. 0021 did this
+  for the shows root, the 0019/0020 write policies, crew_members and the two SECURITY DEFINER
+  views: execution 62 → 14 ms on dev, per-row helper calls 70 → 0, same permissions
+  (`rls.mts` 45 green). **The chain DEPTH is a separate cost** (~26 SubPlans, `shows` still
+  scanned 34×) — that is what denormalizing `show_id` onto rooms/timecards/punches (the
+  planned 0023, precedent: `show_assignments.organization_id`) removes. Write any new policy
+  in the wrapped form; measure with `scripts/sql/checks/rls-cost.sql`; and read policy text
+  from `pg_policies` or the migrations, never from `schema.sql`, which is stale (pre-0013).
 
 - **`npm run build` and `next dev` share `.next`, and building while the dev server runs makes
   every route 404.** The production build overwrites the dev manifests, so `next dev` then serves
