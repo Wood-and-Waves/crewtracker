@@ -32,6 +32,7 @@ import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
+import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -659,6 +660,14 @@ console.log('\n--- evening digest ---')
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
   check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
+}
+
+console.log('\n--- days changed email ---')
+{
+  const { subject, text } = buildDaysChangedEmail({ to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', orgName: 'Wood & Waves', venue: 'Moscone West',
+    days: [{ date: '2026-09-08', isTravelDay: false, travelIn: true, travelOut: false, activities: ['load_in'] }, { date: '2026-09-09', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }] })
+  check('subject', subject, 'Wood & Waves: your days on Northwind changed')
+  check('lists the new days with what each is', text.includes('Tue, Sep 8') && text.includes('Load-in') && text.includes('Wed, Sep 9'), true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

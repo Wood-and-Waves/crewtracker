@@ -10,6 +10,7 @@ import { buildCallHandoffEmail } from '../../lib/callHandoffEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import { buildReadyEmail, compressDays } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
+import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
 
 console.log('=== Send to scheduling ===\n')
 
@@ -115,3 +116,28 @@ const digest = buildDigestEmail({
 
 console.log(`Subject: ${digest.subject}\n`)
 console.log(digest.text)
+
+console.log('\n\n=== Days changed (extended onto a new day) ===\n')
+
+const daysChanged = buildDaysChangedEmail({
+  to: 'alex@example.test', crewName: 'Alex Reyes', showName: 'Northwind User Conference',
+  orgName: 'Wood & Waves Productions', venue: 'Moscone West',
+  days: [
+    { date: '2026-09-08', isTravelDay: false, travelIn: true, travelOut: false, activities: ['load_in'] },
+    { date: '2026-09-09', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] },
+    { date: '2026-09-10', isTravelDay: false, travelIn: false, travelOut: true, activities: ['show', 'load_out'] },
+  ],
+})
+
+console.log(`Subject: ${daysChanged.subject}\n`)
+console.log(daysChanged.text)
+
+console.log('\n\n=== Days changed (released — nothing left) ===\n')
+
+const daysChangedEmpty = buildDaysChangedEmail({
+  to: 'jordan@example.test', crewName: 'Jordan Blake', showName: 'Northwind User Conference',
+  orgName: 'Wood & Waves Productions', venue: 'Moscone West', days: [],
+})
+
+console.log(`Subject: ${daysChangedEmpty.subject}\n`)
+console.log(daysChangedEmpty.text)

@@ -8,6 +8,7 @@ import { compressDays } from '@/lib/readyEmail'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import PositionDefsEditor from '@/components/PositionDefsEditor'
+import CrewChangeNotice from '@/components/CrewChangeNotice'
 import type { DayKind, GridDay, PositionDef } from '@/lib/positionDefs'
 
 // Edit Show → Positions (piece B of the 2026-09-07 show-flow spec).
@@ -114,6 +115,11 @@ export default function PositionDefsSection({
   const [openSlots, setOpenSlots] = useState<OpenSlot[]>([])
   const [target, setTarget] = useState('')
 
+  // Crew change notice: a move or a release changes what a person's days
+  // look like, so both offer to tell them — never forced. Only people with a
+  // crewMemberId can be told (the route emails by crew_members row).
+  const [changed, setChanged] = useState<{ id: string; name: string }[]>([])
+
   async function startMove(f: SlotFlag) {
     setError('')
     setMoving(f); setOpenSlots([]); setTarget('')
@@ -152,6 +158,9 @@ export default function PositionDefsSection({
       role: moving.role,
       days: compressDays([slot.date]),
     })
+    if (moving.crew_member_id) {
+      setChanged(prev => [...prev, { id: moving.crew_member_id!, name: moving.crew_member_name }])
+    }
     setMoving(null)
     await supabase.rpc('sync_position_slots', { p_show_id: showId })
     router.refresh()
@@ -179,6 +188,9 @@ export default function PositionDefsSection({
       role: f.role,
       days: compressDays([f.date]),
     })
+    if (f.crew_member_id) {
+      setChanged(prev => [...prev, { id: f.crew_member_id!, name: f.crew_member_name }])
+    }
     await supabase.rpc('sync_position_slots', { p_show_id: showId })
     setBusy(false)
     router.refresh()
@@ -231,6 +243,12 @@ export default function PositionDefsSection({
         </div>
       )}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+
+      {changed.length > 0 && (
+        <div className="mt-4">
+          <CrewChangeNotice showId={showId} people={changed} onDone={() => setChanged([])} />
+        </div>
+      )}
     </section>
   )
 }

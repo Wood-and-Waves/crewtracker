@@ -371,6 +371,7 @@ export default function EditShowClient({
             <AddDayButton
               showId={show.id}
               hasCrew={crewRateEntries.length > 0}
+              hasDefs={!!positions && positions.defs.length > 0}
             />
           </div>
           <p className="text-xs text-muted mt-2">Adding a day takes effect straight away.</p>

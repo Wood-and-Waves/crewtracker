@@ -7,6 +7,7 @@ import { logStaffingEvent } from '@/lib/staffingEvents'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import CrewCallModal from '@/components/CrewCallModal'
+import CrewChangeNotice from '@/components/CrewChangeNotice'
 import { cn } from '@/lib/cn'
 
 type RoomCrew = { id: string; crewMemberId: string | null; name: string; role: string; dayRate: number }
@@ -60,6 +61,10 @@ export default function RoomActionsMenu({
   // Timecard ids currently typing a custom role.
   const [customRole, setCustomRole] = useState<Record<string, boolean>>({})
   const [callOpen, setCallOpen] = useState(false)
+  // Crew change notice: removing someone changes what's left of their show,
+  // so offer to tell them — never forced. Only people with a crewMemberId can
+  // be told (the route emails by crew_members row).
+  const [changed, setChanged] = useState<{ id: string; name: string }[]>([])
 
   // Load the org's AV roles for the role dropdown when Edit Crew opens.
   useEffect(() => {
@@ -77,6 +82,7 @@ export default function RoomActionsMenu({
     setName(roomName)
     setError('')
     setCrewList(crew)
+    setChanged([])
   }
 
   function startEditCrew() {
@@ -84,6 +90,7 @@ export default function RoomActionsMenu({
     setRateInputs(Object.fromEntries(crew.map(c => [c.id, String(c.dayRate ?? 0)])))
     setMenuOpen(false)
     setError('')
+    setChanged([])
     setMode('editCrew')
   }
 
@@ -119,6 +126,9 @@ export default function RoomActionsMenu({
         role: tc.role,
         days: null,
       })
+      if (tc.crewMemberId) {
+        setChanged(prev => [...prev, { id: tc.crewMemberId!, name: tc.name }])
+      }
     }
     setCrewList(prev => prev.filter(c => c.id !== tc.id))
     router.refresh()
@@ -363,6 +373,11 @@ export default function RoomActionsMenu({
 
             <div className="p-5 pt-3 border-t border-line">
               {error && <p className="text-xs text-danger mb-2">{error}</p>}
+              {showId && changed.length > 0 && (
+                <div className="mb-3">
+                  <CrewChangeNotice showId={showId} people={changed} onDone={() => setChanged([])} />
+                </div>
+              )}
               <Button variant="ghost" className="w-full py-3" onClick={close}>Done</Button>
             </div>
           </div>

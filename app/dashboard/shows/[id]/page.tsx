@@ -105,7 +105,7 @@ export default async function ShowDetailPage({
   // go in one round trip. This page used to be nine awaits deep after its
   // opening Promise.all; every one of those is paid again on every
   // router.refresh(), i.e. after every punch.
-  const [{ data: allShowRooms }, { data: organization }] = await Promise.all([
+  const [{ data: allShowRooms }, { data: organization }, { data: defRows }] = await Promise.all([
     supabase
       .from('rooms')
       .select('id, name, work_day_id')
@@ -114,8 +114,15 @@ export default async function ShowDetailPage({
       // back arbitrarily and could reshuffle between refreshes.
       .order('created_at'),
     supabase.from('organizations').select('timecard_rounding_minutes').eq('id', organizationId).single(),
+    // Add Day's extend-toggle: cheap existence check, gated the same as every
+    // other positions query on this page — a switched-off organization must
+    // not see the extend flow reappear just because old rows are still there.
+    schedulingOn
+      ? supabase.from('position_defs').select('id').eq('show_id', id).limit(1)
+      : Promise.resolve({ data: [] as { id: string }[] }),
   ])
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
+  const hasDefs = (defRows?.length ?? 0) > 0
 
   const allRoomIds = (allShowRooms || []).map(r => r.id)
 
@@ -258,6 +265,7 @@ export default async function ShowDetailPage({
     <AddDayButton
       showId={id}
       hasCrew={lastDayHasCrew}
+      hasDefs={hasDefs}
       variant="circle"
     />
   )
