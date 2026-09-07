@@ -18,7 +18,7 @@ import MobileRoomTracker from '@/components/MobileRoomTracker'
 import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
 import { punchGridCols, LAYOUT_COOKIE } from '@/lib/trackerLayout'
-import { dayTypeBgClass, dayTypeLabel } from '@/lib/dayTypes'
+import { dayActivitiesBgClass, dayLabel } from '@/lib/dayActivities'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
@@ -372,10 +372,10 @@ export default async function ShowDetailPage({
                   dropdown under the date read as a question the operator had to
                   answer before punching anybody in. Nothing shows when no type
                   is set, rather than a "Set day type…" prompt. */}
-              {dayTypeLabel(activeDay.day_type) && (
+              {dayLabel(activeDay.activities) && (
                 <p className="mt-1 flex items-center justify-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-muted">
-                  <span className={cn('h-2 w-2 shrink-0', dayTypeBgClass(activeDay.day_type) ?? 'bg-line')} />
-                  {dayTypeLabel(activeDay.day_type)}
+                  <span className={cn('h-2 w-2 shrink-0', dayActivitiesBgClass(activeDay.activities) ?? 'bg-line')} />
+                  {dayLabel(activeDay.activities)}
                 </p>
               )}
             </div>
@@ -612,7 +612,7 @@ export default async function ShowDetailPage({
         dayNumber={activeDay.day_number}
         totalDays={workDays.length}
         workDayId={activeDay.id}
-        dayType={activeDay.day_type ?? null}
+        dayActivities={activeDay.activities ?? []}
         dateLabel={dateLabel}
         prevDayNumber={prevDay?.day_number ?? null}
         nextDayNumber={nextDay?.day_number ?? null}

@@ -8,12 +8,12 @@ import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES } from '@/lib/timezones'
 import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
-import DayTypePicker from '@/components/DayTypePicker'
+import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
-import { dayTypeBgClass } from '@/lib/dayTypes'
+import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import { cn } from '@/lib/cn'
 
 const inputCls =
@@ -64,6 +64,34 @@ export default function EditShowClient({
 }) {
   const router = useRouter()
   const supabase = createClient()
+
+  // Day activities (0032). Deliberately NOT gated on a finalized show: that
+  // lock covers timecards and punches, not work days.
+  const [dayActs, setDayActs] = useState<Record<string, Activity[]>>(
+    () => Object.fromEntries(workDays.map((wd: any) => [wd.id, normalizeActivities(wd.activities)])))
+  useEffect(() => {
+    setDayActs(Object.fromEntries(workDays.map((wd: any) => [wd.id, normalizeActivities(wd.activities)])))
+  }, [workDays])
+  const [savingDay, setSavingDay] = useState<string | null>(null)
+  const [dayError, setDayError] = useState('')
+
+  async function toggleDayActivity(workDayId: string, a: Activity, next: boolean) {
+    setDayError('')
+    const before = dayActs[workDayId] ?? []
+    const after = normalizeActivities(next ? [...before, a] : before.filter(x => x !== a))
+    setDayActs(v => ({ ...v, [workDayId]: after }))
+    setSavingDay(workDayId)
+    // .select('id') and count the rows: an UPDATE matching no policy returns
+    // success with zero rows (CLAUDE.md). Never render success unconfirmed.
+    const { data, error } = await supabase.from('work_days').update({ activities: after }).eq('id', workDayId).select('id')
+    setSavingDay(null)
+    if (error || !data || data.length === 0) {
+      setDayActs(v => ({ ...v, [workDayId]: before }))
+      setDayError(error?.message ?? "Couldn't save — you may not have permission to change this show.")
+      return
+    }
+    router.refresh()
+  }
   const [saveError, setSaveError] = useState('')
   // Transient "Saved" tick. Deliberately not a toast: this page fires a lot of
   // small writes and a stack of toasts would be worse than the Save button was.
@@ -465,31 +493,19 @@ export default function EditShowClient({
         </section>
       )}
 
-      {/* Day types — the show's plan for each day, so they live with the show
-          rather than on the tracker, where a picker under the date read as
-          something the operator had to answer before punching anybody in.
-          Each tile saves itself (DayTypePicker owns its own verified write). */}
+      {/* Day activities — the show's plan for each day, so they live with the
+          show rather than on the tracker. Each toggle saves itself: a verified
+          write, optimistic, reverted on refusal. */}
       {workDays.length > 0 && (
         <section className="mb-6">
-          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Day Types</p>
-          <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-            {workDays.map(wd => (
-              <div key={wd.id}>
-                <div className={cn('h-1.5 w-full', dayTypeBgClass(wd.day_type) ?? 'bg-line')} />
-                <div className="mt-1.5 flex items-center justify-between gap-3">
-                  <span className="shrink-0 whitespace-nowrap font-mono text-xs font-semibold uppercase text-muted">
-                    {new Date(wd.date + 'T00:00:00').toLocaleDateString('en-US', {
-                      weekday: 'short', month: 'short', day: 'numeric',
-                    })}
-                  </span>
-                  <DayTypePicker workDayId={wd.id} value={wd.day_type ?? null} className="w-[190px] shrink-0" />
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-muted">
-            Optional. Shown on the tracker and beside each date in a crew booking request.
-          </p>
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Day activities</p>
+          <DayActivitiesGrid
+            rows={workDays.map((wd: any) => ({ key: wd.id, date: wd.date }))}
+            value={dayActs}
+            busyKey={savingDay}
+            error={dayError}
+            onToggle={toggleDayActivity}
+          />
         </section>
       )}
 

@@ -17,7 +17,7 @@
 // shape of a phishing message.
 
 import { Resend } from 'resend'
-import { dayTypeLabel } from '@/lib/dayTypes'
+import { dayLabel } from '@/lib/dayActivities'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
 
@@ -64,9 +64,10 @@ export type EngagementDay = {
    * travelling" are different facts and a crew member deciding whether to take
    * the job wants both. Null when nobody has set one.
    *
-   * A display field only. It never reaches lib/payroll.ts — see lib/dayTypes.ts.
+   * A display field only. It never reaches lib/payroll.ts — see
+   * lib/dayActivities.ts. Empty or missing when nobody has set any.
    */
-  dayType?: string | null
+  activities?: readonly string[] | null
 }
 
 type Kind = 'work' | 'travel' | 'travel+work'
@@ -164,16 +165,16 @@ export function describeDayLines(
       const k = kindOf(d)
       return {
         date: fmtDate(d.date),
-        production: dayTypeLabel(d.dayType),
+        production: dayLabel(d.activities),
         // 'work' adds nothing a crew member doesn't already assume.
         you: k === 'work' ? null : KIND_TEXT[k].replace(/^./, c => c.toUpperCase()),
       }
     })
 }
 
-/** True when at least one day has a production day type worth printing. */
-export function hasAnyDayType(days: EngagementDay[]): boolean {
-  return days.some(d => dayTypeLabel(d.dayType) !== null)
+/** True when at least one day has production activities worth printing. */
+export function hasAnyDayActivity(days: EngagementDay[]): boolean {
+  return days.some(d => dayLabel(d.activities) !== null)
 }
 
 export type BookingRequestInput = {
@@ -198,7 +199,7 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   // list answers "what happens on each day". Only shown when somebody actually
   // set day types — an unset run would otherwise print a column of blanks.
   const lines = describeDayLines(input.days)
-  const showSchedule = hasAnyDayType(input.days)
+  const showSchedule = hasAnyDayActivity(input.days)
   const scheduleText = showSchedule
     ? lines.map(l => {
         const right = [l.production, l.you].filter(Boolean).join(' · ')
@@ -278,11 +279,11 @@ export function buildBookingRequestText(input: Omit<BookingRequestInput, 'to' | 
   // Production day types only. The personal travel commitment is already its
   // own sentence above (`qualifiers`), and repeating it per day would say the
   // same thing twice at double the length.
-  const schedule = hasAnyDayType(input.days)
+  const schedule = hasAnyDayActivity(input.days)
     ? [...input.days]
         .sort((a, b) => a.date.localeCompare(b.date))
         .map(d => {
-          const label = dayTypeLabel(d.dayType)
+          const label = dayLabel(d.activities)
           return label ? `${fmtDateShort(d.date)} ${label}` : fmtDateShort(d.date)
         })
         .join(', ')

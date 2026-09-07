@@ -11,7 +11,8 @@ import Button from '@/components/ui/Button'
 import NumberedHead from '@/components/ui/NumberedHead'
 import Select from '@/components/ui/Select'
 import { BAND } from '@/lib/panel'
-import { DAY_TYPES, DAY_TYPE_LABELS, isDayType, dayTypeBgClass, type DayType } from '@/lib/dayTypes'
+import { normalizeActivities, type Activity } from '@/lib/dayActivities'
+import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import { cn } from '@/lib/cn'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
 import { plannedPositions, roomDayIndices, validateRooms, type CallModel } from '@/lib/crewCallGrid'
@@ -91,7 +92,7 @@ export default function NewShowClient({
   // Keyed by DATE, not by index: the run shifts when the start or end date
   // changes, and a day that is still in the run should keep the type it was
   // given rather than inherit whatever the day in that position used to be.
-  const [dayTypes, setDayTypes] = useState<Record<string, DayType>>({})
+  const [activities, setActivities] = useState<Record<string, Activity[]>>({})
   const [presetId, setPresetId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -168,13 +169,14 @@ export default function NewShowClient({
       setCreatedShowId(data.id)
     }
 
-    // day_type is null when nobody picked one. Never invent a default — a made-up
-    // day type ends up on the tracker and in a booking request email.
+    // No activities when nobody tapped any. Never invent a default — a made-up
+    // activity ends up on the tracker and in a booking request email. The
+    // database mirrors day_type from this (migration 0032).
     const workDayRows = dates.map((date, i) => ({
       show_id: showId,
       date,
       day_number: i + 1,
-      day_type: dayTypes[date] ?? null,
+      activities: activities[date] ?? [],
     }))
 
     // The preset's values are COPIED in rather than referenced. The show owns
@@ -386,44 +388,18 @@ export default function NewShowClient({
         <section className="mb-9">
           <NumberedHead
             n="3"
-            title="Day Types"
-            note={`${Object.keys(dayTypes).length} of ${dates.length} set · optional`}
+            title="Day activities"
+            note={`${Object.values(activities).filter(a => a.length > 0).length} of ${dates.length} set · optional`}
             className="mb-4"
           />
-          <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-            {dates.map(date => (
-              <div key={date}>
-                <div className={cn('h-1.5 w-full', dayTypeBgClass(dayTypes[date]) ?? 'bg-line')} />
-                <div className="mt-1.5 flex items-center justify-between gap-3">
-                  <span className="shrink-0 whitespace-nowrap font-mono text-xs font-semibold uppercase text-muted">
-                    {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-                      weekday: 'short', month: 'short', day: 'numeric',
-                    })}
-                  </span>
-                  <Select
-                    ariaLabel={`Day type for ${date}`}
-                    size="sm"
-                    className="w-[190px] shrink-0"
-                    value={dayTypes[date] ?? ''}
-                    onChange={v => setDayTypes(prev => {
-                      const next = { ...prev }
-                      if (isDayType(v)) next[date] = v
-                      else delete next[date]
-                      return next
-                    })}
-                    options={[
-                      { value: '', label: '—' },
-                      ...DAY_TYPES.map(t => ({
-                        value: t,
-                        label: DAY_TYPE_LABELS[t],
-                        swatchClass: dayTypeBgClass(t),
-                      })),
-                    ]}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+          <DayActivitiesGrid
+            rows={dates.map(date => ({ key: date, date }))}
+            value={activities}
+            onToggle={(date, a, next) => setActivities(prev => {
+              const cur = prev[date] ?? []
+              return { ...prev, [date]: normalizeActivities(next ? [...cur, a] : cur.filter(x => x !== a)) }
+            })}
+          />
         </section>
       )}
 
@@ -444,7 +420,7 @@ export default function NewShowClient({
           onChange={setCall}
           onRoomsChange={setRooms}
           schedulingEnabled={schedulingEnabled}
-          dayTypes={dayTypes}
+          dayActivities={activities}
           invalidRoomKeys={badRoomKeys}
           sectionNumber="4"
         />

@@ -9,7 +9,7 @@ import BatchPunchBar from '@/components/BatchPunchBar'
 import RoomActionsMenu from '@/components/RoomActionsMenu'
 import CopyCrewButton from '@/components/CopyCrewButton'
 import { visiblePunchTypes } from '@/lib/punches'
-import { dayTypeBgClass, dayTypeLabel } from '@/lib/dayTypes'
+import { dayActivitiesBgClass, dayLabel } from '@/lib/dayActivities'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 
@@ -30,7 +30,7 @@ export default function MobileRoomTracker({
   dayNumber,
   totalDays,
   workDayId,
-  dayType,
+  dayActivities,
   dateLabel,
   prevDayNumber,
   nextDayNumber,
@@ -67,7 +67,7 @@ export default function MobileRoomTracker({
   dayNumber: number
   totalDays: number
   workDayId: string
-  dayType: string | null
+  dayActivities: string[]
   dateLabel: string
   prevDayNumber: number | null
   nextDayNumber: number | null
@@ -229,10 +229,10 @@ export default function MobileRoomTracker({
             <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {dayNumber} of {totalDays}</p>
             <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
             {/* Read-only: the picker lives on Edit Show now. */}
-            {dayTypeLabel(dayType) && (
+            {dayLabel(dayActivities) && (
               <p className="mt-1 flex items-center justify-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-muted">
-                <span className={cn('h-2 w-2 shrink-0', dayTypeBgClass(dayType) ?? 'bg-line')} />
-                {dayTypeLabel(dayType)}
+                <span className={cn('h-2 w-2 shrink-0', dayActivitiesBgClass(dayActivities) ?? 'bg-line')} />
+                {dayLabel(dayActivities)}
               </p>
             )}
           </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Button from '@/components/ui/Button'
-import { dayTypeLabel, dayTypeBgClass } from '@/lib/dayTypes'
+import { dayLabel as activitiesLabel, dayActivitiesBgClass } from '@/lib/dayActivities'
 import { cn } from '@/lib/cn'
 import PositionsBulkAdd from '@/components/PositionsBulkAdd'
 import RolePicker from '@/components/RolePicker'
@@ -62,7 +62,7 @@ export default function CrewCallGrid({
   roles,
   onChange,
   onRoomsChange,
-  dayTypes,
+  dayActivities,
   invalidRoomKeys,
   sectionNumber,
   readOnly = false,
@@ -76,7 +76,7 @@ export default function CrewCallGrid({
   /** Accepts an updater so add/remove can be safe against rapid clicks. */
   onRoomsChange: (next: GridRoom[] | ((prev: GridRoom[]) => GridRoom[])) => void
   /** Day type per DATE, for the column headers. Optional — unset days show none. */
-  dayTypes?: Record<string, string>
+  dayActivities?: Record<string, string[]>
   /** Rooms whose name would cost them their positions at create time. */
   invalidRoomKeys?: string[]
   /** Open Paper section number for the grid's NumberedHead ("4" on New Show). */
@@ -192,7 +192,7 @@ export default function CrewCallGrid({
             </div>
             {schedulingEnabled && dates.map((date, i) => {
               const l = dayLabel(date)
-              const tint = dayTypeBgClass(dayTypes?.[date])
+              const tint = dayActivitiesBgClass(dayActivities?.[date])
               return (
                 <div
                   key={date}
@@ -210,9 +210,9 @@ export default function CrewCallGrid({
                   {/* The real day type, when one has been set. This replaced
                       hard-coded "load in"/"load out" positional guesses. Blank
                       when unset — better than a confident lie. */}
-                  {dayTypeLabel(dayTypes?.[date]) && (
+                  {activitiesLabel(dayActivities?.[date]) && (
                     <div className={cn('truncate font-display text-[9px] uppercase leading-tight', tint ? 'text-white' : 'text-accent')}>
-                      {dayTypeLabel(dayTypes?.[date])}
+                      {activitiesLabel(dayActivities?.[date])}
                     </div>
                   )}
                 </div>

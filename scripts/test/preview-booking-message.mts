@@ -7,6 +7,7 @@
 // Renders nothing and sends nothing. Pure formatting, no database, no Resend.
 
 import { buildBookingRequestEmail, buildBookingRequestText, type EngagementDay } from '../../lib/bookingEmail.ts'
+import { fromLegacy } from '../../lib/dayActivities.ts'
 
 function day(
   date: string,
@@ -18,7 +19,7 @@ function day(
     isTravelDay: kind === 'travel',
     travelIn: kind === 'in',
     travelOut: kind === 'out',
-    dayType,
+    activities: fromLegacy(dayType),
   }
 }
 

@@ -62,13 +62,13 @@ export async function POST(request: Request) {
   // selected: the request tells them nothing about money.
   const { data: timecards } = await supabase
     .from('timecards')
-    .select('id, role, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id, day_type ) )')
+    .select('id, role, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id, activities ) )')
     .eq('crew_member_id', crewMemberId)
     .eq('rooms.work_days.show_id', showId)
 
   // Keyed by date so a person in two rooms on one day is still one day, and so
   // the travel flags are ORed rather than whichever row came back last.
-  const byDate = new Map<string, { date: string; isTravelDay: boolean; travelIn: boolean; travelOut: boolean; dayType: string | null }>()
+  const byDate = new Map<string, { date: string; isTravelDay: boolean; travelIn: boolean; travelOut: boolean; activities: string[] }>()
   let role: string | null = null
   for (const t of (timecards ?? []) as any[]) {
     const room = Array.isArray(t.rooms) ? t.rooms[0] : t.rooms
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         travelIn: !!prev?.travelIn || t.travel_in_day === true,
         travelOut: !!prev?.travelOut || t.travel_out_day === true,
         // From work_days, so both rows of a two-room day agree.
-        dayType: prev?.dayType ?? wd.day_type ?? null,
+        activities: prev?.activities ?? wd.activities ?? [],
       })
     }
     if (!role && t.role) role = t.role
