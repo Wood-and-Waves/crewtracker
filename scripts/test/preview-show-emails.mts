@@ -8,6 +8,7 @@
 
 import { buildCallHandoffEmail } from '../../lib/callHandoffEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
+import { buildReadyEmail, compressDays } from '../../lib/readyEmail.ts'
 
 console.log('=== Send to scheduling ===\n')
 
@@ -35,3 +36,58 @@ console.log(`Subject: ${subject}\n`)
 console.log(text)
 console.log('\n---')
 console.log('callSize:', describeCallSize(call))
+
+console.log('\n\n=== Ready email (show fully staffed) ===\n')
+
+// 3 days, 2 rooms: Alex works all three days, Casey only load-in/show,
+// Jordan skips the show day and comes back for load-out.
+const readyDays = [
+  {
+    date: '2026-09-08', label: 'Load-in',
+    rooms: [
+      { name: 'Ballroom', people: [
+        { name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' },
+        { name: 'Jordan Blake', role: 'Stagehand', phone: null },
+      ] },
+      { name: 'Breakout A', people: [
+        { name: 'Casey Nguyen', role: 'A2', phone: '(312) 555-0142' },
+      ] },
+    ],
+  },
+  {
+    date: '2026-09-09', label: 'Show',
+    rooms: [
+      { name: 'Ballroom', people: [
+        { name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' },
+      ] },
+      { name: 'Breakout A', people: [
+        { name: 'Casey Nguyen', role: 'A2', phone: '(312) 555-0142' },
+      ] },
+    ],
+  },
+  {
+    date: '2026-09-10', label: 'Show · Load-out',
+    rooms: [
+      { name: 'Ballroom', people: [
+        { name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' },
+        { name: 'Jordan Blake', role: 'Stagehand', phone: null },
+      ] },
+    ],
+  },
+]
+
+const readyPerPerson = [
+  { name: 'Alex Reyes', role: 'A1', days: compressDays(['2026-09-08', '2026-09-09', '2026-09-10']) },
+  { name: 'Casey Nguyen', role: 'A2', days: compressDays(['2026-09-08', '2026-09-09']) },
+  { name: 'Jordan Blake', role: 'Stagehand', days: compressDays(['2026-09-08', '2026-09-10']) },
+]
+
+const ready = buildReadyEmail({
+  to: 'sam@example.test', pmName: 'Sam Okafor', showName: 'Northwind User Conference',
+  dates: 'Sep 8–10', venue: 'Moscone West', orgName: 'Wood & Waves Productions',
+  link: 'https://crewtracker.app/dashboard/shows/abc123',
+  days: readyDays, perPerson: readyPerPerson, waiting: 0,
+})
+
+console.log(`Subject: ${ready.subject}\n`)
+console.log(ready.text)

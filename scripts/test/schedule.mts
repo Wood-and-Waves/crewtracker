@@ -30,6 +30,7 @@ import {
 import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDay } from '../../lib/positionDefs.ts'
 import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
+import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -616,6 +617,24 @@ console.log('\n--- scheduling queue summary ---')
   )
   check('show a: 1 open of 3, 1 waiting, 2 flags', m.get('a'), { open: 1, total: 3, waiting: 1, flags: 2 })
   check('show b: full but 1 waiting (pencilled counts)', m.get('b'), { open: 0, total: 1, waiting: 1, flags: 0 })
+}
+
+console.log('\n--- ready email: day compression ---')
+{
+  check('consecutive → range', compressDays(['2026-09-08','2026-09-09','2026-09-10']), 'Tue 8 – Thu 10')
+  check('gap → list', compressDays(['2026-09-08','2026-09-10']), 'Tue 8, Thu 10')
+  check('one day', compressDays(['2026-09-08']), 'Tue 8')
+  check('unsorted input is sorted', compressDays(['2026-09-10','2026-09-08','2026-09-09']), 'Tue 8 – Thu 10')
+  const { subject, text } = buildReadyEmail({
+    to: 'pm@x.test', pmName: 'Sam Okafor', showName: 'Northwind', dates: 'Sep 8–10', venue: 'Moscone West',
+    orgName: 'Wood & Waves', link: 'https://crewtracker.app/dashboard/shows/1',
+    days: [{ date: '2026-09-08', label: 'Load-in', rooms: [{ name: 'Ballroom', people: [{ name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' }] }] }],
+    perPerson: [{ name: 'Alex Reyes', role: 'A1', days: 'Tue 8 – Thu 10' }], waiting: 0,
+  })
+  check('subject names the show and says it is staffed', subject, 'Wood & Waves: Northwind is fully staffed')
+  check('roster line carries name, role, phone', text.includes('Alex Reyes · A1 · (312) 555-0100'), true)
+  check('per-person line', text.includes('Alex Reyes · A1 · Tue 8 – Thu 10'), true)
+  check('waiting count', text.includes('0 waiting on a reply'), true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

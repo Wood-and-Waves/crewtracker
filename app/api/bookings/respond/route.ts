@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendDeclineNoticeEmail } from '@/lib/bookingEmail'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 import { siteOrigin } from '@/lib/siteOrigin'
+import { maybeSendReadyEmail } from '@/lib/showReadiness'
 
 // A crew member's answer to a booking request. No login: the token is the
 // authorization, so this runs with the service role.
@@ -102,6 +103,16 @@ export async function POST(request: Request) {
 
     if (tcError) {
       return NextResponse.json({ error: tcError.message }, { status: 500 })
+    }
+  }
+
+  // A confirm can be the LAST position on the show — check whether it just
+  // went fully staffed. Never fails the response either way: the answer is
+  // recorded regardless of whether the ready email could be sent.
+  if (response === 'confirmed') {
+    const { sent, reason } = await maybeSendReadyEmail(admin, invite.show_id)
+    if (!sent && !['already sent', 'no accepted PM', 'closed', 'no show'].includes(reason) && !/^\d+ open, \d+ waiting$/.test(reason)) {
+      console.error('maybeSendReadyEmail failed after a confirm:', reason)
     }
   }
 
