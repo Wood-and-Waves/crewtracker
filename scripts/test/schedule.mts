@@ -24,6 +24,9 @@ import {
   describeDates, buildBookingRequestText, describeDayLines, hasAnyDayType,
 } from '../../lib/bookingEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
+import {
+  dayLabel, dayTint, isKindOfDay, fromLegacy, toLegacy, normalizeActivities,
+} from '../../lib/dayActivities.ts'
 import { canUseScheduling } from '../../lib/permissions.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
@@ -303,13 +306,13 @@ check('hasAnyDayType is false when nothing is set',
   hasAnyDayType(run(['work', 'work'])), false)
 check('production and personal travel are independent',
   describeDayLines([typed('2026-07-28', 'travel_load_in', 'travel')]),
-  [{ date: 'Tue, Jul 28', production: 'Travel/Load-in', you: 'Travel' }])
+  [{ date: 'Tue, Jul 28', production: 'Travel · Load-in', you: 'Travel' }])
 check('a plain work day on a show day says nothing personal',
   describeDayLines([typed('2026-07-28', 'show')]),
   [{ date: 'Tue, Jul 28', production: 'Show', you: null }])
 check('travel-and-work reads as its own thing, not plain travel',
   describeDayLines([typed('2026-07-28', 'load_out_travel', 'out')]),
-  [{ date: 'Tue, Jul 28', production: 'Load-out/Travel', you: 'Travel and work' }])
+  [{ date: 'Tue, Jul 28', production: 'Load-out · Travel', you: 'Travel and work' }])
 // A value written by a future build must render as blank, never as a raw slug
 // in an email to a crew member.
 check('an unknown stored day type renders as null, not the raw value',
@@ -318,7 +321,7 @@ check('hasAnyDayType ignores unknown values too',
   hasAnyDayType([typed('2026-07-28', 'wrap_party')]), false)
 check('the eighth day type is recognised',
   describeDayLines([typed('2026-07-28', 'show_load_out')]).map(l => l.production),
-  ['Show/Load-out'])
+  ['Show · Load-out'])
 // Query order is not guaranteed anywhere else; it must not be here either.
 check('unsorted input still reads in date order',
   describeDayLines([typed('2026-07-30', 'show'), typed('2026-07-28', 'load_in')])
@@ -523,6 +526,52 @@ check('user may, org does not have it', canUseScheduling(gateUser(false, true)),
 check('neither', canUseScheduling(gateUser(false, false)), false)
 // Signed out, or a deactivated member: getCurrentUser returns null / no org.
 check('nobody signed in', canUseScheduling(null), false)
+
+console.log('\n=== day activities: label, tint, kinds, legacy round-trip ===')
+check('no activities → no label', dayLabel([]), null)
+check('one activity', dayLabel(['show']), 'Show')
+check('label runs in show chronology whatever the input order', dayLabel(['load_out', 'show']), 'Show · Load-out')
+check('the one-day corporate', dayLabel(['show', 'travel', 'load_in']), 'Travel · Load-in · Show')
+check('unknown values are ignored, not printed', dayLabel(['show', 'wrap_party']), 'Show')
+check('normalize dedupes and orders', normalizeActivities(['show', 'travel', 'show']), ['travel', 'show'])
+
+check('tint: show beats everything', dayTint(['travel', 'load_in', 'show']), 'show')
+check('tint: rehearsal beats load-in', dayTint(['load_in', 'rehearsal']), 'rehearsal')
+check('tint: load-in and load-out share amber', dayTint(['load_out']), 'loadin')
+check('tint: travel alone is slate', dayTint(['travel']), 'travel')
+check('tint: nothing → null', dayTint([]), null)
+
+check('kind all matches any day', isKindOfDay([], 'all'), true)
+check('kind show needs show', isKindOfDay(['load_in', 'show'], 'show'), true)
+check('kind show without show', isKindOfDay(['load_in'], 'show'), false)
+check('kind load matches load-in', isKindOfDay(['travel', 'load_in'], 'load'), true)
+check('kind load matches load-out', isKindOfDay(['show', 'load_out'], 'load'), true)
+check('kind load without either', isKindOfDay(['show'], 'load'), false)
+check('kind custom never matches by activities', isKindOfDay(['show'], 'custom'), false)
+
+// The eight legacy slugs must read as they did. Tints follow the new rule
+// (show > rehearsal > load-in/out > travel), so the two travel+load days change
+// from slate to amber — the ONE visible change, deliberate.
+const LEGACY: Record<string, { label: string; tint: string }> = {
+  travel_load_in: { label: 'Travel · Load-in', tint: 'loadin' },
+  load_in: { label: 'Load-in', tint: 'loadin' },
+  load_in_show: { label: 'Load-in · Show', tint: 'show' },
+  rehearsal: { label: 'Rehearsal', tint: 'rehearsal' },
+  show: { label: 'Show', tint: 'show' },
+  show_load_out: { label: 'Show · Load-out', tint: 'show' },
+  load_out_travel: { label: 'Load-out · Travel', tint: 'loadin' },
+  travel: { label: 'Travel', tint: 'travel' },
+}
+for (const [slug, want] of Object.entries(LEGACY)) {
+  const acts = fromLegacy(slug)
+  check(`legacy ${slug} → label`, dayLabel(acts), want.label)
+  check(`legacy ${slug} → tint`, dayTint(acts), want.tint)
+  check(`legacy ${slug} round-trips through toLegacy`, toLegacy(acts), slug)
+}
+check('legacy null → no activities', fromLegacy(null), [])
+check('toLegacy of a set with no legacy name falls back to its biggest activity', toLegacy(['rehearsal', 'show']), 'show')
+check('toLegacy of a lone load-out is null — the legacy list never had one', toLegacy(['load_out']), null)
+check('toLegacy of nothing is null', toLegacy([]), null)
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)
