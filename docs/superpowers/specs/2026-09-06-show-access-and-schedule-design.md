@@ -1,3 +1,5 @@
+> **2026-09-07:** Section 4 (the grid) was built, then rolled back at Dan's direction and superseded by `2026-09-07-show-flow-design.md`, which also replaces the per-show `scheduler_id` door with "has the scheduling permission and the show was sent to scheduling". Sections 1–3 and 5 are built and on production.
+
 # Show access, crew-side logins, and the schedule grid — design
 
 Decided with Dan, 2026-09-06. Five sections, in build order. Sections 1, 2, 3 and 5 ship as
