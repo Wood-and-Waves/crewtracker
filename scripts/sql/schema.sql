@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 7BcOeC0TbGGaRQN2JavAQs3JCREFlEaNzONmfqeyUA1wotX6mmCui5q9CYhalBX
+\restrict YdmTEhM9xiKB8zuIAIlxu1Xbh0W2rhdhY9dQ3c68iaohefM7lhSxhEKC0bALZVi
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -31,6 +31,30 @@ CREATE SCHEMA "public";
 --
 
 COMMENT ON SCHEMA "public" IS 'standard public schema';
+
+
+--
+-- Name: activities_to_day_type("text"[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."activities_to_day_type"("p" "text"[]) RETURNS "text"
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select case
+    when p is null or cardinality(p) = 0 then null
+    when cardinality(p) = 2 and p @> array['travel','load_in']  then 'travel_load_in'
+    when cardinality(p) = 2 and p @> array['load_in','show']    then 'load_in_show'
+    when cardinality(p) = 2 and p @> array['show','load_out']   then 'show_load_out'
+    when cardinality(p) = 2 and p @> array['load_out','travel'] then 'load_out_travel'
+    when cardinality(p) = 1 and p[1] in ('load_in','rehearsal','show','travel') then p[1]
+    -- No compound name: the biggest activity that has a legacy slug. The
+    -- legacy list never had a plain load_out, so load-out-only mirrors to null.
+    when 'show' = any(p) then 'show'
+    when 'rehearsal' = any(p) then 'rehearsal'
+    when 'load_in' = any(p) then 'load_in'
+    when 'travel' = any(p) then 'travel'
+    else null end;
+$$;
 
 
 --
@@ -192,6 +216,26 @@ begin
   end if;
   return null;
 end; $$;
+
+
+--
+-- Name: day_type_to_activities("text"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."day_type_to_activities"("p" "text") RETURNS "text"[]
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select case p
+    when 'travel_load_in'  then array['travel','load_in']
+    when 'load_in'         then array['load_in']
+    when 'load_in_show'    then array['load_in','show']
+    when 'rehearsal'       then array['rehearsal']
+    when 'show'            then array['show']
+    when 'show_load_out'   then array['show','load_out']
+    when 'load_out_travel' then array['load_out','travel']
+    when 'travel'          then array['travel']
+    else '{}'::text[] end;
+$$;
 
 
 --
@@ -908,6 +952,31 @@ begin
 end; $$;
 
 
+--
+-- Name: work_days_mirror_day_type(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."work_days_mirror_day_type"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if tg_op = 'INSERT' then
+    if cardinality(coalesce(new.activities, '{}')) = 0 and new.day_type is not null then
+      new.activities := day_type_to_activities(new.day_type);
+    else
+      new.day_type := activities_to_day_type(new.activities);
+    end if;
+  else
+    if new.activities is distinct from old.activities then
+      new.day_type := activities_to_day_type(new.activities);
+    elsif new.day_type is distinct from old.day_type then
+      new.activities := day_type_to_activities(new.day_type);
+    end if;
+  end if;
+  return new;
+end; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -1397,6 +1466,8 @@ CREATE TABLE "public"."work_days" (
     "day_number" integer NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "day_type" "text",
+    "activities" "text"[] DEFAULT '{}'::"text"[] NOT NULL,
+    CONSTRAINT "work_days_activities_check" CHECK (("activities" <@ ARRAY['travel'::"text", 'load_in'::"text", 'rehearsal'::"text", 'show'::"text", 'load_out'::"text"])),
     CONSTRAINT "work_days_day_type_check" CHECK ((("day_type" IS NULL) OR ("day_type" = ANY (ARRAY['travel_load_in'::"text", 'load_in'::"text", 'load_in_show'::"text", 'rehearsal'::"text", 'show'::"text", 'show_load_out'::"text", 'load_out_travel'::"text", 'travel'::"text"]))))
 );
 
@@ -2077,6 +2148,13 @@ CREATE TRIGGER "timecards_inherit_show_day_rate" BEFORE INSERT ON "public"."time
 --
 
 CREATE TRIGGER "timecards_propagate_show_day_rate" AFTER UPDATE OF "day_rate" ON "public"."timecards" FOR EACH ROW WHEN (("old"."day_rate" IS DISTINCT FROM "new"."day_rate")) EXECUTE FUNCTION "public"."propagate_show_day_rate"();
+
+
+--
+-- Name: work_days work_days_mirror_day_type; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "work_days_mirror_day_type" BEFORE INSERT OR UPDATE ON "public"."work_days" FOR EACH ROW EXECUTE FUNCTION "public"."work_days_mirror_day_type"();
 
 
 --
@@ -2832,9 +2910,9 @@ CREATE POLICY "Users see work days for their shows" ON "public"."work_days" FOR 
 -- Name: work_days Users set day type on their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users set day type on their org shows" ON "public"."work_days" FOR UPDATE USING (("show_id" IN ( SELECT "shows"."id"
-   FROM "public"."shows"))) WITH CHECK (("show_id" IN ( SELECT "shows"."id"
-   FROM "public"."shows")));
+CREATE POLICY "Users set day type on their org shows" ON "public"."work_days" FOR UPDATE USING ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm"))) WITH CHECK ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
 
 
 --
@@ -3056,6 +3134,15 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 --
+-- Name: FUNCTION "activities_to_day_type"("p" "text"[]); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."activities_to_day_type"("p" "text"[]) TO "anon";
+GRANT ALL ON FUNCTION "public"."activities_to_day_type"("p" "text"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activities_to_day_type"("p" "text"[]) TO "service_role";
+
+
+--
 -- Name: FUNCTION "add_show_day"("p_show_id" "uuid", "p_copy_crew" boolean); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3107,6 +3194,15 @@ GRANT ALL ON FUNCTION "public"."crew_members_crew_access_tg"() TO "service_role"
 GRANT ALL ON FUNCTION "public"."crew_members_link_login_tg"() TO "anon";
 GRANT ALL ON FUNCTION "public"."crew_members_link_login_tg"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."crew_members_link_login_tg"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "day_type_to_activities"("p" "text"); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."day_type_to_activities"("p" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."day_type_to_activities"("p" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."day_type_to_activities"("p" "text") TO "service_role";
 
 
 --
@@ -3358,6 +3454,15 @@ GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "servic
 GRANT ALL ON FUNCTION "public"."timecards_crew_access_tg"() TO "anon";
 GRANT ALL ON FUNCTION "public"."timecards_crew_access_tg"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."timecards_crew_access_tg"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "work_days_mirror_day_type"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."work_days_mirror_day_type"() TO "anon";
+GRANT ALL ON FUNCTION "public"."work_days_mirror_day_type"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."work_days_mirror_day_type"() TO "service_role";
 
 
 --
@@ -3730,6 +3835,13 @@ GRANT UPDATE("day_type") ON TABLE "public"."work_days" TO "authenticated";
 
 
 --
+-- Name: COLUMN "work_days"."activities"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE("activities") ON TABLE "public"."work_days" TO "authenticated";
+
+
+--
 -- Name: TABLE "timecard_day_rates"; Type: ACL; Schema: public; Owner: -
 --
 
@@ -3801,5 +3913,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 7BcOeC0TbGGaRQN2JavAQs3JCREFlEaNzONmfqeyUA1wotX6mmCui5q9CYhalBX
+\unrestrict YdmTEhM9xiKB8zuIAIlxu1Xbh0W2rhdhY9dQ3c68iaohefM7lhSxhEKC0bALZVi
 

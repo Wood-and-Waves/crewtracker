@@ -320,9 +320,8 @@ scripts/
                        which stays as a trigger-maintained mirror both ways; column grant
                        · 0033 editing a day requires can_edit_timecards (0015's policy
                        checked only visibility — a view-only member could retag days)
-                       0018–0031 are on BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0031 2026-09-07). **0032–0033 are on DEV
-                       only** until their cutover.
+                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06, 0028–0033 2026-09-07). Nothing is dev-only.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A

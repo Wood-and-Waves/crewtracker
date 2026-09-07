@@ -100,3 +100,4 @@ grant INSERT("booking_responded_at"), SELECT("booking_responded_at"), UPDATE("bo
 grant SELECT("show_id") on table "public"."timecards" to authenticated;
 grant INSERT("absence"), SELECT("absence"), UPDATE("absence") on table "public"."timecards" to authenticated;
 grant UPDATE("day_type") on table "public"."work_days" to authenticated;
+grant UPDATE("activities") on table "public"."work_days" to authenticated;
