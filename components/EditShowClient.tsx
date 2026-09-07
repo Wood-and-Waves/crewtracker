@@ -11,6 +11,7 @@ import AddDayButton from '@/components/AddDayButton'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import PositionDefsSection, { type DefRow, type SlotFlag } from '@/components/PositionDefsSection'
 import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
+import PmField, { type PmState } from '@/components/PmField'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
@@ -42,6 +43,7 @@ export default function EditShowClient({
   canEditRates = false,
   scheduling,
   positions,
+  pm,
   children,
 }: {
   show: any
@@ -54,6 +56,8 @@ export default function EditShowClient({
   scheduling?: { schedulerName: string | null; positionCount: number; callSize: string }
   /** Positions by kind (piece B): definitions, flags and the role list. Omitted without the scheduling module. */
   positions?: { defs: DefRow[]; flags: SlotFlag[]; roles: string[] }
+  /** The named production manager and where the invitation stands (piece B). */
+  pm?: PmState
   shoulderSurferMode?: boolean
   organizationId?: string
   canManageRulesets?: boolean
@@ -513,6 +517,17 @@ export default function EditShowClient({
             error={dayError}
             onToggle={toggleDayActivity}
           />
+        </section>
+      )}
+
+      {/* Who runs the show. Naming is an invitation; accepting grants it. */}
+      {pm && (
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Production manager</p>
+          <PmField showId={show.id} pm={pm} />
+          <p className="mt-2 text-xs text-muted">
+            They get an email, and the show appears in their CrewTracker once they accept. Nothing is shared before that.
+          </p>
         </section>
       )}
 

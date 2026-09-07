@@ -14,6 +14,7 @@ import { BAND } from '@/lib/panel'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import PositionDefsEditor from '@/components/PositionDefsEditor'
+import PmField from '@/components/PmField'
 import { derivedCounts, type PositionDef } from '@/lib/positionDefs'
 import { cn } from '@/lib/cn'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
@@ -98,6 +99,9 @@ export default function NewShowClient({
   // Positions by KIND of day (piece B): the definitions; the per-day slots are
   // derived by the database after the show exists (sync_position_slots).
   const [defs, setDefs] = useState<PositionDef[]>([])
+  // The production manager, if one is named now. Invited once the show exists;
+  // the show reaches them only when they accept (piece B).
+  const [pm, setPm] = useState<{ id: string; name: string } | null>(null)
   const [presetId, setPresetId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -152,6 +156,10 @@ export default function NewShowClient({
     badRoomKeys.length === 0
 
   async function createShow() {
+    // Naming a PM sends them an email, so it is asked out loud, once, before
+    // anything is written. Not on a retry: the invitation went with the first
+    // attempt or the person is already told where to send it from.
+    if (pm && !createdShowId && !confirm(`Create the show and invite ${pm.name} as PM? They'll get an email and the show once they accept.`)) return
     setError('')
     setLoading(true)
 
@@ -306,6 +314,21 @@ export default function NewShowClient({
           return
         }
       }
+
+      if (pm) {
+        const res = await fetch('/api/pm/invite', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ showId, profileId: pm.id }),
+        })
+        const body = await res.json().catch(() => ({}))
+        // Same shape as the positions above: the show exists, so report and
+        // point at where to finish rather than fail the whole creation.
+        if (!res.ok) {
+          setError(`Show created, but ${pm.name} couldn't be named PM: ${body.error ?? 'unknown error'}. Name them on Edit Show.`)
+          setLoading(false)
+          return
+        }
+      }
     }
 
     router.push(`/dashboard/shows/${showId}`)
@@ -381,6 +404,10 @@ export default function NewShowClient({
                 onChange={setTimezone}
                 options={SHOW_TIMEZONES}
               />
+            </div>
+            <div className="mt-3">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Production manager</p>
+              <PmField pm={{ profileId: pm?.id ?? null, name: pm?.name ?? null, invitedAt: null, acceptedAt: null }} onPick={setPm} />
             </div>
         </div>
       </section>

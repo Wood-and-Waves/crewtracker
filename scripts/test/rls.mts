@@ -603,6 +603,33 @@ try {
     await q(`delete from shows where id=$1`, [sh.id])
   }
 
+  console.log('\n=== the PM is invited; only accepting grants the show (0034) ===')
+  {
+    // dave is not on showA2. Naming him writes a pointer and a token — nothing
+    // opens until the accept route writes the source='pm' assignment.
+    await q(`update shows set pm_profile_id=$2, pm_invited_at=now() where id=$1`, [showA2.id, dave])
+    await q(`insert into pm_invites (show_id, profile_id, organization_id) values ($1,$2,$3)`, [showA2.id, dave, orgA])
+    await asUser(dave, async () => {
+      const [r] = await q(`select count(*)::int n from timecards where show_id=$1`, [showA2.id])
+      check('named but not accepted: the PM sees nothing on the show', r.n === 0, `${r.n}`)
+      const [t] = await q(`select count(*)::int n from pm_invites where show_id=$1`, [showA2.id])
+      check('and cannot read the invitation token from the database', t.n === 0, `${t.n}`)
+    })
+    await q(`insert into show_assignments (show_id, profile_id, source) values ($1,$2,'pm')`, [showA2.id, dave])
+    await asUser(dave, async () => {
+      const [r] = await q(`select count(*)::int n from timecards where show_id=$1`, [showA2.id])
+      check('accepted (a source=pm assignment): the PM sees the show', r.n === 1, `${r.n}`)
+    })
+    // Replacing the PM removes only the row that came from accepting. sam's
+    // hand-granted (manual) assignment on showA2 is somebody else's decision.
+    const [before] = await q(`select count(*)::int n from show_assignments where show_id=$1`, [showA2.id])
+    await q(`delete from show_assignments where show_id=$1 and source='pm'`, [showA2.id])
+    const [after] = await q(`select count(*)::int n from show_assignments where show_id=$1 and source='manual'`, [showA2.id])
+    check('replacing the PM drops the accepted-by-invite row and keeps a hand-granted one', before.n === 2 && after.n === 1, `${before.n} → ${after.n}`)
+    await q(`delete from pm_invites where show_id=$1`, [showA2.id])
+    await q(`update shows set pm_profile_id=null, pm_invited_at=null where id=$1`, [showA2.id])
+  }
+
   console.log('\n=== signed out, nothing is visible ===')
   await c.query('begin'); await c.query('set local role anon')
   for (const t of ['shows', 'crew_members', 'timecards', 'punches', 'memberships', 'profiles', 'organizations']) {

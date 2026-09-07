@@ -120,6 +120,17 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       ])
     : [{ data: null }, { data: null }, { data: null }]
 
+  // The named PM (piece B). Their name comes from profiles, in-org readable.
+  const { data: pmProfile } = show.pm_profile_id
+    ? await supabase.from('profiles').select('full_name, email').eq('id', show.pm_profile_id).maybeSingle()
+    : { data: null }
+  const pmState = {
+    profileId: (show.pm_profile_id as string | null) ?? null,
+    name: ((pmProfile as any)?.full_name || (pmProfile as any)?.email || null) as string | null,
+    invitedAt: (show.pm_invited_at as string | null) ?? null,
+    acceptedAt: (show.pm_accepted_at as string | null) ?? null,
+  }
+
   const callSummary = summarizeCall((positionRows ?? []).map((p: any) => {
     const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
     const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
@@ -163,6 +174,7 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
         positionCount: callSummary.total,
         callSize: describeCallSize(callSummary),
       } : undefined}
+      pm={pmState}
       positions={schedulingOn ? {
         defs: (positionDefs ?? []) as any[],
         flags: (slotFlags ?? []) as any[],
