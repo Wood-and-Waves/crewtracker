@@ -17,6 +17,7 @@
 
 import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow } from '../../lib/clockLinks.ts'
 import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, type Punch } from '../../lib/punches.ts'
+import { punchRefusal } from '../../lib/clockPunch.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -234,6 +235,25 @@ const startAndOut = [full[0], full[1]]
 check('M1 Out clears once M1 In is gone', clearBlockedReason(startAndOut, 'meal_out'), null)
 check('start still blocked by an M1 Out that needs it',
   clearBlockedReason(startAndOut, 'start'), 'Clear M1 Out first — it needs Start.')
+
+console.log('\n=== punchRefusal: the one crew-punch decision both routes share ===')
+{
+  const P = (type: string, at: string, source: 'staff' | 'crew' = 'crew') =>
+    ({ id: type, punch_type: type as any, punched_at: at, source })
+  const started = [P('start', '2026-09-01T13:00:00Z')]
+  check('a fresh start is allowed', punchRefusal([], false, null, 'start', undefined), null)
+  check('M1 In without M1 Out is refused (the two-check rule)',
+    typeof punchRefusal(started, false, null, 'meal_in', undefined), 'string')
+  check('a travel day refuses everything', typeof punchRefusal([], true, null, 'start', undefined), 'string')
+  check('a cancelled day refuses everything', typeof punchRefusal([], false, 'cancelled', 'start', undefined), 'string')
+  check('a no-show day refuses everything', typeof punchRefusal([], false, 'no_show', 'start', undefined), 'string')
+  check('correcting your own punch skips the order rule',
+    punchRefusal(started, false, null, 'start', started[0]), null)
+  const pmStart = [P('start', '2026-09-01T13:00:00Z', 'staff')]
+  check('a PM-entered punch cannot be changed',
+    typeof punchRefusal(pmStart, false, null, 'start', pmStart[0]), 'string')
+  check('wrap after start is allowed', punchRefusal(started, false, null, 'end', undefined), null)
+}
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

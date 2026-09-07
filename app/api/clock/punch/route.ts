@@ -1,10 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import {
-  PUNCH_ORDER, PUNCH_LABELS, getChronologyError, isEligibleForBatch, isWrapped,
-  roundWallTime, clearBlockedReason, type Punch, type PunchType,
-} from '@/lib/punches'
-import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
+import { PUNCH_ORDER, type PunchType } from '@/lib/punches'
+import { applyCrewPunch } from '@/lib/clockPunch'
 import { isClockLinkExpired } from '@/lib/clockLinks'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 
@@ -103,166 +100,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'This link has expired. Ask your PM for a new one.' }, { status: 400 })
   }
 
-  // Checked BEFORE writing. punches_blocked_when_finalized is a TRIGGER, and
-  // the service role does not bypass triggers — so a punch on a closed-out show
-  // would otherwise surface to a crew member as a raw 500.
-  if (show.finalized_at) {
-    return NextResponse.json({
-      error: 'This show has been closed out, so times can no longer be changed. Talk to your PM.',
-    }, { status: 400 })
-  }
-
-  // The timecard must be THIS person's and on THIS show. Its own work day
-  // supplies the date, so the caller never gets to name one.
-  const timeZone = show.timezone_identifier || 'America/Chicago'
-
-  const { data: timecard } = await admin
-    .from('timecards')
-    .select('id, crew_member_id, is_travel_day, absence, rooms!inner ( work_days!inner ( date, show_id ) )')
-    .eq('id', timecardId)
-    .maybeSingle()
-
-  const room = Array.isArray((timecard as any)?.rooms) ? (timecard as any).rooms[0] : (timecard as any)?.rooms
-  const workDay = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-
-  if (
-    !timecard ||
-    timecard.crew_member_id !== link.crew_member_id ||
-    workDay?.show_id !== show.id ||
-    !workDay?.date
-  ) {
-    return NextResponse.json({ error: "That isn't one of your shifts on this show." }, { status: 400 })
-  }
-  const punchDate = workDay.date as string
-  if (timecard.absence) {
-    return NextResponse.json({
-      error: timecard.absence === 'cancelled'
-        ? 'That day was cancelled, so there are no punches to record. Talk to your PM if that is wrong.'
-        : 'That day is marked as a no-show. Talk to your PM if that is wrong.',
-    }, { status: 400 })
-  }
-  if (timecard.is_travel_day) {
-    return NextResponse.json({ error: 'That day is marked as a travel day, so there are no punches to record.' }, { status: 400 })
-  }
-
-  const { data: existing } = await admin
-    .from('punches')
-    .select('id, punch_type, punched_at, source')
-    .eq('timecard_id', timecardId)
-
-  const mine = (existing || []).find(p => p.punch_type === type)
-
-  // A punch the PM entered is theirs. Crew may fix their OWN mistake but must
-  // never overwrite a correction — which is exactly what the source column is
-  // for. Applies to clearing as much as to changing.
-  if (mine && mine.source !== 'crew') {
-    return NextResponse.json({
-      error: `Your ${PUNCH_LABELS[type]} was set by your PM, so it can't be ${clear ? 'cleared' : 'changed'} here. Ask them.`,
-    }, { status: 400 })
-  }
-
-  // ---- Clearing a punch the crew member entered themselves ----------------
-  if (clear) {
-    if (!mine) {
-      return NextResponse.json({ error: 'There is nothing recorded to clear.' }, { status: 400 })
-    }
-    // Removing from the middle of a day would orphan whatever comes after it.
-    const all: Punch[] = (existing || [])
-      .map(p => ({ id: p.id, punch_type: p.punch_type as PunchType, punched_at: p.punched_at }))
-    const blocked = clearBlockedReason(all, type)
-    if (blocked) return NextResponse.json({ error: blocked }, { status: 400 })
-
-    // Verified delete: a delete matching no row returns success with zero rows.
-    const { data: gone, error: delError } = await admin
-      .from('punches').delete().eq('id', mine.id).select('id')
-    if (delError || !gone || gone.length === 0) {
-      return NextResponse.json({
-        error: delError?.message ?? 'That did not clear. Try again, or tell your PM.',
-      }, { status: 500 })
-    }
-    return NextResponse.json({ ok: true, cleared: type })
-  }
-
-  const all: Punch[] = (existing || [])
-    .map(p => ({ id: p.id, punch_type: p.punch_type as PunchType, punched_at: p.punched_at }))
-
-  // ORDER, which chronology does NOT cover. getChronologyError only checks
-  // that the times of punches that EXIST run forwards; it is perfectly happy
-  // to accept an M1 In when there is no M1 Out, because there is no earlier
-  // time to contradict. The "the previous punch must exist" rule is a separate
-  // one, and isEligibleForBatch is where this app already keeps it — reused
-  // here rather than written a second time, so a new meal type stays a
-  // one-place change.
-  //
-  // Skipped when somebody is correcting a punch they made themselves: the
-  // punch already exists, so eligibility would reject it and chronology is the
-  // right judge instead.
-  if (!mine && !isEligibleForBatch(all, timecard.is_travel_day, type, timecard.absence)) {
-    // 'end' needs a start, not the meal before it — everything else needs its
-    // immediate predecessor.
-    const requirement: PunchType | null =
-      type === 'start' ? null
-      : type === 'end' ? 'start'
-      : PUNCH_ORDER[PUNCH_ORDER.indexOf(type) - 1]
-    const why = isWrapped(all) && type !== 'end'
-      ? 'You’ve already wrapped for today.'
-      : requirement
-        ? `Your ${PUNCH_LABELS[requirement]} isn’t recorded yet.`
-        : 'That isn’t available right now.'
-    return NextResponse.json({ error: `${why} Ask your PM if that’s not right.` }, { status: 400 })
-  }
-
-  // The instant being recorded. `at` is a wall-clock time in the SHOW's zone
-  // on the work day the server already resolved, so the date is never the
-  // caller's to choose. No `at` means now, which is what the tracker's own
-  // "punch now" does.
-  const { data: org } = await admin
-    .from('organizations').select('timecard_rounding_minutes')
-    .eq('id', show.organization_id).maybeSingle()
-  const roundingMinutes = org?.timecard_rounding_minutes ?? 1
-
-  const wall = at ?? new Intl.DateTimeFormat('en-GB', {
-    timeZone, hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(new Date())
-
-  // Snapped server-side, not just stepped in the picker: `step` on a time
-  // input is a hint browsers let you type past, and this is the value that
-  // gets paid.
-  const { timeStr, dayOffset } = roundWallTime(wall, roundingMinutes)
-  const now = zonedWallTimeToUtc(addDays(punchDate, dayOffset), timeStr, timeZone)
-
-  // Chronology, re-run server-side against every OTHER punch. Excluding this
-  // type matches TimeEntryModal: replacing a punch must not be blocked by the
-  // value it is replacing.
-  const others: Punch[] = all.filter(p => p.punch_type !== type)
-
-  const chronologyError = getChronologyError(now, type, others)
-  if (chronologyError) {
-    return NextResponse.json({ error: chronologyError }, { status: 400 })
-  }
-
-  // Update-or-insert, never a blind insert: nothing in the database prevents a
-  // second punch of the same type, so a blind insert would silently duplicate.
-  const written = mine
-    ? await admin.from('punches')
-        .update({ punched_at: now.toISOString(), source: 'crew', source_link: link.id })
-        .eq('id', mine.id).select('id')
-    : await admin.from('punches')
-        .insert({
-          timecard_id: timecardId,
-          punch_type: type,
-          punched_at: now.toISOString(),
-          source: 'crew',
-          // No session, so nobody signed in authored this.
-          created_by: null,
-          source_link: link.id,
-        }).select('id')
-
-  if (written.error || !written.data || written.data.length === 0) {
-    return NextResponse.json({
-      error: written.error?.message ?? 'That did not save. Try again, or tell your PM.',
-    }, { status: 500 })
-  }
-
-  return NextResponse.json({ ok: true, punchType: type, punchedAt: now.toISOString() })
+  // Everything from here — whose timecard, finalized, travel/absence, PM-owned
+  // punches, order, chronology, rounding, the write — is lib/clockPunch.ts,
+  // shared with the login route so the two can never disagree.
+  const result = await applyCrewPunch(admin, {
+    timecardId, type, at, clear: !!clear,
+    crewMemberId: link.crew_member_id, showId: show.id,
+    sourceLink: link.id, createdBy: null,
+  })
+  return NextResponse.json(result.body, { status: result.status })
 }
