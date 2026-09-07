@@ -512,6 +512,21 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   forward first. The reverted code is in git history (commits 1f2d6aa…20f8380 on `scheduling`,
   reverted immediately after) and `docs/superpowers/plans/2026-09-07-schedule-grid.md` records
   the design. Do not rebuild it until the earlier steps of that flow exist.
+- **Legal groundwork before the first outside beta tester** (Dan, 2026-09-07: "research IP for
+  this site… how do I set up terms to protect myself?"). Not code, but it gates handing out
+  logins. The pieces, in the order that matters: (1) an LLC or similar so a claim lands on the
+  company, not on Dan; (2) **Terms of Service** shown and accepted at first sign-in (a "beta"
+  clause: as-is, no warranty, may change or end, no liability for payroll decisions made from
+  the numbers — the app calculates, the customer is responsible for paying people correctly);
+  (3) a **Privacy Policy**, required because the app stores other people's names, emails,
+  phones and pay rates — say what is stored, where (Supabase, US), who it is shared with
+  (Resend for email, Vercel for hosting), and how a customer gets it deleted; (4) a short
+  **beta agreement** for testers: confidentiality, feedback belongs to CrewTracker, no
+  guarantee the data survives the beta; (5) **trademark**: search "CrewTracker" at USPTO
+  before spending on branding — a domain is not a trademark; the code itself is copyrighted
+  automatically, registration is optional. Build side: an `accepted_terms_at` on profiles and a
+  click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
+  consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
