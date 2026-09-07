@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/session'
+import { getCurrentUser, isCrewOnly } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import CrewDirectoryClient from '@/components/CrewDirectoryClient'
 
@@ -7,6 +7,9 @@ export default async function DirectoryPage() {
   const supabase = await createClient()
   const user = await getCurrentUser()
   if (!user) redirect('/login')
+  // A crew-only login (Section 3, 2026-09-06) has no business in the company
+  // directory — everyone's phone numbers and emails live here.
+  if (isCrewOnly(user)) redirect('/dashboard')
 
   if (!user.organizationId) {
     return (

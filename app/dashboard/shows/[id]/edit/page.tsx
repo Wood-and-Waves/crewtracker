@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser, canUseScheduling } from '@/lib/session'
+import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
@@ -28,6 +28,9 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
   if (!user) redirect('/login')
 
   if (!show) notFound()
+  // Crew-side viewers have their own screen; everything else on the show
+  // belongs to the PM (Section 3, 2026-09-06).
+  if (!(await isPmOnShow(supabase, id))) redirect(`/dashboard/shows/${id}`)
 
   const workDayIds = (workDays || []).map(d => d.id)
 

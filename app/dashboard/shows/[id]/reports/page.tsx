@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser, canSeeFinancials as canSeeFinancialsFor } from '@/lib/session'
+import { getCurrentUser, canSeeFinancials as canSeeFinancialsFor, isPmOnShow } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -89,6 +89,9 @@ export default async function ShowReportPage({
   if (!user) redirect('/login')
 
   if (!show) notFound()
+  // Crew-side viewers have their own screen; everything else on the show
+  // belongs to the PM (Section 3, 2026-09-06).
+  if (!(await isPmOnShow(supabase, id))) redirect(`/dashboard/shows/${id}`)
 
   // Financials only show in exports if BOTH the show tracks dollar amounts
   // AND the current user has permission to view pay rates.

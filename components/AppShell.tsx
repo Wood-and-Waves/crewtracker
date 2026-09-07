@@ -82,6 +82,7 @@ export default function AppShell({
   organizations = [],
   version,
   canUseScheduling = false,
+  showDirectory = true,
 }: {
   children: React.ReactNode
   canManageUsers?: boolean
@@ -94,12 +95,15 @@ export default function AppShell({
   version?: string
   /** Org has the scheduling module AND this member may use it. */
   canUseScheduling?: boolean
+  /** False for a crew-only login (Section 3): the Directory is company business. */
+  showDirectory?: boolean
 }) {
   const pathname = usePathname()
   const navItems = [
     baseNavItems[0],
     ...(canUseScheduling ? [scheduleNavItem] : []),
-    ...baseNavItems.slice(1),
+    // The Directory is company business — hidden from a crew-only login.
+    ...baseNavItems.slice(1).filter(i => showDirectory || i.href !== '/dashboard/directory'),
     ...(canManageUsers ? [teamNavItem] : []),
     ...(isSuperAdmin ? [superAdminNavItem] : []),
   ]

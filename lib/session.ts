@@ -229,3 +229,32 @@ export function canSeeFinancials(
 // server-only. Re-exported here so call sites can reach it beside
 // canSeeFinancials without caring where it is defined.
 export { canUseScheduling } from '@/lib/permissions'
+
+/**
+ * PM-side on this show? (Section 2, 2026-09-06.) True when the caller can see
+ * every show, created it, is its scheduler, or is on its access list — the
+ * same set the database uses to decide whether they see everyone's rows or
+ * only their own. False means crew-side: staffed, sees only themselves.
+ * One RPC; the helper is STABLE and cheap. Accepts either row shape PostgREST
+ * uses for a `setof uuid`.
+ */
+export async function isPmOnShow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  showId: string,
+): Promise<boolean> {
+  const { data } = await supabase.rpc('my_pm_show_ids')
+  return Array.isArray(data) && data.some((row: any) =>
+    (typeof row === 'string' ? row : row?.my_pm_show_ids) === showId)
+}
+
+/**
+ * A login with NO company permission at all — the `crew` preset (Section 3).
+ * Such a person is only ever crew-side, so the parts of the app that exist
+ * for running a company (the Directory, with everyone's phone numbers) are
+ * not theirs to open. Deliberately a property of the permissions, not of
+ * base_role: it is what the person can DO that decides.
+ */
+export function isCrewOnly(user: CurrentUser | null): boolean {
+  if (!user) return false
+  return ALL_PERMISSION_KEYS.every(k => !user.permissions[k])
+}
