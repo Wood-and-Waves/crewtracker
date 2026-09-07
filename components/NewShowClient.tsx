@@ -283,9 +283,7 @@ export default function NewShowClient({
       }
     }
 
-    // Details → rules → rooms/positions → schedule: the show exists now, so its
-    // people can be given their days (Section 4, 2026-09-06).
-    router.push(`/dashboard/shows/${showId}/edit#schedule`)
+    router.push(`/dashboard/shows/${showId}`)
   }
 
   return (
