@@ -24,9 +24,14 @@ export function summarizeQueue(
 }
 
 export async function fetchSchedulingQueue(supabase: { from: (t: string) => any }): Promise<QueueRow[]> {
+  // A day of slack either side is fine here — this hides shows that have
+  // wrapped, not a payroll boundary, so UTC "today" is acceptable even though
+  // it can be off by a day in the show's own timezone.
+  const today = new Date().toISOString().slice(0, 10)
   const { data: shows } = await supabase.from('shows')
     .select('id, name, venue, start_date, end_date, sent_to_scheduling_at')
     .not('sent_to_scheduling_at', 'is', null).is('finalized_at', null).not('archived', 'is', true)
+    .gte('end_date', today)
     .order('sent_to_scheduling_at', { ascending: true })
   const ids = (shows ?? []).map((s: any) => s.id as string)
   if (!ids.length) return []

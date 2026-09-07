@@ -656,6 +656,7 @@ console.log('\n--- evening digest ---')
   check('booked line', describeEvent({ kind: 'booked', crewMemberName: 'Alex Reyes', role: 'A1', days: 'Tue 8 – Thu 10' }), 'Alex Reyes booked as A1, Tue 8 – Thu 10')
   check('declined line', describeEvent({ kind: 'declined', crewMemberName: 'Bo Ellery', role: 'Stagehand', days: null }), 'Bo Ellery declined Stagehand')
   check('moved line', describeEvent({ kind: 'moved', crewMemberName: 'Bo Ellery', role: 'Stagehand', days: 'Mon 9' }), 'Bo Ellery moved to Mon 9 (Stagehand)')
+  check('extended line with no days never prints null', describeEvent({ kind: 'extended', crewMemberName: 'Sam', role: 'A1', days: null }).includes('null'), false)
   const { subject, text } = buildDigestEmail({ to: 'pm@x.test', pmName: 'Sam', showName: 'Northwind', date: 'Sep 7', link: 'https://crewtracker.app/dashboard/shows/1',
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')

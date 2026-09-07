@@ -54,11 +54,11 @@ export function describeEvent(e: DescribableEvent): string {
     case 'released':
       return `${name} released from ${role}${days ? `, ${days}` : ''}`
     case 'days_changed':
-      return `${name}'s days changed to ${days} (${role})`
+      return days ? `${name}'s days changed to ${days} (${role})` : `${name}'s days changed (${role})`
     case 'moved':
-      return `${name} moved to ${days} (${role})`
+      return days ? `${name} moved to ${days} (${role})` : `${name} moved (${role})`
     case 'extended':
-      return `${name} extended to ${days} (${role})`
+      return days ? `${name} extended to ${days} (${role})` : `${name} extended (${role})`
   }
 }
 

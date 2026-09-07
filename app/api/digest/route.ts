@@ -64,6 +64,12 @@ export async function GET(request: Request) {
     if (auth !== `Bearer ${secret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+  } else if (process.env.VERCEL) {
+    // This route sends customer email. Without CRON_SECRET set, it would be a
+    // public, unauthenticated endpoint that emails every eligible show's PM —
+    // fine for local dev (no VERCEL), never fine once deployed. Fail closed
+    // rather than silently running open.
+    return NextResponse.json({ error: 'Digest is not configured.' }, { status: 503 })
   }
 
   const admin = createAdminClient()

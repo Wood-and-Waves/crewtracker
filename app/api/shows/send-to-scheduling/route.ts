@@ -33,10 +33,11 @@ export async function POST(request: Request) {
 
   const { data: show } = await supabase
     .from('shows')
-    .select('id, name, venue, start_date, end_date, organization_id, sent_to_scheduling_at, finalized_at')
+    .select('id, name, venue, start_date, end_date, organization_id, sent_to_scheduling_at, finalized_at, archived')
     .eq('id', showId).maybeSingle()
   if (!show) return NextResponse.json({ error: 'Show not found.' }, { status: 404 })
   if (show.finalized_at) return NextResponse.json({ error: 'This show has been closed out.' }, { status: 400 })
+  if (show.archived) return NextResponse.json({ error: 'This show has been archived.' }, { status: 400 })
 
   const now = new Date().toISOString()
 
@@ -62,10 +63,23 @@ export async function POST(request: Request) {
   }).filter((r: any) => r.date))
   if (!call.total) return NextResponse.json({ error: 'Add at least one position before sending this show to scheduling.' }, { status: 400 })
 
+  // Conditioned on still being unsent, so two clicks in flight (or a slow
+  // double-submit) cannot both send the same show — the second one matches
+  // zero rows instead of overwriting the first's stamp.
   const { data: updated, error: updateError } = await supabase.from('shows')
-    .update({ sent_to_scheduling_at: now, sent_to_scheduling_by: user.id }).eq('id', show.id).select('id')
+    .update({ sent_to_scheduling_at: now, sent_to_scheduling_by: user.id })
+    .eq('id', show.id).is('sent_to_scheduling_at', null).select('id')
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 })
-  if (!updated?.length) return NextResponse.json({ error: 'You do not have permission to send this show.' }, { status: 403 })
+  if (!updated?.length) {
+    // Zero rows means either "already sent" (the race just described) or
+    // "no permission" (the RLS UPDATE policy matched nothing) — re-read to
+    // tell them apart rather than guessing.
+    const { data: recheck } = await supabase.from('shows').select('sent_to_scheduling_at').eq('id', show.id).maybeSingle()
+    if (recheck?.sent_to_scheduling_at) {
+      return NextResponse.json({ error: 'This show is already with scheduling.' }, { status: 400 })
+    }
+    return NextResponse.json({ error: 'You do not have permission to send this show.' }, { status: 403 })
+  }
 
   // Everyone with the permission, in THIS company, live. Read with the
   // service role: the caller may not hold can_manage_users, and this is a

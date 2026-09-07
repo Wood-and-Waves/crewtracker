@@ -666,6 +666,13 @@ try {
       const ins = await probe(`insert into staffing_events (show_id, kind, crew_member_name, role, days) values ($1,'booked','Sam','A1','Tue 3')`, [showA2.id])
       check('and nobody can log events on a show they cannot see', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
     })
+    // 0036: seeing a show is not enough to log a staffing event on it — sam is
+    // crew-side on showA (staffed there, no can_edit_timecards), so this must
+    // be refused even though sam can see showA's own rows.
+    await asUser(sam, async () => {
+      const ins = await probe(`insert into staffing_events (show_id, kind, crew_member_name, role, days) values ($1,'booked','Sam','A1','Tue 3')`, [showA.id])
+      check('a crew-side login cannot log staffing events', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
+    })
     await q(`update shows set scheduler_id=$2 where id=$1`, [showA2.id, dave])
     await asUser(dave, async () => {
       const s = await q(`select count(*)::int n from shows where id=$1`, [showA2.id])
@@ -702,8 +709,12 @@ try {
     // "Add Day (copy crew) still works" check above.
     await asUser(alice, async () => {
       const n = (await q(`select count(*)::int n from extend_all_day_positions($1,$2)`, [sh.id, d3.id]))[0].n
-      const who = await q(`select t.crew_member_name from timecards t join rooms r on r.id=t.room_id where r.work_day_id=$1 order by 1`, [d3.id])
+      const who = await q(`select t.crew_member_name, t.booking_status from timecards t join rooms r on r.id=t.room_id where r.work_day_id=$1 order by 1`, [d3.id])
       check('extends exactly the all-day person, not the show-day one', n === 1 && who.length === 1 && who[0].crew_member_name === 'Sam', JSON.stringify(who))
+      // 0036: Sam's day-2 booking is 'confirmed' (set at line ~690), and the
+      // extension must carry that status forward rather than reset to
+      // 'pencilled' — a person who has already said yes stays said-yes.
+      check('the extended booking keeps the source day\'s confirmed status', who[0]?.booking_status === 'confirmed', JSON.stringify(who))
       const again = (await q(`select count(*)::int n from extend_all_day_positions($1,$2)`, [sh.id, d3.id]))[0].n
       check('running it twice adds nobody twice', again === 0, `${again}`)
     })

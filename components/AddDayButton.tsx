@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { logStaffingEvent } from '@/lib/staffingEvents'
+import { compressDays } from '@/lib/readyEmail'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
@@ -96,6 +97,8 @@ export default function AddDayButton({
         { p_show_id: showId, p_work_day_id: workDayId },
       )
       if (!extendError) {
+        // row.day_date is the new day itself — the same one just extended to.
+        const extendedDay = row?.day_date ? compressDays([String(row.day_date).slice(0, 10)]) : null
         for (const r of (extendedRows ?? []) as { crew_member_id: string | null; crew_member_name: string; role: string | null }[]) {
           await logStaffingEvent(supabase, {
             showId,
@@ -103,7 +106,7 @@ export default function AddDayButton({
             crewMemberId: r.crew_member_id,
             crewMemberName: r.crew_member_name,
             role: r.role,
-            days: null,
+            days: extendedDay,
           })
         }
         setExtended(
@@ -111,6 +114,8 @@ export default function AddDayButton({
             .filter((r): r is { crew_member_id: string; crew_member_name: string } => !!r.crew_member_id)
             .map(r => ({ id: r.crew_member_id, name: r.crew_member_name })),
         )
+      } else {
+        setError(extendError.message)
       }
     }
 
@@ -195,7 +200,7 @@ export default function AddDayButton({
           it extended lives outside it so closing the dialog doesn't hide it.
           Floated (see the wrapper above) rather than in normal flow. */}
       {extended.length > 0 && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-72 border-2 border-ink bg-surface p-3 shadow-edge">
+        <div className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] border-2 border-ink bg-surface p-3 shadow-edge">
           <CrewChangeNotice showId={showId} people={extended} onDone={() => setExtended([])} />
         </div>
       )}

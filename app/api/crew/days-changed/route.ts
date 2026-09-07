@@ -78,6 +78,13 @@ export async function POST(request: Request) {
 
   let sent = 0
   const skipped: string[] = []
+  // A stale id (crew member removed or moved after the caller's list was
+  // built) has no row in `crew` — count it too, rather than let it vanish
+  // between "requested" and "sent + skipped".
+  const foundIds = new Set(crew.map(c => c.id))
+  for (const id of crewMemberIds) {
+    if (!foundIds.has(id)) skipped.push(id)
+  }
   for (const c of crew) {
     if (!c.email) { skipped.push(c.full_name); continue }
     const days = [...(byPerson.get(c.id)?.values() ?? [])].sort((a, b) => a.date.localeCompare(b.date))
