@@ -269,7 +269,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 310 assertions as of 2026-09-06.
+                  helper, no framework. 346 assertions as of 2026-09-06.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -308,8 +308,15 @@ scripts/
                        · 0026 timecard_day_rates learns the scheduler_id arm
                        · 0027 timecards.absence (no_show|cancelled) + cancellation_pay_percent
                        on payroll_rulesets/payroll_presets; column grant on timecards
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06). Nothing is dev-only right now.
+                       · 0028 crew_members.profile_id — the login link, by email, one company
+                       (WRITES existing rows: the backfill links matching entries)
+                       · 0029 show_crew_access + my_pm_show_ids/my_crew_member_ids, real
+                       is_own_timecard, PM-side/crew-side policies
+                       · 0030 the same policies rewritten to short-circuit cheaply
+                       · 0031 guard_show_unlock + the finalized-write message
+                       0018–0027 are on BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06). **0028–0031 are on DEV only** until their
+                       cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -324,7 +331,8 @@ scripts/
 - `subscriptions` — one per org, auto-created via `handle_new_organization()` trigger
 - `invitations` — token-based invites; `token`/`expires_at` have DB defaults
 - `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to)
-- `show_assignments` — links users to specific shows; carries a denormalized `organization_id` (see Past incidents)
+- `show_assignments` — links users to specific shows (the PM-side access list); carries a denormalized `organization_id` (see Past incidents)
+- `show_crew_access` — (show_id, profile_id, organization_id): a linked login is staffed on this show. Trigger-owned (0029); the app never writes it; its own policy is `profile_id = auth.uid()` so it can never form a cycle.
 - `payroll_rulesets` — one per show; mirrors iOS `PayrollRuleset`, plus `continuous_time_enabled`
 - `payroll_presets` — org-level named rule sets (one flagged `is_default`), **copied** into a show's `payroll_rulesets` at creation. Never a live link — a live link would retroactively rewrite closed shows. Writes gated on `can_manage_rulesets`.
 - `work_days` — id, show_id, date, day_number
@@ -338,7 +346,7 @@ scripts/
   writer must apply them itself.
 - `clock_links` — the no-login crew clock token. `crew_member_id` NULL = the show's venue QR;
   NOT NULL = one person's personal link. Two partial unique indexes keep one of each.
-- `crew_members` — id, organization_id, full_name, email, phone, notes
+- `crew_members` — id, organization_id, full_name, email, phone, notes, `profile_id` (0028: the login this entry IS, set by email matching inside the company; app writes it only to NULL)
 - `rate_cards` — id, crew_member_id, role, day_rate
 - `av_roles` — id, organization_id, name, sort_order, created_at — per-org job title list, auto-seeded with 31 defaults on org creation (guarded against duplicate seeding — this broke once, see below). Existing orgs are never backfilled when the seed list changes.
 
@@ -404,8 +412,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
     under these policies and its copy-crew step inserts timecards; a careless tightening breaks
     Add Day invisibly until somebody presses it on a real show. There is a test for exactly
     that.
-  - **`UnlockShowButton` needs only `can_edit_timecards`**, not admin, so the copy "an admin
-    can unlock it" overstates the protection on a finalized show. Either gate it or reword it.
+  - ~~`UnlockShowButton` needs only `can_edit_timecards`, not admin.~~ **DONE 2026-09-06
+    (0031)**: admins or the show's PM, enforced by `guard_show_unlock()`; copy reworded.
   - ~~No rate limiting anywhere in the app.~~ **DONE 2026-09-06 (migration 0025 +
     `lib/rateLimit.ts`).** The three public write routes — `/api/bookings/respond`,
     `/api/clock/punch`, `/api/clock/identify` — are throttled per token AND per address,
@@ -662,6 +670,47 @@ Other things that are load-bearing and were each verified:
   a lint rule, as `lib/bookingInvite.ts`.
 
 Rate limiting on both routes since 2026-09-06 — see the security backlog entry for the limits.
+
+## Show access: PM-side and crew-side (2026-09-06)
+
+Decided with Dan in a planning session; spec in
+`docs/superpowers/specs/2026-09-06-show-access-and-schedule-design.md`, plan in
+`docs/superpowers/plans/2026-09-06-show-access-and-crew-side.md`. The same person is a PM on
+one show and an A1 on another, so what a login may do is decided PER SHOW, not per company:
+
+| You are… | because… | and you see… |
+|---|---|---|
+| **PM-side** | you can see all shows (`can_edit_all_shows`), OR created it, OR are its scheduler, OR are on its access list (Edit Show → Show Access) | everything, as always |
+| **Crew-side** | your DIRECTORY ENTRY is staffed on it (a live timecard) and is linked to your login | only your own timecards and punches — other rows do not exist for you at the database |
+
+- **The link is by EMAIL, inside one company** (0028): `crew_members.profile_id` is set by
+  triggers when exactly one directory entry and exactly one live member share an email
+  (case-insensitive); zero or several → no link, and Edit Crew says why. The app writes
+  `profile_id` only to NULL (Unlink). Company B's entry for the same person links only inside
+  B — the cross-org rule holds by construction.
+- **`show_crew_access` is trigger-owned, never written by the app** (0029). It exists because
+  the shows visibility rule must not read `timecards` (the recursion incident); it is the fifth
+  door in that rule. `my_pm_show_ids()` and `my_crew_member_ids()` are the two helpers; the
+  policies use them only as `in (select …)`. **0030 rewrote the timecards/punches rules so
+  `(select can_see_all_shows())` short-circuits first** — as written in 0029 they cost 9× (the
+  punches rule re-derived every visible timecard). Measured after 0030: app punch read 1.9 ms.
+- **`is_own_timecard()` is real** — the placeholder 0019 left is now the crew-side write door.
+  Timecard writes stay `can_edit_timecards`: a crew-side person cannot change their own flags.
+- **The crew screen from a login** is the crew clock (`components/CrewShowScreen.tsx` →
+  `ClockPunch` with `endpoint="/api/clock/punch-me"`). `lib/clockPunch.ts` is the ONE place the
+  crew-punch rules live; both routes call `applyCrewPunch()`. `loadClockViewForProfile()`
+  shares `assignmentsFor()` with the link path. Pages branch on `isPmOnShow()`; Reports and
+  Edit Show send a crew-side visitor back to the show; the Directory is hidden from a
+  crew-only login (`isCrewOnly()` = no company permission at all).
+- **The `crew` preset exists and nothing hands it out yet** — Dan chose to build the model
+  first; the invite path (from the directory) is a later, small job. Until a link exists,
+  every rule reduces to what it was.
+- **Unlock** (0031): admins or PM-side, enforced by `guard_show_unlock()`; the button shows to
+  PM-side people who may edit timecards. Copy everywhere: "An admin or the show's PM can
+  unlock it."
+- Proven by `rls.mts` fixtures `sam` (crew on showA, assigned on showA2) and `samCrewA/B`:
+  link exactly-one/never-cross-org/relink, own rows only, own punches only, no flags, PM-side
+  on the assigned show, decline and unlink revoke, unlock matrix. 86 checks.
 
 ### Already built — do not rebuild these
 
