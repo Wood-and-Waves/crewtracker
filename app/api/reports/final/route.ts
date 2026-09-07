@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   }
   if (show.finalized_at) {
     return NextResponse.json(
-      { error: 'This show has already been finalized. An admin can unlock it to send again.' },
+      { error: 'This show has already been finalized. An admin or the show’s PM can unlock it to send again.' },
       { status: 409 },
     )
   }

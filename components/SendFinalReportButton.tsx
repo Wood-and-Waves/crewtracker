@@ -72,7 +72,7 @@ export default function SendFinalReportButton({
             <h2 className="text-lg font-bold text-ink mb-2">Final report sent</h2>
             <p className="text-sm text-muted mb-5">
               Sent to {sentTo} {sentTo === 1 ? 'recipient' : 'recipients'}. This show&apos;s times are
-              now locked — an admin can unlock it if a correction is needed.
+              now locked — an admin or the show’s PM can unlock it if a correction is needed.
             </p>
             <Button className="w-full py-3" onClick={() => setOpen(false)}>Done</Button>
           </>

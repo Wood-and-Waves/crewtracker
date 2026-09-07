@@ -9,7 +9,7 @@ import TimeEntryModal from '@/components/TimeEntryModal'
 import { cn } from '@/lib/cn'
 import { punchGridCols } from '@/lib/trackerLayout'
 
-const LOCKED_NOTE = 'Times are locked — the final report has been sent. An admin can unlock the show.'
+const LOCKED_NOTE = 'Times are locked — the final report has been sent. An admin or the show’s PM can unlock the show.'
 
 export default function TimecardRow({
   timecard: timecardProp,

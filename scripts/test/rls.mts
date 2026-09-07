@@ -500,6 +500,19 @@ try {
     check('nor read the counters', !t.ok || (await q(`select count(*)::int n from rate_limits`))[0].n === 0, t.ok ? 'readable' : t.code)
   })
 
+  console.log('\n=== unlocking a finalized show (0031) ===')
+  // Each attempt runs inside asUser (rolled back), so the show is re-finalized
+  // before every one and the outcome is the probe's own row count / error.
+  const tryUnlock = (uid: string) => asUser(uid, () => probe(`update shows set finalized_at=null where id=$1`, [showA.id]))
+  await q(`update shows set finalized_at=now() where id=$1`, [showA.id])
+  {
+    let r = await tryUnlock(alice); check('an admin can unlock', r.ok && r.n === 1, r.ok ? `${r.n} rows` : r.code)
+    r = await tryUnlock(dave); check("the show's assigned PM can unlock", r.ok && r.n === 1, r.ok ? `${r.n} rows` : r.code)
+    r = await tryUnlock(carol); check('a view-only member cannot', !r.ok || r.n === 0, r.ok ? `${r.n} rows` : '')
+    r = await tryUnlock(sam); check('a crew-side person cannot', !r.ok || r.n === 0, r.ok ? `${r.n} rows` : '')
+  }
+  await q(`update shows set finalized_at=null where id=$1`, [showA.id])
+
   console.log('\n=== signed out, nothing is visible ===')
   await c.query('begin'); await c.query('set local role anon')
   for (const t of ['shows', 'crew_members', 'timecards', 'punches', 'memberships', 'profiles', 'organizations']) {

@@ -469,7 +469,7 @@ export default function CrewCallModal({
 
             {locked && (
               <p className="rounded-field border border-line px-3 py-2 text-xs text-muted">
-                This show is finalized, so its call is read-only. An admin can unlock it.
+                This show is finalized, so its positions are read-only. An admin or the show’s PM can unlock it.
               </p>
             )}
           </>

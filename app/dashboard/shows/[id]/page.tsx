@@ -405,7 +405,10 @@ export default async function ShowDetailPage({
               })}
               . Punches and staffing are rejected by the database until the show is unlocked.
             </p>
-            {user.can('can_manage_users') && (
+            {/* PM-side is already true past the crew-side return above; the
+                edit-timecards permission is what the shows UPDATE policy
+                needs, and guard_show_unlock() has the final say (0031). */}
+            {user.can('can_edit_timecards') && !user.can('view_only') && (
               <div className="mt-2"><UnlockShowButton showId={id} /></div>
             )}
           </div>

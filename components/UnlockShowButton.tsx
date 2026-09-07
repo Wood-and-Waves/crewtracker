@@ -10,8 +10,9 @@ import Button from '@/components/ui/Button'
 // (finalized_by, final_report_recipients) are left intact so the record of the
 // original sign-off survives.
 //
-// Admin-only — gated on can_manage_users by the caller, and by the
-// organizations/shows RLS policies at the database.
+// Admins and the show's PM (Section 5, 2026-09-06). The page shows it to
+// PM-side people who may edit timecards; guard_show_unlock() (0031) is the
+// rule at the database, so a hand-made request gets the same answer.
 
 export default function UnlockShowButton({ showId }: { showId: string }) {
   const router = useRouter()
