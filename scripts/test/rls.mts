@@ -513,6 +513,33 @@ try {
   }
   await q(`update shows set finalized_at=null where id=$1`, [showA.id])
 
+  console.log('\n=== day activities (0032) ===')
+  {
+    // The backfill and the mirror, as the owner.
+    await q(`update work_days set day_type='show_load_out' where id=$1`, [wdA.id])
+    const [r] = await q(`select activities from work_days where id=$1`, [wdA.id])
+    check('a legacy day_type write still lands in activities (the mirror runs both ways)',
+      JSON.stringify(r.activities) === '["show","load_out"]', JSON.stringify(r.activities))
+    await q(`update work_days set activities='{travel,load_in,show}' where id=$1`, [wdA.id])
+    const [m] = await q(`select day_type from work_days where id=$1`, [wdA.id])
+    check('a set with no legacy name mirrors to its biggest activity', m.day_type === 'show', `${m.day_type}`)
+    await q(`update work_days set activities='{load_out}' where id=$1`, [wdA.id])
+    const [lo] = await q(`select day_type from work_days where id=$1`, [wdA.id])
+    check('a lone load-out mirrors to null — the legacy list never had one', lo.day_type === null, `${lo.day_type}`)
+  }
+  await asUser(alice, async () => {
+    const r = await probe(`update work_days set activities='{load_in}' where id=$1`, [wdA.id])
+    check('a timecard editor can toggle activities (grant AND policy)', r.ok && r.n === 1, r.ok ? `${r.n} rows` : r.code)
+    // probe() needs a transaction (savepoints), which asUser provides.
+    const bad = await probe(`update work_days set activities='{wrap_party}' where id=$1`, [wdA.id])
+    check('unknown activities are refused by the check constraint', !bad.ok, bad.ok ? 'accepted' : '')
+  })
+  await asUser(carol, async () => {
+    const r = await probe(`update work_days set activities='{show}' where id=$1`, [wdA.id])
+    check('a view-only member cannot', !r.ok || r.n === 0, r.ok ? `${r.n} rows` : '')
+  })
+  await q(`update work_days set activities='{}', day_type=null where id=$1`, [wdA.id])
+
   console.log('\n=== signed out, nothing is visible ===')
   await c.query('begin'); await c.query('set local role anon')
   for (const t of ['shows', 'crew_members', 'timecards', 'punches', 'memberships', 'profiles', 'organizations']) {
