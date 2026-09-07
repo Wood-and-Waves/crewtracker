@@ -50,15 +50,10 @@ export default function PositionDefsEditor({
         const mine = defs.filter(d => d.roomKey === room.key)
         return (
           <div key={room.key}>
-            <div className="mb-1 flex items-baseline justify-between border-b border-line pb-1">
+            <div className="mb-1 border-b border-line pb-1">
               <span className="font-display text-[12px] font-semibold uppercase tracking-[0.1em] text-ink">
                 {room.name.trim() || 'Unnamed room'}
               </span>
-              {!readOnly && (
-                <button type="button" onClick={() => add(room.key)} className="text-xs font-semibold text-accent hover:underline">
-                  + Add position
-                </button>
-              )}
             </div>
             {mine.length === 0 && (
               <p className="py-2 text-xs text-muted">No positions yet.</p>
@@ -130,6 +125,12 @@ export default function PositionDefsEditor({
                 </p>
               </div>
             ))}
+            {/* Under the last row, where the eye is after adding one (Dan, 2026-09-07). */}
+            {!readOnly && (
+              <button type="button" onClick={() => add(room.key)} className="mt-1.5 text-xs font-semibold text-accent hover:underline">
+                + Add position
+              </button>
+            )}
           </div>
         )
       })}
