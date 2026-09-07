@@ -2,7 +2,7 @@
 // Plain module (no 'use client') so it is safe to import from client
 // components — see CLAUDE.md "Past incidents" on the client/server export rule.
 
-export type Role = 'admin' | 'staff' | 'pm'
+export type Role = 'admin' | 'staff' | 'pm' | 'crew'
 
 export type PermissionKey =
   | 'can_manage_users'
@@ -136,6 +136,31 @@ export const PERMISSION_PRESETS: Record<Role, PermissionValues> = {
     can_send_reports: true,
     // A PM in a small company is often the person who crews their own show.
     can_manage_scheduling: true,
+    view_only: false,
+  },
+  // A crew member with a login (Section 2, 2026-09-06). No company permission
+  // at all: what they may do comes from being STAFFED on a show — see their
+  // own days, punch their own times. Not handed out by anything yet; the
+  // invite path is a later round.
+  crew: {
+    can_manage_users: false,
+    can_manage_billing: false,
+    can_manage_crew_directory: false,
+    can_import_crew: false,
+    can_view_crew_contacts: false,
+    can_create_shows: false,
+    can_edit_all_shows: false,
+    can_archive_shows: false,
+    can_duplicate_shows: false,
+    can_edit_timecards: false,
+    can_approve_timecards: false,
+    can_view_pay_rates: false,
+    can_edit_pay_rates: false,
+    can_manage_rulesets: false,
+    can_view_reports: false,
+    can_export_reports: false,
+    can_send_reports: false,
+    can_manage_scheduling: false,
     view_only: false,
   },
 }

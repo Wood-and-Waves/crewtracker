@@ -141,6 +141,10 @@ const [samCrewB] = await q(`insert into crew_members (organization_id, full_name
 const sam = await makeUser(samEmail)
 await q(`insert into memberships (profile_id, organization_id, base_role) values ($1,$2,'crew')`, [sam, orgA])
 await q(`update profiles set active_organization_id=$2 where id=$1`, [sam, orgA])
+// sam is staffed on showA (crew-side there) and assigned to showA2 (PM-side there).
+const [tcSam] = await q(`insert into timecards (room_id, crew_member_id, crew_member_name, role) values ($1,$2,'Sam Crew','A1') returning id`, [roomA.id, samCrewA.id])
+const [punchSam] = await q(`insert into punches (timecard_id, punch_type, punched_at, source) values ($1,'start',now(),'crew') returning id`, [tcSam.id])
+await q(`insert into show_assignments (show_id, profile_id) values ($1,$2)`, [showA2.id, sam])
 
 try {
   console.log('\n=== one company cannot see another ===')
@@ -378,6 +382,68 @@ try {
     const [r] = await q(`select relink_crew_member($1) as p`, [samCrewA.id])
     check('relink_crew_member() links an unlinked entry', r.p === sam, `${r.p}`)
   }
+
+  console.log('\n=== crew-side: a staffed login sees only its own rows (0029) ===')
+  {
+    const [row] = await q(`select count(*)::int n from show_crew_access where show_id=$1 and profile_id=$2`, [showA.id, sam])
+    check('staffing a linked person records their access to the show', row.n === 1, `${row.n}`)
+  }
+  await asUser(sam, async () => {
+    const shows = await q(`select id from shows`)
+    check('sam sees showA (staffed) and showA2 (assigned) and nothing else',
+      shows.length === 2 && shows.some(s => s.id === showA.id) && shows.some(s => s.id === showA2.id), JSON.stringify(shows))
+    const tcs = await q(`select id from timecards where show_id=$1`, [showA.id])
+    check('on showA sam sees only their own timecard', tcs.length === 1 && tcs[0].id === tcSam.id, JSON.stringify(tcs))
+    const pun = await q(`select id from punches where show_id=$1`, [showA.id])
+    check('and only their own punches', pun.length === 1 && pun[0].id === punchSam.id, JSON.stringify(pun))
+    const rates = await q(`select count(*)::int n from timecard_day_rates where show_id=$1`, [showA.id])
+    check('and no rates', rates[0].n === 0, `${rates[0].n}`)
+
+    const own = await probe(`update punches set punched_at=now() where id=$1`, [punchSam.id])
+    check('sam can change their own punch', own.ok && own.n === 1, own.ok ? `${own.n} rows` : own.code)
+    const ins = await probe(`insert into punches (timecard_id, punch_type, punched_at, source) values ($1,'meal_out',now(),'crew')`, [tcSam.id])
+    check('and add one', ins.ok && ins.n === 1, ins.ok ? '' : ins.code)
+    const other = await probe(`update punches set punched_at=now() where id=$1`, [punchA.id])
+    check("but not somebody else's on the same show", !other.ok || other.n === 0, other.ok ? `${other.n} rows` : '')
+    const flag = await probe(`update timecards set is_travel_day=true where id=$1`, [tcSam.id])
+    check('and cannot change their own timecard flags', !flag.ok || flag.n === 0, flag.ok ? `${flag.n} rows` : '')
+
+    const a2 = await q(`select count(*)::int n from timecards where show_id=$1`, [showA2.id])
+    check('on showA2 (assigned) sam sees every timecard', a2[0].n === 1, `${a2[0].n}`)
+    const pm = await q(`select count(*)::int n from my_pm_show_ids() f where f = $1`, [showA2.id])
+    const notPm = await q(`select count(*)::int n from my_pm_show_ids() f where f = $1`, [showA.id])
+    check('my_pm_show_ids() says PM on showA2, not on showA', pm[0].n === 1 && notPm[0].n === 0, `${pm[0].n} ${notPm[0].n}`)
+  })
+  // Declining removes access; unlinking removes access.
+  await q(`update timecards set booking_status='declined' where id=$1`, [tcSam.id])
+  await asUser(sam, async () => {
+    const s = await q(`select count(*)::int n from shows where id=$1`, [showA.id])
+    check('a declined booking takes the show away', s[0].n === 0, `${s[0].n}`)
+  })
+  await q(`update timecards set booking_status='confirmed' where id=$1`, [tcSam.id])
+  await q(`update crew_members set profile_id=null where id=$1`, [samCrewA.id])
+  await asUser(sam, async () => {
+    const s = await q(`select count(*)::int n from shows where id=$1`, [showA.id])
+    check('unlinking takes the show away', s[0].n === 0, `${s[0].n}`)
+  })
+  await q(`select relink_crew_member($1)`, [samCrewA.id])
+  await asUser(sam, async () => {
+    const s = await q(`select count(*)::int n from shows where id=$1`, [showA.id])
+    check('relinking gives it back', s[0].n === 1, `${s[0].n}`)
+  })
+  // Unchanged for everyone else.
+  await asUser(alice, async () => {
+    const tcs = await q(`select count(*)::int n from timecards where show_id=$1`, [showA.id])
+    check('an admin still sees every timecard on showA', tcs[0].n >= 2, `${tcs[0].n}`)
+  })
+  await asUser(dave, async () => {
+    const tcs = await q(`select count(*)::int n from timecards where show_id=$1`, [showA.id])
+    check('an assigned PM still sees every timecard on showA', tcs[0].n >= 2, `${tcs[0].n}`)
+  })
+  await asUser(carol, async () => {
+    const tcs = await q(`select count(*)::int n from timecards where show_id=$1`, [showA.id])
+    check('a view-only member (sees all shows) still sees every timecard', tcs[0].n >= 2, `${tcs[0].n}`)
+  })
 
   console.log('\n=== removed and misdirected users get nothing ===')
   await q(`update memberships set deactivated_at=now() where profile_id=$1 and organization_id=$2`, [alice, orgA])
