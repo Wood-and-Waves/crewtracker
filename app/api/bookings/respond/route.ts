@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   // would otherwise surface to a crew member as a raw 500.
   const { data: show } = await admin
     .from('shows')
-    .select('id, name, finalized_at, scheduler_id, created_by')
+    .select('id, name, finalized_at, sent_to_scheduling_at, organization_id, created_by')
     .eq('id', invite.show_id)
     .maybeSingle()
 
@@ -109,24 +109,40 @@ export async function POST(request: Request) {
   // actionable: somebody has to find a replacement, and the sooner they know
   // the better. Failure to notify never fails the response; the answer is
   // recorded either way and telling the crew member otherwise would be a lie.
+  //
+  // Who "somebody" is depends on whether the show has been sent to scheduling
+  // (piece C, 2026-09-07): sent, nobody owns it, so every scheduler in the
+  // company hears about it; not sent, it's still the creator's to staff.
   if (response === 'declined') {
-    const notifyId = show.scheduler_id || show.created_by
-    if (notifyId) {
-      const [{ data: person }, { data: crew }] = await Promise.all([
-        admin.from('profiles').select('email, full_name').eq('id', notifyId).maybeSingle(),
-        admin.from('crew_members').select('full_name').eq('id', invite.crew_member_id).maybeSingle(),
-      ])
-      if (person?.email) {
-        const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
-        await sendDeclineNoticeEmail({
-          to: person.email,
-          recipientName: person.full_name ?? null,
-          crewName: crew?.full_name ?? 'A crew member',
-          showName: show.name,
-          note: note?.slice(0, 500) || null,
-          link: `${origin}/dashboard/shows/${show.id}`,
-        })
-      }
+    let people: { email: string | null; name: string | null }[]
+    if (show.sent_to_scheduling_at) {
+      const { data: schedulers } = await admin.from('memberships')
+        .select('profiles(email, full_name)')
+        .eq('organization_id', show.organization_id).eq('can_manage_scheduling', true).is('deactivated_at', null)
+      people = ((schedulers ?? []) as any[]).map(m => {
+        const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
+        return { email: (p?.email ?? null) as string | null, name: (p?.full_name ?? null) as string | null }
+      })
+    } else if (show.created_by) {
+      const { data: creator } = await admin.from('profiles').select('email, full_name').eq('id', show.created_by).maybeSingle()
+      people = creator ? [{ email: creator.email ?? null, name: creator.full_name ?? null }] : []
+    } else {
+      people = []
+    }
+    people = people.filter(p => p.email)
+
+    const { data: crew } = await admin.from('crew_members').select('full_name').eq('id', invite.crew_member_id).maybeSingle()
+
+    if (people.length) {
+      const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
+      await Promise.all(people.map(p => sendDeclineNoticeEmail({
+        to: p.email!,
+        recipientName: p.name,
+        crewName: crew?.full_name ?? 'A crew member',
+        showName: show.name,
+        note: note?.slice(0, 500) || null,
+        link: `${origin}/dashboard/shows/${show.id}`,
+      })))
     }
   }
 

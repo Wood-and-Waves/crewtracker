@@ -44,7 +44,6 @@ export type ShowRow = {
   total: number
   /** People actually booked on the busiest day, whether or not a call exists. */
   bookedPeakPerDay: number
-  schedulerName: string | null
   archived: boolean
 }
 

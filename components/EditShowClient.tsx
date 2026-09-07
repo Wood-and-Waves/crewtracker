@@ -10,7 +10,7 @@ import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import PositionDefsSection, { type DefRow, type SlotFlag } from '@/components/PositionDefsSection'
-import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
+import SendToSchedulingButton from '@/components/SendToSchedulingButton'
 import PmField, { type PmState } from '@/components/PmField'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
@@ -53,7 +53,7 @@ export default function EditShowClient({
   crewRateEntries: any[]
   /** Handoff state, fetched server-side. Omitted for a caller who shouldn't
    *  see the Scheduling section at all. */
-  scheduling?: { schedulerName: string | null; positionCount: number; callSize: string; openHandoff?: boolean }
+  scheduling?: { sentAt: string | null; positionCount: number; callSize: string; openHandoff?: boolean }
   /** Positions by kind (piece B): definitions, flags and the role list. Omitted without the scheduling module. */
   positions?: { defs: DefRow[]; flags: SlotFlag[]; roles: string[] }
   /** The named production manager and where the invitation stands (piece B). */
@@ -549,10 +549,9 @@ export default function EditShowClient({
       {scheduling && (
         <section className="mb-6">
           <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Scheduling</p>
-          <HandoffToSchedulerButton
+          <SendToSchedulingButton
             showId={show.id}
-            approvedAt={show.call_approved_at ?? null}
-            schedulerName={scheduling.schedulerName}
+            sentAt={scheduling.sentAt}
             positionCount={scheduling.positionCount}
             callSize={scheduling.callSize}
             initialOpen={scheduling.openHandoff}

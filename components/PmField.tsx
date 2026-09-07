@@ -20,9 +20,8 @@ import Select from '@/components/ui/Select'
 // show is real. On EDIT SHOW (showId given) a choice is confirmed and sent at
 // once through /api/pm/invite, and the field also offers Resend.
 //
-// Members are loaded here rather than passed in — the same call
-// HandoffToSchedulerButton makes — so neither page grows a prop for a list
-// that is only needed when somebody opens this field.
+// Members are loaded here rather than passed in, so neither page grows a
+// prop for a list that is only needed when somebody opens this field.
 
 export type PmState = {
   profileId: string | null

@@ -21,8 +21,8 @@ export type ShowStatusInput = {
    */
   positionsTotal?: number
   positionsFilled?: number
-  /** Non-null once the call has been approved and handed to a scheduler. */
-  call_approved_at?: string | null
+  /** Non-null once the show has been sent to scheduling. */
+  sent_to_scheduling_at?: string | null
 }
 
 /**
@@ -64,14 +64,14 @@ export function showStatus(show: ShowStatusInput, now?: string): ShowStatus {
   // covers an admin who simply booked everyone themselves.
   if (total > 0 && filled >= total) return 'preshow'
 
-  // STAFFING MEANS HANDED OVER, not merely "a call exists". Since the call is
-  // now built during show creation, every show has positions from the moment it
-  // exists — so keying off positions alone made 'new' unreachable and marked
-  // shows as being staffed while the person who created them was still writing
-  // the call. The handoff is the real transition, and it is the one Dan's
-  // process turns on: admin builds the call, approves it, and only then does
-  // the scheduler start work.
-  return show.call_approved_at ? 'staffing' : 'new'
+  // STAFFING MEANS SENT TO SCHEDULING, not merely "a call exists". Since the
+  // call is now built during show creation, every show has positions from the
+  // moment it exists — so keying off positions alone made 'new' unreachable
+  // and marked shows as being staffed while the person who created them was
+  // still writing the call. Sending it to scheduling is the real transition,
+  // and it is the one Dan's process turns on: admin builds the call, sends it,
+  // and only then does anyone with the scheduling permission start work.
+  return show.sent_to_scheduling_at ? 'staffing' : 'new'
 }
 
 /**

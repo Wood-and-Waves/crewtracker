@@ -1,4 +1,5 @@
-// "This show is ready to crew" — the email that hands a show to its scheduler.
+// "This show has been sent to scheduling" — the email that puts a show in the
+// scheduling queue for everyone who can staff it.
 //
 // Plain module, no 'use client': imported by an API route.
 //
@@ -6,23 +7,24 @@
 // `new Resend(...)` throws during `next build` when the key is absent, which
 // broke every Vercel Preview deployment on 2026-07-27.
 //
-// Deliberately contains no pay information. The scheduler may or may not hold
+// Deliberately contains no pay information. The recipient may or may not hold
 // can_view_pay_rates, and an email is the one surface where that check cannot
 // be made per reader — so it carries none.
 
 import { Resend } from 'resend'
+import { describeShowDates } from '@/lib/pmInviteEmail'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
 
 export type CallHandoffEmailInput = {
   to: string
-  schedulerName: string | null
+  recipientName: string | null
   showName: string
   venue: string | null
   startDate: string
   endDate: string
   organizationName: string
-  approvedByName: string | null
+  sentByName: string | null
   /** Already-phrased size, e.g. "12 crew across 5 days". Never a raw row count. */
   callSize: string
   link: string
@@ -32,25 +34,15 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function fmtDate(d: string) {
-  // Bare 'YYYY-MM-DD' + T00:00:00 = local midnight; a date-only string parses as
-  // UTC and renders as the previous day west of Greenwich.
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  })
-}
-
 export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
-  const dates = input.startDate === input.endDate
-    ? fmtDate(input.startDate)
-    : `${fmtDate(input.startDate)} – ${fmtDate(input.endDate)}`
+  const dates = describeShowDates(input.startDate, input.endDate)
 
   // Company and show name in the subject: a scheduler working several
   // organizations needs to know whose show this is from the inbox list alone.
-  const subject = `${input.organizationName}: ${input.showName} is ready to crew`
+  const subject = `${input.organizationName}: ${input.showName} needs scheduling — ${input.callSize}, ${dates}`
 
-  const greeting = input.schedulerName ? `Hi ${input.schedulerName},` : 'Hi,'
-  const approvedBy = input.approvedByName ? ` by ${input.approvedByName}` : ''
+  const greeting = input.recipientName ? `Hi ${input.recipientName},` : 'Hi,'
+  const sentBy = input.sentByName ? ` by ${input.sentByName}` : ''
   // NOT the position-row count. Positions are stored per room per day, so a
   // five-day show needing twelve people has sixty rows — and an email saying
   // "60 positions to fill" reads as a crisis rather than a normal week.
@@ -59,7 +51,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
   const text = [
     greeting,
     '',
-    `The positions for ${input.showName} have been approved${approvedBy}, so it's ready for you to staff.`,
+    `${input.showName} has been sent to scheduling${sentBy}. Any scheduler can fill its positions; it's first come, first served.`,
     '',
     `Show:   ${input.showName}`,
     input.venue ? `Venue:  ${input.venue}` : null,
@@ -75,8 +67,8 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
   <p style="font-size:15px;margin:0 0 16px">${escapeHtml(greeting)}</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">
-    The positions for <strong>${escapeHtml(input.showName)}</strong> have been approved${escapeHtml(approvedBy)},
-    so it&rsquo;s ready for you to staff.
+    <strong>${escapeHtml(input.showName)}</strong> has been sent to scheduling${escapeHtml(sentBy)}.
+    Any scheduler can fill its positions; it&rsquo;s first come, first served.
   </p>
   <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 24px">
     <tr><td style="padding:6px 0;color:#71717a;width:80px">Show</td><td style="padding:6px 0">${escapeHtml(input.showName)}</td></tr>

@@ -136,18 +136,6 @@ export default async function DashboardPage({
     bookedByShow.set(wd.show_id, perDay)
   }
 
-  // Scheduler names, one query for the page. Only the shows on screen are
-  // looked up, and only their name is read.
-  const schedulerIds = schedulingOn
-    ? [...new Set(shows.map(s => s.scheduler_id).filter(Boolean))] as string[]
-    : []
-  const { data: schedulers } = schedulerIds.length
-    ? await supabase.from('profiles').select('id, full_name, email').in('id', schedulerIds)
-    : { data: [] }
-  const schedulerById = new Map(
-    (schedulers ?? []).map((p: any) => [p.id, p.full_name || p.email || null]),
-  )
-
   const rows: ShowRow[] = shows.map(show => {
     const call = callByShow.get(show.id)
     const summary = summarizeCall(call?.dates ?? [])
@@ -187,7 +175,6 @@ export default async function DashboardPage({
       bookedPeakPerDay: Math.max(0, ...[...(bookedByShow.get(show.id)?.values() ?? [0])]),
       filled: call?.filled ?? 0,
       total: call?.total ?? 0,
-      schedulerName: show.scheduler_id ? schedulerById.get(show.scheduler_id) ?? null : null,
       archived: !!show.archived,
     }
   })

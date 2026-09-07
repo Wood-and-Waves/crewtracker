@@ -98,24 +98,19 @@ export default async function EditShowPage({
     ? await supabase.from('clock_links').select('id, crew_member_id, token, revoked_at').eq('show_id', id)
     : { data: [] }
 
-  // Handing off to a scheduler. Moved here from the tracker header (2026-08-06)
-  // — it is an admin act on the whole show, not something you do while punching
+  // Sending to scheduling. Moved here from the tracker header (2026-08-06) —
+  // it is an admin act on the whole show, not something you do while punching
   // people in. Counted per DAY, never per row: a five-day show needing twelve
   // people has sixty position rows, and "60" is not a number anybody crews
   // against.
   const schedulingOn = canUseScheduling(user)
 
-  const [{ data: positionRows }, { data: scheduler }] = schedulingOn
-    ? await Promise.all([
-        supabase
-          .from('crew_call_positions')
-          .select('id, rooms!inner(work_days!inner(date, show_id))')
-          .eq('rooms.work_days.show_id', id),
-        show.scheduler_id
-          ? supabase.from('profiles').select('full_name, email').eq('id', show.scheduler_id).maybeSingle()
-          : Promise.resolve({ data: null }),
-      ])
-    : [{ data: null }, { data: null }]
+  const { data: positionRows } = schedulingOn
+    ? await supabase
+        .from('crew_call_positions')
+        .select('id, rooms!inner(work_days!inner(date, show_id))')
+        .eq('rooms.work_days.show_id', id)
+    : { data: null }
 
   // Positions by kind (piece B): the definitions, the flags, and the role list
   // for the editor. Only with the scheduling module, like the slots above.
@@ -177,7 +172,7 @@ export default async function EditShowPage({
       // Omitted entirely when the module is off — EditShowClient renders the
       // Scheduling section only when this prop is present.
       scheduling={schedulingOn ? {
-        schedulerName: (scheduler as any)?.full_name || (scheduler as any)?.email || null,
+        sentAt: show.sent_to_scheduling_at ?? null,
         positionCount: callSummary.total,
         callSize: describeCallSize(callSummary),
         openHandoff: handoff === '1',
