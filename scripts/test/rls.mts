@@ -652,6 +652,8 @@ try {
       check('and every timecard on it (PM-side)', t[0].n === 1, `${t[0].n}`)
       const pm = await q(`select count(*)::int n from my_pm_show_ids() f where f = $1`, [showA2.id])
       check('my_pm_show_ids() agrees', pm[0].n === 1, `${pm[0].n}`)
+      const pu = await q(`select count(*)::int n from punches where show_id=$1`, [showA2.id])
+      check('and its punches', pu[0].n === 1, `${pu[0].n}`)
       const ins = await probe(`insert into staffing_events (show_id, kind, crew_member_name, role, days) values ($1,'booked','Sam','A1','Tue 3')`, [showA2.id])
       check('a scheduler can log a staffing event on a sent show', ins.ok && ins.n === 1, ins.ok ? `${ins.n}` : ins.code)
     })
@@ -659,6 +661,8 @@ try {
     await asUser(dave, async () => {
       const s = await q(`select count(*)::int n from shows where id=$1`, [showA2.id])
       check('without the permission a sent show is invisible again', s[0].n === 0, `${s[0].n}`)
+      const pu = await q(`select count(*)::int n from punches where show_id=$1`, [showA2.id])
+      check('and its punches are gone too', pu[0].n === 0, `${pu[0].n}`)
       const ins = await probe(`insert into staffing_events (show_id, kind, crew_member_name, role, days) values ($1,'booked','Sam','A1','Tue 3')`, [showA2.id])
       check('and nobody can log events on a show they cannot see', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
     })
