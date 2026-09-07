@@ -159,7 +159,7 @@ export default function PositionDefsSection({
       days: compressDays([slot.date]),
     })
     if (moving.crew_member_id) {
-      setChanged(prev => [...prev, { id: moving.crew_member_id!, name: moving.crew_member_name }])
+      setChanged(prev => prev.some(p => p.id === moving.crew_member_id) ? prev : [...prev, { id: moving.crew_member_id!, name: moving.crew_member_name }])
     }
     setMoving(null)
     await supabase.rpc('sync_position_slots', { p_show_id: showId })
@@ -189,7 +189,7 @@ export default function PositionDefsSection({
       days: compressDays([f.date]),
     })
     if (f.crew_member_id) {
-      setChanged(prev => [...prev, { id: f.crew_member_id!, name: f.crew_member_name }])
+      setChanged(prev => prev.some(p => p.id === f.crew_member_id) ? prev : [...prev, { id: f.crew_member_id!, name: f.crew_member_name }])
     }
     await supabase.rpc('sync_position_slots', { p_show_id: showId })
     setBusy(false)

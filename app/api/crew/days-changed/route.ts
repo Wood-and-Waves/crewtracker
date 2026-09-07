@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling } from '@/lib/session'
+import { liveBookings } from '@/lib/timecardFields'
 import { sendDaysChangedEmail } from '@/lib/daysChangedEmail'
 import type { EngagementDay } from '@/lib/bookingEmail'
 
@@ -51,11 +52,11 @@ export async function POST(request: Request) {
   // app/api/bookings/send does it, extended to several people at once: keyed
   // by crew member then date, so a person in two rooms on one day is still
   // one day and the travel flags are ORed rather than whichever row came
-  // back last.
-  const { data: timecards } = await supabase
+  // back last. A declined day is not one of their days.
+  const { data: timecards } = await liveBookings(supabase
     .from('timecards')
     .select('crew_member_id, is_travel_day, travel_in_day, travel_out_day, rooms!inner ( work_days!inner ( date, show_id, activities ) )')
-    .in('crew_member_id', crewMemberIds)
+  ).in('crew_member_id', crewMemberIds)
     .eq('rooms.work_days.show_id', showId)
 
   const byPerson = new Map<string, Map<string, EngagementDay>>()
