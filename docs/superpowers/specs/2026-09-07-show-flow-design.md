@@ -22,7 +22,7 @@ digest, day-change flags, crew change notices.**
 | Handoff | New Show has **two buttons**: "Create show" and "Create show and send to scheduler". Edit Show keeps "Send to scheduler". |
 | Who is "the scheduler" | **Everyone with the scheduling permission.** Nobody owns a show; any of them can fill any position. |
 | What schedulers see | **Only shows that have been sent to scheduling.** A show still being built is out of sight. |
-| PM before show day | A **ready email**, automatic, **when the last position is accepted**: roster by day and room with phones, each person's days, anyone still waiting. |
+| PM before show day | A **ready email**, automatic, **when the last position is accepted** — to a PM who has **accepted** the show. No PM yet? It is held and sent the moment one accepts. Roster by day and room with phones, each person's days, anyone still waiting. |
 | Changes after that | An automatic **evening digest** to the PM, each line marked accepted / waiting on reply / declined. Starts only after the ready email. |
 | A person's days | **A position is "a role, for these kinds of day"**: all days / show days / load-in and load-out / custom dates. Filling it gives the person those days by default, with a checklist to trim. |
 | A day added or removed later | The app **adds open slots freely and never removes a person on its own**. A booked person on a day that no longer fits becomes a **flag for a human** (move / keep / release). All-day people are offered an extension to a new day. |
@@ -101,8 +101,11 @@ days · Load-in and load-out · Custom…"). Default kind: **all days** — toda
 **Production manager.** `shows.pm_profile_id uuid null references profiles`. Naming one (New
 Show field, Edit Show field) writes a `show_assignments` row for them (that is what gives
 access — the PM-side door already exists) and offers **"Email Sam that they're the PM?"** —
-`lib/pmAssignedEmail.ts`, the booking-request sender, `siteOrigin()` for the link. Changing the
-PM removes the old assignment only if it was created by this field (tracked by
+`lib/pmAssignedEmail.ts`, the booking-request sender, `siteOrigin()` for the link. The email
+carries an **Accept** button (a token link, like a booking request, landing on the show);
+`shows.pm_accepted_at` records it. Opening the show while signed in as the PM counts as
+accepting too, so nobody is blocked on a button. Changing the PM clears `pm_accepted_at` and
+removes the old assignment only if it was created by this field (tracked by
 `show_assignments.source = 'pm'`), never one an admin granted by hand.
 
 **Two finish buttons.** "Create show" (today's) and "Create show and send to scheduler" =
@@ -129,14 +132,17 @@ history until a later migration drops it, once nothing reads it.
 the punch/timecard policies (0030) — schedulers are **PM-side** on sent shows. The Schedule
 screen gains a **"Needs scheduling"** list: sent shows with any open slot, oldest first.
 
-**Ready email** — automatic. In `/api/bookings/respond`, after an acceptance: if the show now
-has **no open slot and no booking waiting on a reply**, and `shows.ready_email_sent_at` is
-null, send `lib/readyEmail.ts` to the PM (`pm_profile_id`; if none, to the creator) and set
-`ready_email_sent_at`. Body: roster by day and room (name, role, phone), each person's days
-in one line ("Sam Lindqvist · A1 · Tue–Thu"), and "0 waiting on a reply". Idempotent by the
-timestamp; a later change that reopens a slot does NOT unsend or resend it.
+**Ready email** — automatic, and **only to an accepted PM**. One function,
+`maybeSendReadyEmail(showId)`, called after a crew acceptance (`/api/bookings/respond`) AND
+after a PM accepts (the Accept link, or first signed-in open): if the show has **no open slot
+and no booking waiting on a reply**, `pm_accepted_at` is set, and `ready_email_sent_at` is
+null → send `lib/readyEmail.ts` to the PM and set `ready_email_sent_at`. A show that fills
+before it has a PM simply waits; the email goes the moment the PM accepts. Body: roster by day
+and room (name, role, phone), each person's days in one line ("Sam Lindqvist · A1 · Tue–Thu"),
+and "0 waiting on a reply". Idempotent by the timestamp; a later change that reopens a slot
+does NOT unsend or resend it.
 
-**Evening digest** — automatic, only after `ready_email_sent_at`. A `staffing_events` table
+**Evening digest** — automatic, only after `ready_email_sent_at` (so only ever to an accepted PM). A `staffing_events` table
 (show_id, at, kind: booked / accepted / declined / released / days_changed / moved,
 crew_member_name, role, days, actor) written by the routes and the tracker's staffing writes
 (one helper, `lib/staffingEvents.ts`). A Vercel cron (`/api/digest`, daily 23:30 UTC — Hobby
