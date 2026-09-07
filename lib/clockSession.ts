@@ -202,12 +202,32 @@ export async function loadClockView(
   }
 
   // ---- Personal link: this person's own day -----------------------------
-  // No day_rate in the column list — see the header. Declined rows are
-  // excluded for the same reason as above.
+  const assignments = await assignmentsFor(admin, link.crew_member_id, roomIds, roomName)
+
+  return {
+    ...base,
+    kind: 'personal',
+    me: { crewMemberId: link.crew_member_id, name: crew!.full_name, assignments },
+    roster: [],
+  }
+}
+
+/**
+ * This person's rooms and punches on ONE day of a show. Shared by the link
+ * path and the login path (Section 3, 2026-09-06): same columns, same shape,
+ * same rules. No day_rate in the column list — see the header. Declined rows
+ * are excluded for the same reason the venue roster excludes them.
+ */
+async function assignmentsFor(
+  admin: ReturnType<typeof createAdminClient>,
+  crewMemberId: string,
+  roomIds: string[],
+  roomName: Map<string, string>,
+): Promise<ClockAssignment[]> {
   const { data: mine } = await admin
     .from('timecards')
     .select('id, role, is_travel_day, absence, room_id')
-    .eq('crew_member_id', link.crew_member_id)
+    .eq('crew_member_id', crewMemberId)
     .in('room_id', roomIds)
     .neq('booking_status', 'declined')
 
@@ -223,7 +243,7 @@ export async function loadClockView(
         .in('timecard_id', timecardIds)
     : { data: [] as any[] }
 
-  const assignments: ClockAssignment[] = (mine || []).map(t => ({
+  return (mine || []).map(t => ({
     timecardId: t.id,
     room: roomName.get(t.room_id) || 'Room',
     role: t.role ?? null,
@@ -237,11 +257,68 @@ export async function loadClockView(
       }))
       .sort((a: Punch, b: Punch) => a.punched_at.localeCompare(b.punched_at)),
   })).sort((a, b) => a.room.localeCompare(b.room))
+}
 
-  return {
-    ...base,
-    kind: 'personal',
-    me: { crewMemberId: link.crew_member_id, name: crew!.full_name, assignments },
-    roster: [],
+/**
+ * The crew screen for a SIGNED-IN person on a show they are staffed on
+ * (Section 3, 2026-09-06). Same view the link builds, minus the link: no
+ * token, no expiry, no revocation — you are staffed or you are not.
+ * `showId` must already have passed the caller's own RLS (the page read it);
+ * the caller's directory entry is found through crew_members.profile_id.
+ */
+export async function loadClockViewForProfile(
+  showId: string,
+  profileId: string,
+  requestedDate?: string,
+): Promise<ClockView | null> {
+  if (!UUID.test(showId) || !UUID.test(profileId)) return null
+  const admin = createAdminClient()
+
+  const { data: show } = await admin.from('shows')
+    .select('id, name, venue, city_state, organization_id, timezone_identifier, finalized_at, end_date')
+    .eq('id', showId).maybeSingle()
+  if (!show) return null
+
+  const [{ data: org }, { data: crew }] = await Promise.all([
+    admin.from('organizations').select('name, timecard_rounding_minutes').eq('id', show.organization_id).maybeSingle(),
+    admin.from('crew_members').select('id, full_name')
+      .eq('organization_id', show.organization_id).eq('profile_id', profileId).maybeSingle(),
+  ])
+  if (!crew) return null
+
+  const timeZone = show.timezone_identifier || 'America/Chicago'
+  const today = todayInZone(timeZone)
+  const { data: allDays } = await admin.from('work_days').select('date').eq('show_id', show.id).order('date')
+  const days = (allDays ?? []).map(d => d.date as string)
+  const selectedDate = requestedDate && days.includes(requestedDate) ? requestedDate : today
+
+  const base = {
+    token: '',
+    kind: 'personal' as const,
+    showId: show.id,
+    showName: show.name,
+    venue: show.venue ?? show.city_state ?? null,
+    organizationName: org?.name ?? 'the production team',
+    timeZone,
+    today,
+    selectedDate,
+    days,
+    roundingMinutes: org?.timecard_rounding_minutes ?? 1,
+    finalized: !!show.finalized_at,
+    expired: false,
+    revoked: false,
+    roster: [] as ClockView['roster'],
   }
+  const me = { crewMemberId: crew.id, name: crew.full_name, assignments: [] as ClockAssignment[] }
+
+  const { data: workDay } = await admin
+    .from('work_days').select('id').eq('show_id', show.id).eq('date', selectedDate).maybeSingle()
+  if (!workDay) return { ...base, me }
+  const { data: rooms } = await admin.from('rooms').select('id, name').eq('work_day_id', workDay.id)
+  const roomIds = (rooms || []).map(r => r.id)
+  const roomName = new Map((rooms || []).map(r => [r.id, r.name]))
+  if (roomIds.length === 0) return { ...base, me }
+
+  me.assignments = await assignmentsFor(admin, crew.id, roomIds, roomName)
+  return { ...base, me }
 }

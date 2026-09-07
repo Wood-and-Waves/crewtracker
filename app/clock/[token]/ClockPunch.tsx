@@ -32,10 +32,16 @@ import type { ClockAssignment } from '@/lib/clockSession'
 // exactly the three-register treatment TimecardRow uses.
 
 export default function ClockPunch({
-  token, showName, venue, crewName, timeZone, roundingMinutes,
+  token, showId, endpoint = '/api/clock/punch', showName, venue, crewName, timeZone, roundingMinutes,
   selectedDate, today, days, assignments,
 }: {
-  token: string
+  /** The link's token. Absent when reached from a login (Section 3), which
+   *  sends `showId` to /api/clock/punch-me instead. */
+  token?: string
+  showId?: string
+  /** Where punches go. The link and the login differ only in who they say
+   *  is punching; the rules behind both are lib/clockPunch.ts. */
+  endpoint?: string
   showName: string
   venue: string | null
   crewName: string
@@ -125,10 +131,10 @@ export default function ClockPunch({
     const { timecardId, type } = editing
     setBusy(true); setError('')
     try {
-      const res = await fetch('/api/clock/punch', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, timecardId, punchType: type, clear: true }),
+        body: JSON.stringify({ ...(token ? { token } : { showId }), timecardId, punchType: type, clear: true }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'That did not clear.'); setBusy(false); return }
@@ -146,12 +152,12 @@ export default function ClockPunch({
     const { timecardId, type } = editing
     setBusy(true); setError('')
     try {
-      const res = await fetch('/api/clock/punch', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // Only a wall-clock time is sent. The DATE comes from the timecard,
         // server-side — see the route header.
-        body: JSON.stringify({ token, timecardId, punchType: type, at: `${hh}:${mm}` }),
+        body: JSON.stringify({ ...(token ? { token } : { showId }), timecardId, punchType: type, at: `${hh}:${mm}` }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'That did not save.'); setBusy(false); return }
