@@ -1,7 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
-import ShowScheduleGrid from '@/components/ShowScheduleGrid'
-import type { GridTimecard } from '@/lib/scheduleGrid'
 import { redirect, notFound } from 'next/navigation'
 import EditShowClient from '@/components/EditShowClient'
 import ShowAccessEditor from '@/components/ShowAccessEditor'
@@ -56,26 +54,10 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
     fetchLiveTimecards<TimecardRowMaybeRate>(
       supabase,
       roomIds,
-      // The schedule grid needs the flags and absence too; Crew & Rates ignores them.
-      'id, crew_member_id, crew_member_name, role, room_id, is_travel_day, travel_in_day, travel_out_day, absence',
+      'id, crew_member_id, crew_member_name, role, room_id',
     ),
     canViewRates ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
   ])
-
-  // Punch counts per timecard, for the schedule grid: a worked day is never
-  // removed or moved from the grid, so each cell has to know. One query for
-  // the show, grouped here.
-  const timecardIds = (timecards || []).map(t => t.id)
-  const { data: punchRows } = timecardIds.length > 0
-    ? await supabase.from('punches').select('timecard_id').in('timecard_id', timecardIds)
-    : { data: [] as { timecard_id: string }[] }
-  const punchCount = new Map<string, number>()
-  for (const p of punchRows || []) punchCount.set(p.timecard_id, (punchCount.get(p.timecard_id) ?? 0) + 1)
-  const gridTimecards: GridTimecard[] = (timecards || []).map(t => ({
-    id: t.id, room_id: t.room_id, crew_member_id: t.crew_member_id, crew_member_name: t.crew_member_name,
-    role: t.role, is_travel_day: !!t.is_travel_day, travel_in_day: !!t.travel_in_day,
-    travel_out_day: !!t.travel_out_day, absence: (t as any).absence ?? null, punchCount: punchCount.get(t.id) ?? 0,
-  }))
 
   // Dedupe to unique (crew, role) combos, matching iOS crewRateEntries logic
   const seen: Record<string, any> = {}
@@ -172,19 +154,6 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
         callSize: describeCallSize(callSummary),
       } : undefined}
     >
-      {canEditTimecards && (
-        <ShowScheduleGrid
-          showId={show.id}
-          organizationId={user.organizationId!}
-          days={(workDays || []).map(d => ({ id: d.id, date: d.date, day_number: d.day_number, day_type: d.day_type ?? null }))}
-          rooms={rooms || []}
-          timecards={gridTimecards}
-          locked={!!show.finalized_at}
-          canEdit={canEditTimecards}
-          canEditRates={user.can('can_edit_pay_rates')}
-        />
-      )}
-
       {canEditTimecards && (
         <CrewClockPanel
           showId={show.id}

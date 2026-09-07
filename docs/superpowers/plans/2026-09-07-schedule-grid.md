@@ -4,7 +4,7 @@
 
 **Goal:** Section 4 of `docs/superpowers/specs/2026-09-06-show-access-and-schedule-design.md` — a crew × days grid on Edit Show where an admin says who works which days, in which room, with their own travel dates, in one place. Desktop first.
 
-**Architecture:** No schema change: a cell IS a timecard row (person × room-day) and its travel flags, so the grid reads what the tracker reads and writes what Staff room / Reset already write. A pure model (`lib/scheduleGrid.ts`) decides what a tap means — insert, update flags, move room, delete, or refuse — and is unit-tested without a database; `components/ShowScheduleGrid.tsx` renders and performs verified writes with optimistic paint and revert, the tracker's pattern. Adding a person reuses `StaffRoomModal` (its "apply to all remaining days" is exactly "every day as Work in this room").
+**Architecture:** No schema change: a cell IS a timecard row (person × room-day) and its travel flags, so the grid reads what the tracker reads and writes what Staff room / Reset already write. A pure model (`lib/scheduleGrid.ts`) decides what a tap means — insert, update flags, move room, delete, or refuse — and is unit-tested without a database; `components/ScheduleGrid.tsx` renders and performs verified writes with optimistic paint and revert, the tracker's pattern. Adding a person reuses `StaffRoomModal` (its "apply to all remaining days" is exactly "every day as Work in this room").
 
 **Tech Stack:** Next.js 16 App Router, Supabase JS (browser client, RLS-checked writes), Tailwind tokens, the repo's plain-Node tests.
 
@@ -28,8 +28,8 @@
 |---|---|
 | `lib/scheduleGrid.ts` (new, plain module) | `CellState`, `cellStateOf(tc)`, `nextState(s)`, `flagsFor(s)`, `planChange(...)` — the decision, pure |
 | `scripts/test/scheduleGrid.mts` (new) + `package.json` | tests for the model; wired into `npm test` |
-| `app/dashboard/shows/[id]/edit/page.tsx` | loads day types, every room-day, every live timecard with flags/absence, punch counts; renders `<ShowScheduleGrid>` |
-| `components/ShowScheduleGrid.tsx` (new, `'use client'`; NOT `ScheduleGrid.tsx`, which is the company-wide Schedule page's grid) | the grid: room picker, headers, rows, cells, tap cycle, right-click/long-press menu, writes |
+| `app/dashboard/shows/[id]/edit/page.tsx` | loads day types, every room-day, every live timecard with flags/absence, punch counts; renders `<ScheduleGrid>` |
+| `components/ScheduleGrid.tsx` (new, `'use client'`) | the grid: room picker, headers, rows, cells, tap cycle, right-click/long-press menu, writes |
 | `components/NewShowClient.tsx:286` | finish lands on `/dashboard/shows/<id>/edit#schedule` |
 | `CLAUDE.md` | the grid, the rule "a cell is a timecard", the desktop-first note |
 
@@ -263,11 +263,11 @@ git push origin scheduling
 
 **Files:**
 - Modify: `app/dashboard/shows/[id]/edit/page.tsx`
-- Create: `components/ShowScheduleGrid.tsx`
+- Create: `components/ScheduleGrid.tsx`
 
 **Interfaces:**
 - Consumes: `cellStateOf`, `CELL_LABELS`, `GridTimecard` (Task 1); `dayTypeBgClass`, `dayTypeLabel` (`lib/dayTypes.ts`); `BAND`, `RULE_MAJOR` (`lib/panel.ts`); `Select` (`components/ui/Select`).
-- Produces: `<ShowScheduleGrid>` props:
+- Produces: `<ScheduleGrid>` props:
   ```ts
   {
     showId: string
@@ -303,7 +303,7 @@ git push origin scheduling
 
 ```tsx
       {canEditTimecards && (
-        <ShowScheduleGrid
+        <ScheduleGrid
           showId={show.id}
           organizationId={user.organizationId!}
           days={(workDays || []).map(d => ({ id: d.id, date: d.date, day_number: d.day_number, day_type: d.day_type ?? null }))}
@@ -317,7 +317,7 @@ git push origin scheduling
 
 (`canEditTimecards` is already computed on this page for `CrewClockPanel`; confirm the name with `grep -n canEditTimecards`.)
 
-- [ ] **Step 2: The component, read-only.** Create `components/ShowScheduleGrid.tsx`:
+- [ ] **Step 2: The component, read-only.** Create `components/ScheduleGrid.tsx`:
 
 ```tsx
 'use client'
@@ -365,7 +365,7 @@ function initials(name: string) {
   return name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-export default function ShowScheduleGrid({
+export default function ScheduleGrid({
   showId, organizationId, days, rooms, timecards: initial, locked, canEdit,
 }: {
   showId: string
@@ -490,7 +490,7 @@ export default function ShowScheduleGrid({
 - [ ] **Step 4: Commit** (stop dev, build, `rm -rf .next`)
 
 ```bash
-git add app/dashboard/shows/[id]/edit/page.tsx components/ShowScheduleGrid.tsx
+git add app/dashboard/shows/[id]/edit/page.tsx components/ScheduleGrid.tsx
 git commit -m "Schedule grid on Edit Show, read-only: crew × days, room picker, day-type headers.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
@@ -502,12 +502,12 @@ git push origin scheduling
 ### Task 3: Tapping a cell writes — insert, flags, move, delete, refuse; rooms created on demand
 
 **Files:**
-- Modify: `components/ShowScheduleGrid.tsx`
+- Modify: `components/ScheduleGrid.tsx`
 
 **Interfaces:**
 - Consumes: `nextState`, `planChange` (Task 1).
 
-- [ ] **Step 1: The write.** Add to `ShowScheduleGrid` (below `cardFor`):
+- [ ] **Step 1: The write.** Add to `ScheduleGrid` (below `cardFor`):
 
 ```tsx
   const [busyCell, setBusyCell] = useState<string | null>(null)   // `${personKey}|${dayId}`
@@ -597,7 +597,7 @@ Wire the cell button: `onClick={() => change(p.key, d, nextState(state))}` and `
 - [ ] **Step 5: Commit** (build first)
 
 ```bash
-git add components/ShowScheduleGrid.tsx
+git add components/ScheduleGrid.tsx
 git commit -m "Schedule grid writes: tap cycles a day, right-click picks; rooms created on demand; worked days refuse.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
@@ -609,11 +609,11 @@ git push origin scheduling
 ### Task 4: Adding a person, the New Show hand-off, docs
 
 **Files:**
-- Modify: `components/ShowScheduleGrid.tsx`
+- Modify: `components/ScheduleGrid.tsx`
 - Modify: `components/NewShowClient.tsx:286`
 - Modify: `CLAUDE.md`
 
-- [ ] **Step 1: "+ Add crew" reuses `StaffRoomModal`.** Its "apply to all remaining days" (`remainingRoomIdsSameName`) is exactly "every show day as Work in the selected room". In `ShowScheduleGrid`, compute for the selected room name the instances in day order: `const instances = days.map(d => roomIdOn(d.id, roomName)).filter((x): x is string => !!x)`; render, in the band, a `Button size="sm"` "+ Add crew" that opens:
+- [ ] **Step 1: "+ Add crew" reuses `StaffRoomModal`.** Its "apply to all remaining days" (`remainingRoomIdsSameName`) is exactly "every show day as Work in the selected room". In `ScheduleGrid`, compute for the selected room name the instances in day order: `const instances = days.map(d => roomIdOn(d.id, roomName)).filter((x): x is string => !!x)`; render, in the band, a `Button size="sm"` "+ Add crew" that opens:
 
 ```tsx
 <StaffRoomModal
@@ -630,19 +630,19 @@ git push origin scheduling
 />
 ```
 
-Read `StaffRoomModal`'s props first (`sed -n 19,45p components/StaffRoomModal.tsx`) and match them exactly — it may render its own trigger button rather than take `open`; if so, render it as-is inside the band and skip the custom button. Add `canEditRates: boolean` to `ShowScheduleGrid`'s props and pass `user.can('can_edit_pay_rates')` from the page. If the selected room has no instances (a room that exists on no day — impossible today) disable the button with a title.
+Read `StaffRoomModal`'s props first (`sed -n 19,45p components/StaffRoomModal.tsx`) and match them exactly — it may render its own trigger button rather than take `open`; if so, render it as-is inside the band and skip the custom button. Add `canEditRates: boolean` to `ScheduleGrid`'s props and pass `user.can('can_edit_pay_rates')` from the page. If the selected room has no instances (a room that exists on no day — impossible today) disable the button with a title.
 
 - [ ] **Step 2: New Show lands on the grid.** In `components/NewShowClient.tsx` change `router.push(\`/dashboard/shows/${showId}\`)` to `router.push(\`/dashboard/shows/${showId}/edit#schedule\`)` with the comment: `// Details → rules → rooms/positions → schedule: the show exists now, so its people can be given their days (Section 4).`
 
 - [ ] **Step 3: Prove it.** On dev: create a throwaway show through New Show (2 days, 2 rooms) → you land on Edit Show scrolled to Schedule → "+ Add crew" → pick two people → both appear with `●` on both days in the selected room. Delete the throwaway show afterwards (Edit Show → the existing archive/delete, or SQL `delete from shows where id=…` — cascades).
 
-- [ ] **Step 4: CLAUDE.md.** In the "Show access" section add a sub-heading **"The schedule grid (Section 4, 2026-09-07)"**: a cell is a timecard (person × room-day) + its travel flags — the grid invents no data and writes what Staff room / Reset write; the tap cycle; the room picker and on-demand room creation; the two refusals (punched day never removed or moved; absence is the tracker's); `lib/scheduleGrid.ts` is the tested model; **desktop first** per Dan; adding people is `StaffRoomModal` with apply-to-all-days; New Show hands off to `#schedule`. Update the file map (`components/ShowScheduleGrid.tsx`, `lib/scheduleGrid.ts`, `scripts/test/scheduleGrid.mts`) and the test count.
+- [ ] **Step 4: CLAUDE.md.** In the "Show access" section add a sub-heading **"The schedule grid (Section 4, 2026-09-07)"**: a cell is a timecard (person × room-day) + its travel flags — the grid invents no data and writes what Staff room / Reset write; the tap cycle; the room picker and on-demand room creation; the two refusals (punched day never removed or moved; absence is the tracker's); `lib/scheduleGrid.ts` is the tested model; **desktop first** per Dan; adding people is `StaffRoomModal` with apply-to-all-days; New Show hands off to `#schedule`. Update the file map (`components/ScheduleGrid.tsx`, `lib/scheduleGrid.ts`, `scripts/test/scheduleGrid.mts`) and the test count.
 
 - [ ] **Step 5: Build, commit, and STOP for Dan's first-cut review** (blast radius: `scheduling` only, preview; no database change; merging to `main` is the ship).
 
 ```bash
 npm run build && rm -rf .next
-git add components/ShowScheduleGrid.tsx components/NewShowClient.tsx app/dashboard/shows/[id]/edit/page.tsx CLAUDE.md
+git add components/ScheduleGrid.tsx components/NewShowClient.tsx app/dashboard/shows/[id]/edit/page.tsx CLAUDE.md
 git commit -m "Schedule grid: add crew via Staff room (every day as Work), New Show lands on the grid; docs.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
