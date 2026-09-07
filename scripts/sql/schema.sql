@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict AUTQEcr3vUuExA82zQmPAbDjofkia8eJEugVIfXBu4wlztnaTubvYX525EHi9RM
+\restrict 7BcOeC0TbGGaRQN2JavAQs3JCREFlEaNzONmfqeyUA1wotX6mmCui5q9CYhalBX
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -124,14 +124,13 @@ begin
 
   if v_finalized is not null then
     raise exception
-      'This show was finalized on % and its times are read-only. An admin can unlock it.',
+      'This show was finalized on % and its times are read-only. An admin or the show''s PM can unlock it.',
       to_char(v_finalized, 'YYYY-MM-DD')
       using errcode = 'check_violation';
   end if;
 
   if tg_op = 'DELETE' then return old; else return new; end if;
-end;
-$$;
+end; $$;
 
 
 --
@@ -152,6 +151,47 @@ CREATE FUNCTION "public"."can_see_all_shows"() RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$ select public.my_perm('can_edit_all_shows'); $$;
+
+
+--
+-- Name: crew_members_crew_access_tg(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."crew_members_crew_access_tg"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare r record;
+begin
+  for r in select distinct show_id from timecards where crew_member_id = new.id loop
+    if old.profile_id is not null then perform refresh_show_crew_access(r.show_id, old.profile_id); end if;
+    if new.profile_id is not null then perform refresh_show_crew_access(r.show_id, new.profile_id); end if;
+  end loop;
+  return null;
+end; $$;
+
+
+--
+-- Name: crew_members_link_login_tg(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."crew_members_link_login_tg"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare v_id uuid;
+begin
+  perform relink_crew_member(new.id);
+  -- An email change can also free a twin that was blocked by this row.
+  if tg_op = 'UPDATE' and old.email is distinct from new.email and old.email is not null then
+    for v_id in select id from crew_members
+      where organization_id = new.organization_id and id <> new.id
+        and lower(trim(email)) = lower(trim(old.email)) loop
+      perform relink_crew_member(v_id);
+    end loop;
+  end if;
+  return null;
+end; $$;
 
 
 --
@@ -323,6 +363,25 @@ $$;
 
 
 --
+-- Name: guard_show_unlock(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."guard_show_unlock"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if old.finalized_at is not null and new.finalized_at is null and auth.uid() is not null then
+    if not (my_perm('can_manage_users') or new.id in (select my_pm_show_ids())) then
+      raise exception 'Only an admin or the show''s PM can unlock a finalized show.'
+        using errcode = 'insufficient_privilege';
+    end if;
+  end if;
+  return new;
+end; $$;
+
+
+--
 -- Name: handle_new_organization(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -407,7 +466,10 @@ CREATE FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") RETURNS boole
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-  select false;
+  select exists (
+    select 1 from timecards t join crew_members cm on cm.id = t.crew_member_id
+    where t.id = p_timecard_id and cm.profile_id = auth.uid()
+  );
 $$;
 
 
@@ -416,6 +478,38 @@ $$;
 --
 
 COMMENT ON FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") IS 'Placeholder for crew logins: is this timecard the caller''s own? Always false until crew_members gains a per-org link to an auth user. Never match on email — that leaks identity across organizations.';
+
+
+--
+-- Name: memberships_link_crew_tg(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."memberships_link_crew_tg"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare v_email text; v_id uuid;
+begin
+  select lower(trim(email)) into v_email from profiles where id = new.profile_id;
+  if v_email is null then return null; end if;
+  for v_id in select id from crew_members
+    where organization_id = new.organization_id and lower(trim(email)) = v_email loop
+    perform relink_crew_member(v_id);
+  end loop;
+  return null;
+end; $$;
+
+
+--
+-- Name: my_crew_member_ids(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."my_crew_member_ids"() RETURNS SETOF "uuid"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select id from crew_members where profile_id = auth.uid();
+$$;
 
 
 --
@@ -475,6 +569,23 @@ begin
 
   return coalesce(v::boolean, false);
 end;
+$$;
+
+
+--
+-- Name: my_pm_show_ids(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."my_pm_show_ids"() RETURNS SETOF "uuid"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select s.id from shows s
+  where s.organization_id = my_organization_id()
+    and ( can_see_all_shows()
+       or s.created_by = auth.uid()
+       or s.scheduler_id = auth.uid()
+       or s.id in (select show_id from show_assignments where profile_id = auth.uid()) );
 $$;
 
 
@@ -543,6 +654,78 @@ begin
                 end
   returning count into v_count;
   return v_count <= p_limit;
+end;
+$$;
+
+
+--
+-- Name: refresh_show_crew_access("uuid", "uuid"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."refresh_show_crew_access"("p_show_id" "uuid", "p_profile_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare v_live boolean; v_org uuid;
+begin
+  if p_show_id is null or p_profile_id is null then return; end if;
+  select exists (
+    select 1 from timecards t join crew_members cm on cm.id = t.crew_member_id
+    where t.show_id = p_show_id and cm.profile_id = p_profile_id
+      and t.booking_status is distinct from 'declined'
+  ) into v_live;
+  if v_live then
+    select organization_id into v_org from shows where id = p_show_id;
+    insert into show_crew_access (show_id, profile_id, organization_id)
+    values (p_show_id, p_profile_id, v_org) on conflict do nothing;
+  else
+    delete from show_crew_access where show_id = p_show_id and profile_id = p_profile_id;
+  end if;
+end; $$;
+
+
+--
+-- Name: relink_crew_member("uuid"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."relink_crew_member"("p_crew_member_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_org uuid;
+  v_email text;
+  v_profile uuid;
+  v_twins integer;
+  v_members integer;
+begin
+  select organization_id, lower(trim(email)) into v_org, v_email
+  from crew_members where id = p_crew_member_id;
+  if v_org is null then return null; end if;
+
+  if v_email is null or v_email = '' then
+    update crew_members set profile_id = null where id = p_crew_member_id and profile_id is not null;
+    return null;
+  end if;
+
+  -- Exactly one directory entry in this company with this email, or nothing.
+  select count(*) into v_twins from crew_members
+  where organization_id = v_org and lower(trim(email)) = v_email;
+  if v_twins <> 1 then
+    update crew_members set profile_id = null where id = p_crew_member_id and profile_id is not null;
+    return null;
+  end if;
+
+  -- Exactly one live member of this company with this email, or nothing.
+  select count(*), min(p.id::text)::uuid into v_members, v_profile
+  from memberships m join profiles p on p.id = m.profile_id
+  where m.organization_id = v_org and m.deactivated_at is null
+    and lower(trim(p.email)) = v_email;
+  if v_members <> 1 then v_profile := null; end if;
+
+  update crew_members set profile_id = v_profile
+  where id = p_crew_member_id and profile_id is distinct from v_profile;
+  return v_profile;
 end;
 $$;
 
@@ -703,6 +886,28 @@ CREATE FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") RETURNS "uuid"
 $$;
 
 
+--
+-- Name: timecards_crew_access_tg(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."timecards_crew_access_tg"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare v_old uuid; v_new uuid;
+begin
+  if tg_op in ('DELETE','UPDATE') then
+    select profile_id into v_old from crew_members where id = old.crew_member_id;
+    perform refresh_show_crew_access(old.show_id, v_old);
+  end if;
+  if tg_op in ('INSERT','UPDATE') then
+    select profile_id into v_new from crew_members where id = new.crew_member_id;
+    perform refresh_show_crew_access(new.show_id, v_new);
+  end if;
+  return null;
+end; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -786,7 +991,8 @@ CREATE TABLE "public"."crew_members" (
     "phone" "text",
     "notes" "text",
     "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"()
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "profile_id" "uuid"
 );
 
 
@@ -1078,6 +1284,19 @@ CREATE TABLE "public"."show_assignments" (
     "profile_id" "uuid" NOT NULL,
     "organization_id" "uuid"
 );
+
+
+--
+-- Name: show_crew_access; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."show_crew_access" (
+    "show_id" "uuid" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "organization_id" "uuid" NOT NULL
+);
+
+ALTER TABLE ONLY "public"."show_crew_access" FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1392,6 +1611,14 @@ ALTER TABLE ONLY "public"."show_assignments"
 
 
 --
+-- Name: show_crew_access show_crew_access_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."show_crew_access"
+    ADD CONSTRAINT "show_crew_access_pkey" PRIMARY KEY ("show_id", "profile_id");
+
+
+--
 -- Name: shows shows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1517,6 +1744,13 @@ CREATE INDEX "crew_call_positions_room_id_idx" ON "public"."crew_call_positions"
 
 
 --
+-- Name: crew_members_org_profile_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "crew_members_org_profile_uniq" ON "public"."crew_members" USING "btree" ("organization_id", "profile_id") WHERE ("profile_id" IS NOT NULL);
+
+
+--
 -- Name: crew_members_organization_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1615,6 +1849,13 @@ CREATE INDEX "show_assignments_profile_show_idx" ON "public"."show_assignments" 
 
 
 --
+-- Name: show_crew_access_profile_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "show_crew_access_profile_idx" ON "public"."show_crew_access" USING "btree" ("profile_id");
+
+
+--
 -- Name: shows_created_by_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1692,10 +1933,38 @@ CREATE TRIGGER "block_call_positions_when_finalized" BEFORE INSERT OR DELETE OR 
 
 
 --
+-- Name: crew_members crew_members_crew_access; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "crew_members_crew_access" AFTER UPDATE OF "profile_id" ON "public"."crew_members" FOR EACH ROW EXECUTE FUNCTION "public"."crew_members_crew_access_tg"();
+
+
+--
+-- Name: crew_members crew_members_link_login; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "crew_members_link_login" AFTER INSERT OR UPDATE OF "email" ON "public"."crew_members" FOR EACH ROW EXECUTE FUNCTION "public"."crew_members_link_login_tg"();
+
+
+--
+-- Name: shows guard_show_unlock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "guard_show_unlock" BEFORE UPDATE OF "finalized_at" ON "public"."shows" FOR EACH ROW EXECUTE FUNCTION "public"."guard_show_unlock"();
+
+
+--
 -- Name: memberships memberships_enforce_rules; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER "memberships_enforce_rules" BEFORE UPDATE ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_membership_rules"();
+
+
+--
+-- Name: memberships memberships_link_crew; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "memberships_link_crew" AFTER INSERT OR UPDATE OF "deactivated_at" ON "public"."memberships" FOR EACH ROW EXECUTE FUNCTION "public"."memberships_link_crew_tg"();
 
 
 --
@@ -1787,6 +2056,13 @@ CREATE TRIGGER "timecards_blocked_when_finalized" BEFORE INSERT OR DELETE OR UPD
 --
 
 CREATE TRIGGER "timecards_check_pay_rate_permission" BEFORE INSERT OR UPDATE ON "public"."timecards" FOR EACH ROW EXECUTE FUNCTION "public"."enforce_pay_rate_write_permission"();
+
+
+--
+-- Name: timecards timecards_crew_access; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "timecards_crew_access" AFTER INSERT OR DELETE OR UPDATE OF "crew_member_id", "booking_status", "show_id" ON "public"."timecards" FOR EACH ROW EXECUTE FUNCTION "public"."timecards_crew_access_tg"();
 
 
 --
@@ -1897,6 +2173,14 @@ ALTER TABLE ONLY "public"."crew_call_positions"
 
 ALTER TABLE ONLY "public"."crew_members"
     ADD CONSTRAINT "crew_members_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: crew_members crew_members_profile_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."crew_members"
+    ADD CONSTRAINT "crew_members_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
 
 
 --
@@ -2041,6 +2325,30 @@ ALTER TABLE ONLY "public"."show_assignments"
 
 ALTER TABLE ONLY "public"."show_assignments"
     ADD CONSTRAINT "show_assignments_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: show_crew_access show_crew_access_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."show_crew_access"
+    ADD CONSTRAINT "show_crew_access_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: show_crew_access show_crew_access_profile_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."show_crew_access"
+    ADD CONSTRAINT "show_crew_access_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: show_crew_access show_crew_access_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."show_crew_access"
+    ADD CONSTRAINT "show_crew_access_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
 
 
 --
@@ -2434,8 +2742,14 @@ CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELEC
 -- Name: punches Users see punches for their timecards; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see punches for their timecards" ON "public"."punches" FOR SELECT USING (("show_id" IN ( SELECT "shows"."id"
-   FROM "public"."shows")));
+CREATE POLICY "Users see punches for their timecards" ON "public"."punches" FOR SELECT USING ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("show_id" IN ( SELECT "show_assignments"."show_id"
+   FROM "public"."show_assignments"
+  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"
+  WHERE (("shows"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("shows"."scheduler_id" = ( SELECT "auth"."uid"() AS "uid"))))) OR ("timecard_id" IN ( SELECT "timecards"."id"
+   FROM "public"."timecards"
+  WHERE ("timecards"."crew_member_id" IN ( SELECT "public"."my_crew_member_ids"() AS "my_crew_member_ids")))))));
 
 
 --
@@ -2475,7 +2789,9 @@ CREATE POLICY "Users see rulesets for their shows" ON "public"."payroll_rulesets
 
 CREATE POLICY "Users see their org shows" ON "public"."shows" FOR SELECT USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("id" IN ( SELECT "show_assignments"."show_id"
    FROM "public"."show_assignments"
-  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("scheduler_id" = ( SELECT "auth"."uid"() AS "uid")))));
+  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("scheduler_id" = ( SELECT "auth"."uid"() AS "uid")) OR ("id" IN ( SELECT "show_crew_access"."show_id"
+   FROM "public"."show_crew_access"
+  WHERE ("show_crew_access"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))))));
 
 
 --
@@ -2486,11 +2802,22 @@ CREATE POLICY "Users see their own assignments" ON "public"."show_assignments" F
 
 
 --
+-- Name: show_crew_access Users see their own crew access; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users see their own crew access" ON "public"."show_crew_access" FOR SELECT USING (("profile_id" = ( SELECT "auth"."uid"() AS "uid")));
+
+
+--
 -- Name: timecards Users see timecards for their shows; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see timecards for their shows" ON "public"."timecards" FOR SELECT USING (("show_id" IN ( SELECT "shows"."id"
-   FROM "public"."shows")));
+CREATE POLICY "Users see timecards for their shows" ON "public"."timecards" FOR SELECT USING ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("crew_member_id" IN ( SELECT "public"."my_crew_member_ids"() AS "my_crew_member_ids")) OR ("show_id" IN ( SELECT "show_assignments"."show_id"
+   FROM "public"."show_assignments"
+  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"
+  WHERE (("shows"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("shows"."scheduler_id" = ( SELECT "auth"."uid"() AS "uid"))))))));
 
 
 --
@@ -2689,6 +3016,12 @@ ALTER TABLE "public"."schema_migrations" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."show_assignments" ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: show_crew_access; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."show_crew_access" ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: shows; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2759,6 +3092,24 @@ GRANT ALL ON FUNCTION "public"."can_see_all_shows"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "crew_members_crew_access_tg"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."crew_members_crew_access_tg"() TO "anon";
+GRANT ALL ON FUNCTION "public"."crew_members_crew_access_tg"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."crew_members_crew_access_tg"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "crew_members_link_login_tg"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."crew_members_link_login_tg"() TO "anon";
+GRANT ALL ON FUNCTION "public"."crew_members_link_login_tg"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."crew_members_link_login_tg"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "enforce_membership_rules"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2792,6 +3143,15 @@ GRANT ALL ON FUNCTION "public"."guard_organization_disabled_at"() TO "service_ro
 GRANT ALL ON FUNCTION "public"."guard_profile_super_admin"() TO "anon";
 GRANT ALL ON FUNCTION "public"."guard_profile_super_admin"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."guard_profile_super_admin"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "guard_show_unlock"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."guard_show_unlock"() TO "anon";
+GRANT ALL ON FUNCTION "public"."guard_show_unlock"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."guard_show_unlock"() TO "service_role";
 
 
 --
@@ -2831,6 +3191,24 @@ GRANT ALL ON FUNCTION "public"."is_own_timecard"("p_timecard_id" "uuid") TO "ser
 
 
 --
+-- Name: FUNCTION "memberships_link_crew_tg"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."memberships_link_crew_tg"() TO "anon";
+GRANT ALL ON FUNCTION "public"."memberships_link_crew_tg"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."memberships_link_crew_tg"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "my_crew_member_ids"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."my_crew_member_ids"() TO "anon";
+GRANT ALL ON FUNCTION "public"."my_crew_member_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."my_crew_member_ids"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "my_organization_id"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2849,6 +3227,15 @@ GRANT ALL ON FUNCTION "public"."my_perm"("p" "text") TO "service_role";
 
 
 --
+-- Name: FUNCTION "my_pm_show_ids"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."my_pm_show_ids"() TO "anon";
+GRANT ALL ON FUNCTION "public"."my_pm_show_ids"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."my_pm_show_ids"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "propagate_show_day_rate"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2863,6 +3250,24 @@ GRANT ALL ON FUNCTION "public"."propagate_show_day_rate"() TO "service_role";
 
 REVOKE ALL ON FUNCTION "public"."rate_limit_hit"("p_key" "text", "p_limit" integer, "p_window_seconds" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."rate_limit_hit"("p_key" "text", "p_limit" integer, "p_window_seconds" integer) TO "service_role";
+
+
+--
+-- Name: FUNCTION "refresh_show_crew_access"("p_show_id" "uuid", "p_profile_id" "uuid"); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."refresh_show_crew_access"("p_show_id" "uuid", "p_profile_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."refresh_show_crew_access"("p_show_id" "uuid", "p_profile_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."refresh_show_crew_access"("p_show_id" "uuid", "p_profile_id" "uuid") TO "service_role";
+
+
+--
+-- Name: FUNCTION "relink_crew_member"("p_crew_member_id" "uuid"); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION "public"."relink_crew_member"("p_crew_member_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."relink_crew_member"("p_crew_member_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."relink_crew_member"("p_crew_member_id" "uuid") TO "service_role";
 
 
 --
@@ -2944,6 +3349,15 @@ GRANT ALL ON FUNCTION "public"."set_timecard_show_id"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "service_role";
+
+
+--
+-- Name: FUNCTION "timecards_crew_access_tg"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."timecards_crew_access_tg"() TO "anon";
+GRANT ALL ON FUNCTION "public"."timecards_crew_access_tg"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."timecards_crew_access_tg"() TO "service_role";
 
 
 --
@@ -3143,6 +3557,15 @@ GRANT ALL ON TABLE "public"."schema_migrations" TO "service_role";
 GRANT ALL ON TABLE "public"."show_assignments" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."show_assignments" TO "authenticated";
 GRANT ALL ON TABLE "public"."show_assignments" TO "service_role";
+
+
+--
+-- Name: TABLE "show_crew_access"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."show_crew_access" TO "anon";
+GRANT ALL ON TABLE "public"."show_crew_access" TO "authenticated";
+GRANT ALL ON TABLE "public"."show_crew_access" TO "service_role";
 
 
 --
@@ -3378,5 +3801,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict AUTQEcr3vUuExA82zQmPAbDjofkia8eJEugVIfXBu4wlztnaTubvYX525EHi9RM
+\unrestrict 7BcOeC0TbGGaRQN2JavAQs3JCREFlEaNzONmfqeyUA1wotX6mmCui5q9CYhalBX
 
