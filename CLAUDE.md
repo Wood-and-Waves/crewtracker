@@ -485,10 +485,14 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   `DayTypePicker` sit at their own widths, so the three columns read misaligned. Small polish:
   either stretch the picker to the cell (`w-full` instead of the fixed 190px) or size the bar to
   the content. `components/EditShowClient.tsx` ~L478–485.
-- **The schedule grid does not show booking state or open positions.** A pencilled, invited
-  and confirmed person look identical; an unfilled position has no row. Proposed (2026-09-07,
-  awaiting Dan's call): solid / hollow / clock glyph per booking state on the cell, and greyed
-  "open position" rows at the bottom that open Fill position. Small, on top of the first cut.
+- **The schedule grid was built and ROLLED BACK (2026-09-07).** A crew × days grid on Edit
+  Show (a cell = a timecard; tap cycles Work/Travel In/Travel Out/Travel; room picker; rooms
+  created on demand; punched days refuse) reached a working first cut, then Dan stepped back:
+  *"We are building the end before the start."* The whole flow — New Show → staffing → PM
+  assignment → scheduling → crew → tracker → reports — is being designed from show creation
+  forward first. The reverted code is in git history (commits 1f2d6aa…20f8380 on `scheduling`,
+  reverted immediately after) and `docs/superpowers/plans/2026-09-07-schedule-grid.md` records
+  the design. Do not rebuild it until the earlier steps of that flow exist.
 - **Booking status is not shown beside the role on a tracker crew row.** The column is fetched (`booking_status` is in `TIMECARD_SELECT` as of 2026-08-02), so this is pure display work — reuse the chip renderer in `CrewCallModal.tsx` rather than writing a second label/tone mapping.
 
 - **Declined bookings are filtered on read, in one place.** A declined person keeps their `timecards` row on purpose (migration 0012: it records that we asked and they said no) and does not hold their position. Nothing taught the *read* side that, so until 2026-08-02 a decliner rendered as ordinary staffed crew on the tracker, in reports, and in the emailed Final Report — while the same position also showed as Open. `lib/timecardFields.ts` now owns the rule via `fetchLiveTimecards()` and `liveBookings()`, applied in SQL (`.neq`) so a caller who forgets to select the column can't silently compare `undefined`. **Some queries must still see declined rows** and say so in a comment: `lib/crew.ts` (a write that nulls the FK before delete), the duplicate-staffing guards in `StaffRoomModal`/`CopyCrewButton` (`timecards_room_crew_uniq` has no `booking_status` predicate, so a declined row still occupies the slot), the booking API routes that set the status, and `lib/bookingInvite.ts` (the page a person declines *on*). `lib/payroll.ts` must never read `booking_status` — filter the input set, never the calculator.

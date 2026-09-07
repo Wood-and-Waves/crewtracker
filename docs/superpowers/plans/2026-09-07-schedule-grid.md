@@ -1,3 +1,5 @@
+> **ROLLED BACK 2026-09-07.** Built through Task 4 on `scheduling`, then reverted at Dan's direction: *"We are building the end before the start."* The flow is being designed from show creation forward instead; this plan is kept as a record of what the grid looked like and how it wrote (a cell is a timecard), and may be picked up again once the earlier steps exist.
+
 # Schedule grid — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
