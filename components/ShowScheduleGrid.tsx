@@ -1,13 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Select from '@/components/ui/Select'
 import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import { dayTypeBgClass, dayTypeLabel } from '@/lib/dayTypes'
-import { cellStateOf, CELL_LABELS, type CellState, type GridTimecard } from '@/lib/scheduleGrid'
+import { cellStateOf, nextState, planChange, CELL_LABELS, type CellState, type GridTimecard } from '@/lib/scheduleGrid'
 
 // Who works which days, in which room, with their own travel dates — one grid
 // (Section 4 of the 2026-09-06 spec). A cell IS a timecard: the same row the
@@ -63,7 +63,7 @@ export default function ShowScheduleGrid({
   const supabase = createClient()
   const [timecards, setTimecards] = useState(initial)
   const [error, setError] = useState('')
-  void router; void supabase; void setTimecards; void setError; void showId; void organizationId; void canEditRates
+  void showId; void organizationId; void canEditRates
 
   // Room NAMES, across every day.
   const roomNames = useMemo(() => [...new Set(rooms.map(r => r.name))].sort((a, b) => a.localeCompare(b)), [rooms])
@@ -90,6 +90,102 @@ export default function ShowScheduleGrid({
     return mine.find(t => t.room_id === selected) ?? mine[0]
   }
 
+  const [busyCell, setBusyCell] = useState<string | null>(null)   // `${personKey}|${dayId}`
+  const [menu, setMenu] = useState<{ personKey: string; day: Day; x: number; y: number } | null>(null)
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!menu) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menu])
+
+  // Verified writes, optimistic paint, revert on refusal — the tracker's
+  // pattern (TimecardRow.toggleFlag). One cell at a time.
+  async function change(personKey: string, day: Day, to: CellState) {
+    if (!canEdit || locked || busyCell) return
+    setError('')
+    const person = people.find(p => p.key === personKey)
+    if (!person) return
+    const current = cardFor(personKey, day.id)
+    const selectedRoomId = roomIdOn(day.id, roomName)
+    const plan = planChange({ current, to, selectedRoomId, dayLabel: dayHead(day.date).long, personName: person.name })
+    if (plan.kind === 'none') return
+    if (plan.kind === 'refuse') { setError(plan.reason); return }
+
+    const cellKey = `${personKey}|${day.id}`
+    setBusyCell(cellKey)
+    const before = timecards
+
+    // The selected room may not exist on this day yet: create it first, the
+    // way the tracker's Add Room does, and say so.
+    async function ensureRoom(): Promise<string | null> {
+      if (selectedRoomId) return selectedRoomId
+      const { data, error } = await supabase.from('rooms')
+        .insert({ work_day_id: day.id, name: roomName }).select('id')
+      if (error || !data || data.length === 0) {
+        setError(error?.message ?? `Could not add ${roomName} to ${dayHead(day.date).long}.`)
+        return null
+      }
+      // Until the refresh lands, this id is not in `rooms`; cardFor() falls
+      // back to the person's only card that day, which is this one.
+      return data[0].id
+    }
+
+    try {
+      if (plan.kind === 'insert') {
+        const roomId = await ensureRoom(); if (!roomId) return
+        const draft: GridTimecard = {
+          id: `draft-${cellKey}`, room_id: roomId, crew_member_id: person.crewMemberId, crew_member_name: person.name,
+          role: person.role, absence: null, punchCount: 0, ...plan.flags,
+        }
+        setTimecards(t => [...t, draft])
+        const { data, error } = await supabase.from('timecards')
+          .insert({ room_id: roomId, crew_member_id: person.crewMemberId, crew_member_name: person.name, role: person.role, ...plan.flags })
+          .select('id')
+        if (error || !data || data.length === 0) throw new Error(error?.message ?? 'That did not save — you may not have permission to staff this show.')
+        setTimecards(t => t.map(x => x.id === draft.id ? { ...x, id: data[0].id } : x))
+      } else if (plan.kind === 'update') {
+        setTimecards(t => t.map(x => x.id === plan.timecardId ? { ...x, ...plan.flags } : x))
+        const { data, error } = await supabase.from('timecards').update(plan.flags).eq('id', plan.timecardId).select('id')
+        if (error || !data || data.length === 0) throw new Error(error?.message ?? 'That did not save.')
+      } else if (plan.kind === 'move') {
+        const roomId = plan.toRoomId ?? await ensureRoom(); if (!roomId) return
+        setTimecards(t => t.map(x => x.id === plan.timecardId ? { ...x, room_id: roomId, ...plan.flags } : x))
+        const { data, error } = await supabase.from('timecards').update({ room_id: roomId, ...plan.flags }).eq('id', plan.timecardId).select('id')
+        if (error || !data || data.length === 0) {
+          throw new Error(error?.code === '23505' ? `${person.name} is already in ${roomName} that day.` : (error?.message ?? 'That did not save.'))
+        }
+      } else if (plan.kind === 'delete') {
+        setTimecards(t => t.filter(x => x.id !== plan.timecardId))
+        const { data, error } = await supabase.from('timecards').delete().eq('id', plan.timecardId).select('id')
+        if (error || !data || data.length === 0) throw new Error(error?.message ?? 'That did not save.')
+      }
+      router.refresh()
+    } catch (e: any) {
+      setTimecards(before)
+      setError(e.message)
+    } finally {
+      setBusyCell(null)
+    }
+  }
+
+  // Arrow keys walk the cells; Space/Enter is the button's own tap.
+  function onGridKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
+    const target = e.target as HTMLElement
+    const key = target.getAttribute('data-cell'); if (!key) return
+    const [personKey, dayId] = key.split('|')
+    const pi = people.findIndex(p => p.key === personKey), di = days.findIndex(d => d.id === dayId)
+    const np = e.key === 'ArrowUp' ? pi - 1 : e.key === 'ArrowDown' ? pi + 1 : pi
+    const nd = e.key === 'ArrowLeft' ? di - 1 : e.key === 'ArrowRight' ? di + 1 : di
+    const next = people[np] && days[nd]
+      ? (e.currentTarget.querySelector(`button[data-cell="${people[np].key}|${days[nd].id}"]`) as HTMLElement | null)
+      : null
+    if (next) { e.preventDefault(); next.focus() }
+  }
+
   const gridTemplateColumns = `220px repeat(${days.length}, minmax(64px, 1fr))`
 
   return (
@@ -105,7 +201,7 @@ export default function ShowScheduleGrid({
         )}
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" onKeyDown={onGridKeyDown}>
         <div style={{ minWidth: 220 + days.length * 64 }}>
           <div className="grid border-b-2 border-ink" style={{ gridTemplateColumns }}>
             <div className="sticky left-0 z-20 bg-surface-2 px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">Crew</div>
@@ -147,7 +243,17 @@ export default function ShowScheduleGrid({
                   <button
                     key={d.id}
                     type="button"
-                    disabled={!canEdit || locked}
+                    data-cell={`${p.key}|${d.id}`}
+                    disabled={!canEdit || locked || busyCell !== null}
+                    onClick={() => change(p.key, d, nextState(state))}
+                    onContextMenu={e => { e.preventDefault(); setMenu({ personKey: p.key, day: d, x: e.clientX, y: e.clientY }) }}
+                    onPointerDown={e => {
+                      if (e.pointerType === 'mouse') return
+                      const { clientX: x, clientY: y } = e
+                      pressTimer.current = setTimeout(() => setMenu({ personKey: p.key, day: d, x, y }), 500)
+                    }}
+                    onPointerUp={() => { if (pressTimer.current) clearTimeout(pressTimer.current) }}
+                    onPointerLeave={() => { if (pressTimer.current) clearTimeout(pressTimer.current) }}
                     aria-label={`${p.name}, ${dayHead(d.date).long}: ${card?.absence ? card.absence : CELL_LABELS[state]}${room ? ` in ${room.name}` : ''}`}
                     className={cn(
                       'm-1 flex h-9 flex-col items-center justify-center rounded-field text-xs font-semibold transition-colors disabled:cursor-default',
@@ -168,6 +274,35 @@ export default function ShowScheduleGrid({
         </div>
       </div>
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+
+      {/* Right-click / long-press: pick a state directly. A paper-slip overlay,
+          the one kind of box Open Paper keeps. */}
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
+          <div
+            role="menu"
+            className="fixed z-50 min-w-[160px] border-2 border-ink bg-surface py-1 shadow-edge"
+            style={{ left: Math.min(menu.x, window.innerWidth - 180), top: Math.min(menu.y, window.innerHeight - 220) }}
+          >
+            <p className="px-3 py-1 font-display text-[10px] uppercase tracking-wide text-muted">
+              {people.find(p => p.key === menu.personKey)?.name} · {dayHead(menu.day.date).long}
+            </p>
+            {(['work', 'travel_in', 'travel_out', 'travel', 'empty'] as CellState[]).map(state => (
+              <button
+                key={state}
+                role="menuitem"
+                type="button"
+                onClick={() => { const m = menu; setMenu(null); change(m.personKey, m.day, state) }}
+                className={cn('block w-full px-3 py-1.5 text-left text-sm text-ink hover:bg-surface-2', state === 'empty' && 'border-t border-line text-muted')}
+              >
+                {STATE_GLYPH[state] && <span className="mr-2 inline-block w-4 text-center">{STATE_GLYPH[state]}</span>}
+                {CELL_LABELS[state]}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {locked && (
         <p className="mt-2 text-xs text-muted">Times are locked — the final report has been sent. An admin or the show’s PM can unlock the show.</p>
       )}
