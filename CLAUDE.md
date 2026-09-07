@@ -223,6 +223,7 @@ components/
   BatchPunchBar.tsx / BatchTimeModal.tsx — room-level batch punch actions and batch time entry
   MobileRoomTracker.tsx          — the <1024px tracker layout
   LayoutCookie.tsx               — tells the server which tracker tree (desktop/mobile) to render, so it sends ONE
+  DayActivitiesGrid.tsx          — one row per day, five toggles, the derived label; New Show holds it in state, Edit Show saves each toggle
   CrewDirectoryClient.tsx / EditCrewMemberClient.tsx — Directory goes to a real data table on desktop
   TeamListClient.tsx / EditMemberClient.tsx / PermissionsEditor.tsx / InviteTeammateModal.tsx — org member admin
   EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode; two-column on desktop
@@ -258,6 +259,7 @@ lib/
   rateLimit.ts  — the throttle for the three public write routes; counters live in the database (0025)
   siteOrigin.ts — the origin for every link the app EMAILS; fixed per environment, never the Host header
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
+  dayActivities.ts — what the show does each day: five activities, any set; label and tint DERIVED; the legacy day_type mapping (fromLegacy/toLegacy). lib/dayTypes.ts is a shim over it.
 proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, the keepalive cron, and exactly "/")
 scripts/
   run-sql.mjs   — runs a .sql file; dev by default, --prod for production (npm run db:sql)
@@ -269,7 +271,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 346 assertions as of 2026-09-06.
+                  helper, no framework. 398 assertions as of 2026-09-07.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -314,8 +316,13 @@ scripts/
                        is_own_timecard, PM-side/crew-side policies
                        · 0030 the same policies rewritten to short-circuit cheaply
                        · 0031 guard_show_unlock + the finalized-write message
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0031 2026-09-07). Nothing is dev-only.
+                       · 0032 work_days.activities (a SET of five), backfilled from day_type,
+                       which stays as a trigger-maintained mirror both ways; column grant
+                       · 0033 editing a day requires can_edit_timecards (0015's policy
+                       checked only visibility — a view-only member could retag days)
+                       0018–0031 are on BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06, 0028–0031 2026-09-07). **0032–0033 are on DEV
+                       only** until their cutover.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -334,7 +341,7 @@ scripts/
 - `show_crew_access` — (show_id, profile_id, organization_id): a linked login is staffed on this show. Trigger-owned (0029); the app never writes it; its own policy is `profile_id = auth.uid()` so it can never form a cycle.
 - `payroll_rulesets` — one per show; mirrors iOS `PayrollRuleset`, plus `continuous_time_enabled`
 - `payroll_presets` — org-level named rule sets (one flagged `is_default`), **copied** into a show's `payroll_rulesets` at creation. Never a live link — a live link would retroactively rewrite closed shows. Writes gated on `can_manage_rulesets`.
-- `work_days` — id, show_id, date, day_number
+- `work_days` — id, show_id, date, day_number, `activities text[]` (any subset of travel/load_in/rehearsal/show/load_out — 0032), `day_type` (legacy 8-value slug, now a MIRROR kept by trigger `work_days_mirror_day_type` in both directions; drop it once nothing reads it)
 - `rooms` — id, work_day_id, name (scoped to a day, not persistent across the show). Has full SELECT/INSERT/UPDATE/DELETE policies (UPDATE/DELETE added when room rename/delete UI was built).
 - `timecards` — id, room_id, crew_member_id, crew_member_name, role, day_rate, is_travel_day, travel_in_day, travel_out_day, pay_as_half_day, `absence` (`no_show|cancelled|null`, 0027), `show_id` (0023, trigger-derived). Partial unique index on `(room_id, crew_member_id) where crew_member_id is not null`. Four triggers: the finalized-show write block, and the two that keep `day_rate` show-wide (see Payroll business logic).
 - `punches` — id, timecard_id, punch_type (`start|meal_out|meal_in|meal2_out|meal2_in|end`), punched_at,
@@ -723,6 +730,26 @@ one show and an A1 on another, so what a login may do is decided PER SHOW, not p
 - Proven by `rls.mts` fixtures `sam` (crew on showA, assigned on showA2) and `samCrewA/B`:
   link exactly-one/never-cross-org/relink, own rows only, own punches only, no flags, PM-side
   on the assigned show, decline and unlink revoke, unlock matrix. 86 checks.
+
+### Day activities (piece A of the show flow, 2026-09-07)
+
+**A day is a SET of five activities — Travel, Load-in, Rehearsal, Show, Load-out — not one of
+eight compound labels.** The old list tried to name every combination and could not be finished
+(Dan: "we haven't covered all the possible combinations"). `work_days.activities text[]` is the
+truth; `lib/dayActivities.ts` derives the label ("Show · Load-out", chronological; travel reads
+LAST on a load-out day because it is the trip home) and the tint (show > rehearsal > load-in/
+load-out (shared amber) > travel). Chosen on `DayActivitiesGrid`: one row per day, five squares,
+"Reads as" beside — appears on New Show once both dates are set, and on Edit Show where each
+toggle is a verified write. Two visible changes from the old list, both deliberate: the label
+separator is " · " and a travel+load-in day is amber, not slate.
+
+`work_days.day_type` stays as a MIRROR (migration 0032's trigger keeps it true in both
+directions) so code on either side of the deploy gap agrees; a load-out-only day mirrors to
+NULL because the legacy list never had a plain load-out. `lib/dayTypes.ts` is a shim whose two
+readers accept a slug or an array. `isKindOfDay()` is there for piece B (positions "by kind of
+day"). The column-grant trap: `work_days` UPDATE is column-granted, so 0032 grants `activities`
+explicitly; 0033 closed the pre-existing hole that let a view-only member retag days.
+`lib/payroll.ts` never reads any of it. Spec: `docs/superpowers/specs/2026-09-07-show-flow-design.md`.
 
 ### Already built — do not rebuild these
 
