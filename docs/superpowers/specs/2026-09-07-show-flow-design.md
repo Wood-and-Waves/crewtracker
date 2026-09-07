@@ -17,7 +17,7 @@ digest, day-change flags, crew change notices.**
 |---|---|
 | Day types | Five **activities** a day can carry — Travel, Load-in, Rehearsal, Show, Load-out — as a grid of toggles that appears once the dates are entered. Label and colour are derived. |
 | Who creates a show, knowing what | Sales/office: dates, venue, rooms, **headcount by role** — not names. |
-| Naming the PM | An **optional** field on New Show (and Edit Show). Naming one **offers** an email, like a booking request — never automatic. |
+| Naming the PM | An **optional** field on New Show (and Edit Show). Naming one **sends an invitation** (after one confirmation); **accepting the invitation is what grants access**. Until then the show is not theirs. Dan: a silent accept is dangerous. |
 | Who fills positions | **The scheduler, always.** |
 | Handoff | New Show has **two buttons**: "Create show" and "Create show and send to scheduler". Edit Show keeps "Send to scheduler". |
 | Who is "the scheduler" | **Everyone with the scheduling permission.** Nobody owns a show; any of them can fill any position. |
@@ -98,15 +98,19 @@ definition, per day).
 days*. Positions move to a short list per room: role, count, kind picker ("All days · Show
 days · Load-in and load-out · Custom…"). Default kind: **all days** — today's behaviour.
 
-**Production manager.** `shows.pm_profile_id uuid null references profiles`. Naming one (New
-Show field, Edit Show field) writes a `show_assignments` row for them (that is what gives
-access — the PM-side door already exists) and offers **"Email Sam that they're the PM?"** —
-`lib/pmAssignedEmail.ts`, the booking-request sender, `siteOrigin()` for the link. The email
-carries an **Accept** button (a token link, like a booking request, landing on the show);
-`shows.pm_accepted_at` records it. Opening the show while signed in as the PM counts as
-accepting too, so nobody is blocked on a button. Changing the PM clears `pm_accepted_at` and
-removes the old assignment only if it was created by this field (tracked by
-`show_assignments.source = 'pm'`), never one an admin granted by hand.
+**Production manager.** `shows.pm_profile_id uuid null references profiles`,
+`shows.pm_invited_at`, `shows.pm_accepted_at`, and a `pm_invites` table (show_id,
+profile_id, token, sent_at, accepted_at) — the same shape as `booking_invites`. Naming a PM
+(New Show field, Edit Show field) asks once — **"Invite Sam as PM?"** — and sends
+`lib/pmInviteEmail.ts` (the booking-request sender, `siteOrigin()` for the link). **The
+invitation is the acceptance**: the email carries an **Accept** button, a token link like a
+booking request (`/pm/[token]`, public, POST-only accept, allowlisted in `proxy.ts`), landing
+on a page that names the show and dates with one button. Accepting writes the
+`show_assignments` row (`source = 'pm'`) — THAT is what grants access; until then the show is
+not in Sam's list — and sets `pm_accepted_at`. Nothing else counts as accepting; there is no
+silent accept. Edit Show shows the state (*Invited, waiting* · *Accepted Sep 7* · **Resend**).
+Changing the PM clears the invite state and removes the old assignment only if it was created
+by this field, never one an admin granted by hand. Admins and see-all people are unaffected.
 
 **Two finish buttons.** "Create show" (today's) and "Create show and send to scheduler" =
 create, then the Section C handoff. Both land on the new show's tracker.
@@ -134,7 +138,7 @@ screen gains a **"Needs scheduling"** list: sent shows with any open slot, oldes
 
 **Ready email** — automatic, and **only to an accepted PM**. One function,
 `maybeSendReadyEmail(showId)`, called after a crew acceptance (`/api/bookings/respond`) AND
-after a PM accepts (the Accept link, or first signed-in open): if the show has **no open slot
+after a PM accepts (the Accept link): if the show has **no open slot
 and no booking waiting on a reply**, `pm_accepted_at` is set, and `ready_email_sent_at` is
 null → send `lib/readyEmail.ts` to the PM and set `ready_email_sent_at`. A show that fills
 before it has a PM simply waits; the email goes the moment the PM accepts. Body: roster by day
