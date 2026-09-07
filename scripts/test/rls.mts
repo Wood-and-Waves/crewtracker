@@ -130,6 +130,18 @@ await q(`insert into memberships (profile_id, organization_id, base_role, can_ed
 await q(`update profiles set active_organization_id=$2 where id=$1`, [dave, orgA])
 await q(`insert into show_assignments (show_id, profile_id) values ($1,$2)`, [showA.id, dave])
 
+// ---- Section 1 fixtures: a login that IS a directory entry (0028) ----
+// sam has a login in org A (crew preset: nothing) and a directory entry in A
+// with the same email, so the link is made automatically. A second directory
+// entry in org B with the SAME email must stay unlinked: links never cross
+// companies.
+const samEmail = `${TAG}-sam@example.test`
+const [samCrewA] = await q(`insert into crew_members (organization_id, full_name, email) values ($1,'Sam Crew',$2) returning id`, [orgA, samEmail.toUpperCase()])
+const [samCrewB] = await q(`insert into crew_members (organization_id, full_name, email) values ($1,'Sam In B',$2) returning id`, [orgB, samEmail])
+const sam = await makeUser(samEmail)
+await q(`insert into memberships (profile_id, organization_id, base_role) values ($1,$2,'crew')`, [sam, orgA])
+await q(`update profiles set active_organization_id=$2 where id=$1`, [sam, orgA])
+
 try {
   console.log('\n=== one company cannot see another ===')
   await asUser(alice, async () => {
@@ -336,6 +348,36 @@ try {
     check('but never without it', v[0].n === 0, `${v[0].n}`)
   })
   await q(`update shows set scheduler_id=null where id=$1`, [showA2.id])
+
+  console.log('\n=== a login links to its directory entry by email (0028) ===')
+  {
+    const [a] = await q(`select profile_id from crew_members where id=$1`, [samCrewA.id])
+    check('joining a company links the one directory entry with that email (case-insensitive)', a.profile_id === sam, `${a.profile_id}`)
+    const [b] = await q(`select profile_id from crew_members where id=$1`, [samCrewB.id])
+    check('and never a directory entry in another company', b.profile_id === null, `${b.profile_id}`)
+
+    // Two entries sharing an email: neither is linked, and the existing link is
+    // NOT disturbed by a newcomer.
+    const [dup] = await q(`insert into crew_members (organization_id, full_name, email) values ($1,'Sam Twin',$2) returning id`, [orgA, samEmail])
+    const [twin] = await q(`select profile_id from crew_members where id=$1`, [dup.id])
+    const [still] = await q(`select profile_id from crew_members where id=$1`, [samCrewA.id])
+    check('a second entry with the same email is not linked', twin.profile_id === null, `${twin.profile_id}`)
+    check('and the first keeps its link', still.profile_id === sam, `${still.profile_id}`)
+    await q(`delete from crew_members where id=$1`, [dup.id])
+
+    // Changing the email away from the login clears the link; changing it back relinks.
+    await q(`update crew_members set email='nobody@example.test' where id=$1`, [samCrewA.id])
+    const [cleared] = await q(`select profile_id from crew_members where id=$1`, [samCrewA.id])
+    check('an email that no longer matches clears the link', cleared.profile_id === null, `${cleared.profile_id}`)
+    await q(`update crew_members set email=$2 where id=$1`, [samCrewA.id, samEmail])
+    const [back] = await q(`select profile_id from crew_members where id=$1`, [samCrewA.id])
+    check('and matching again relinks', back.profile_id === sam, `${back.profile_id}`)
+
+    // The app's explicit relink for a row the triggers could not decide.
+    await q(`update crew_members set profile_id=null where id=$1`, [samCrewA.id])
+    const [r] = await q(`select relink_crew_member($1) as p`, [samCrewA.id])
+    check('relink_crew_member() links an unlinked entry', r.p === sam, `${r.p}`)
+  }
 
   console.log('\n=== removed and misdirected users get nothing ===')
   await q(`update memberships set deactivated_at=now() where profile_id=$1 and organization_id=$2`, [alice, orgA])
