@@ -150,6 +150,13 @@ Deferred: any way for crew to obtain a login.
 **Desktop first.** Designed and verified at 1440×900 with a 10-day run and 30 crew; must be
 usable, not optimised, at phone widths (horizontal scroll inside the grid, never the page).
 
+**Same family as New Show's grid.** New Show's positions grid is rooms × days; this is
+people × days with a room per cell — same day headers with day-type tints, same squared
+cells, same ruled section, so one teaches the other. It lives on Edit Show because a
+person's day is a timecard row and timecards cannot exist before the show does; New Show's
+finish action lands on the new show's Schedule section so the flow reads details → rules →
+rooms/positions → schedule.
+
 **Layout.** A ruled section on Edit Show titled **Schedule**. Header row: the show's days
 (short weekday + date, tinted by day type, as the positions grid does). One row per staffed
 person: name and role at left (rate is NOT shown here — rates have their own place and
