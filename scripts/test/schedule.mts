@@ -27,6 +27,7 @@ import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import {
   dayLabel, dayTint, isKindOfDay, fromLegacy, toLegacy, normalizeActivities,
 } from '../../lib/dayActivities.ts'
+import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDay } from '../../lib/positionDefs.ts'
 import { canUseScheduling } from '../../lib/permissions.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
@@ -572,6 +573,34 @@ check('legacy null → no activities', fromLegacy(null), [])
 check('toLegacy of a set with no legacy name falls back to its biggest activity', toLegacy(['rehearsal', 'show']), 'show')
 check('toLegacy of a lone load-out is null — the legacy list never had one', toLegacy(['load_out']), null)
 check('toLegacy of nothing is null', toLegacy([]), null)
+
+console.log('\n=== positions by kind: the preview matches the SQL (0034) ===')
+{
+  const eight: GridDay[] = [
+    { date: '2026-11-02', activities: ['travel'] },
+    { date: '2026-11-03', activities: ['load_in'] },
+    { date: '2026-11-04', activities: ['load_in', 'rehearsal'] },
+    { date: '2026-11-05', activities: ['rehearsal', 'show'] },
+    { date: '2026-11-06', activities: ['show'] },
+    { date: '2026-11-07', activities: ['show'] },
+    { date: '2026-11-08', activities: ['show', 'load_out'] },
+    { date: '2026-11-09', activities: ['load_out', 'travel'] },
+  ]
+  const def = (o: Partial<PositionDef> = {}): PositionDef =>
+    ({ key: 'k', roomKey: 'ball', role: 'A1', count: 1, dayKind: 'all', customDates: [], ...o })
+  const always = () => true
+  check('all days wants every day', eight.every(d => defWants(def(), d)), true)
+  check('show days wants the four show days', eight.filter(d => defWants(def({ dayKind: 'show' }), d)).length, 4)
+  check('load wants load-in OR load-out days', eight.filter(d => defWants(def({ dayKind: 'load' }), d)).length, 4)
+  check('custom wants exactly its dates', eight.filter(d => defWants(def({ dayKind: 'custom', customDates: ['2026-11-04'] }), d)).length, 1)
+  const counts = derivedCounts([def({ key: 'a' }), def({ key: 'b', role: 'Stagehand', count: 3, dayKind: 'load' })], eight, always)
+  check('derived counts per day add up (1 A1 + 3 stagehands on a load day)', counts.ball[1], 4)
+  check('and on a plain show day only the A1', counts.ball[4], 1)
+  check('a room that does not run that day gets nothing', derivedCounts([def()], eight, (_, i) => i !== 0).ball[0] ?? 0, 0)
+  check('describeDefDays reads as dates', describeDefDays(def({ dayKind: 'load' }), eight), 'Tue 3, Wed 4, Sun 8, Mon 9')
+  check('describeDefDays for all days', describeDefDays(def(), eight), 'every day')
+  check('describeDefDays with nothing matching', describeDefDays(def({ dayKind: 'custom' }), eight), 'no days yet')
+}
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)
