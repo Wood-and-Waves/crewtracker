@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { BAND } from '@/lib/panel'
 import ScheduleGrid from '@/components/ScheduleGrid'
 import ScheduleAgenda from '@/components/ScheduleAgenda'
+import NeedsSchedulingList from '@/components/NeedsSchedulingList'
 import { fetchBookings, fetchScheduleShows, resolveWindow } from '@/lib/schedule'
+import { fetchSchedulingQueue } from '@/lib/schedulingQueue'
 import { addDays, dateRange } from '@/lib/datetime'
 import { cn } from '@/lib/cn'
 
@@ -64,9 +66,10 @@ export default async function SchedulePage({
   const win = resolveWindow(params, zones)
   const dates = dateRange(win.start, win.days)
 
-  const [shows, bookings] = await Promise.all([
+  const [shows, bookings, queue] = await Promise.all([
     fetchScheduleShows(supabase, win.start, win.end),
     fetchBookings(supabase, win.start, win.end),
+    fetchSchedulingQueue(supabase),
   ])
 
   const link = (start: string, days: number) => `/dashboard/schedule?start=${start}&days=${days}`
@@ -79,6 +82,9 @@ export default async function SchedulePage({
       <div className={cn(BAND, '-mx-4 mb-5 px-4 py-4 md:-mx-10 md:px-10')}>
         <h1 className="font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">Schedule</h1>
       </div>
+
+      <NeedsSchedulingList rows={queue} />
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* Window length. Not a dropdown: three fixed choices are faster to hit

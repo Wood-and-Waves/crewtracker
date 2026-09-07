@@ -29,6 +29,7 @@ import {
 } from '../../lib/dayActivities.ts'
 import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDay } from '../../lib/positionDefs.ts'
 import { canUseScheduling } from '../../lib/permissions.ts'
+import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -600,6 +601,21 @@ console.log('\n=== positions by kind: the preview matches the SQL (0034) ===')
   check('describeDefDays reads as dates', describeDefDays(def({ dayKind: 'load' }), eight), 'Tue 3, Wed 4, Sun 8, Mon 9')
   check('describeDefDays for all days', describeDefDays(def(), eight), 'every day')
   check('describeDefDays with nothing matching', describeDefDays(def({ dayKind: 'custom' }), eight), 'no days yet')
+}
+
+console.log('\n--- scheduling queue summary ---')
+{
+  const m = summarizeQueue(
+    [
+      { showId: 'a', filled: true, status: 'confirmed' },
+      { showId: 'a', filled: true, status: 'invited' },
+      { showId: 'a', filled: false, status: null },
+      { showId: 'b', filled: true, status: 'pencilled' },
+    ],
+    [{ showId: 'a' }, { showId: 'a' }],
+  )
+  check('show a: 1 open of 3, 1 waiting, 2 flags', m.get('a'), { open: 1, total: 3, waiting: 1, flags: 2 })
+  check('show b: full but 1 waiting (pencilled counts)', m.get('b'), { open: 0, total: 1, waiting: 1, flags: 0 })
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
