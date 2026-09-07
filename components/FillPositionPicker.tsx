@@ -29,6 +29,15 @@ import Toggle from '@/components/ui/Toggle'
 // Filling writes booking_status 'pencilled': penned in, nobody contacted yet.
 // Inviting them is a separate, later action, and conflating the two is how
 // people get asked twice or never.
+//
+// A POSITION DEFINED "BY KIND OF DAY" (position_defs, migration 0034) runs on
+// several days, and most of the time one person does the whole run. So when the
+// clicked slot belongs to a definition, choosing a person opens a second step —
+// their days: the definition's other OPEN slots, each ticked, to untick — and
+// books every ticked day in ONE insert. A slot with no definition (built in the
+// old per-day grid, or a one-off) behaves exactly as before: one day, no step.
+// The picker finds the definition itself from the slot, so no caller has to
+// know the difference.
 
 type Candidate = {
   id: string
@@ -36,6 +45,13 @@ type Candidate = {
   roles: string[]
   /** Where they are already committed on this date, within this organization. */
   conflicts: { showName: string; roomName: string; sameRoom: boolean }[]
+}
+
+/** Another open slot of the same definition, on another day. */
+type SiblingSlot = { id: string; roomId: string; roomName: string; date: string }
+
+function fmtDay(date: string) {
+  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 export default function FillPositionPicker({
@@ -60,6 +76,48 @@ export default function FillPositionPicker({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // The definition's other open days, if the slot has a definition.
+  const [siblings, setSiblings] = useState<SiblingSlot[]>([])
+  // Step two: the chosen person and which of those days stay ticked.
+  const [plan, setPlan] = useState<{ c: Candidate; picked: Set<string> } | null>(null)
+
+  useEffect(() => {
+    let active = true
+    setSiblings([])
+    setPlan(null)
+    ;(async () => {
+      const { data: me } = await supabase
+        .from('crew_call_positions').select('position_def_id').eq('id', positionId).maybeSingle()
+      const defId = (me as any)?.position_def_id
+      if (!defId || !active) return
+      const { data: slots } = await supabase
+        .from('crew_call_positions')
+        .select('id, room_id, rooms!inner ( name, work_days!inner ( date ) )')
+        .eq('position_def_id', defId)
+        .neq('id', positionId)
+      const ids = ((slots ?? []) as any[]).map(s => s.id)
+      const { data: held } = ids.length
+        ? await liveBookings(supabase.from('timecards').select('call_position_id, booking_status')).in('call_position_id', ids)
+        : { data: [] as any[] }
+      if (!active) return
+      const taken = new Set(((held ?? []) as any[]).map(t => t.call_position_id))
+      // ONE slot per room-day, and never the clicked slot's own room: a
+      // definition that wants two stagehands has two open slots on each day,
+      // and one person can hold only one of them (the room+person unique index
+      // says so). The other slot stays open for the next person.
+      const seenRoom = new Set<string>([roomId])
+      setSiblings(((slots ?? []) as any[])
+        .filter(s => !taken.has(s.id))
+        .map(s => {
+          const room = Array.isArray(s.rooms) ? s.rooms[0] : s.rooms
+          const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+          return { id: s.id, roomId: s.room_id, roomName: room?.name ?? '', date: wd?.date ?? '' }
+        })
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .filter(s => (seenRoom.has(s.roomId) ? false : (seenRoom.add(s.roomId), true))))
+    })()
+    return () => { active = false }
+  }, [positionId, roomId])
 
   useEffect(() => {
     let active = true
@@ -130,33 +188,57 @@ export default function FillPositionPicker({
     })
   }, [candidates, onlyRole, search, positionRole])
 
-  async function fill(c: Candidate) {
+  function fill(c: Candidate) {
     if (busy) return
+    setError('')
+    // A definition with other open days: ask which of them first.
+    if (siblings.length > 0) {
+      setPlan({ c, picked: new Set(siblings.map(s => s.id)) })
+      return
+    }
+    void book(c, [])
+  }
+
+  async function book(c: Candidate, extra: SiblingSlot[]) {
     setBusy(true)
     setError('')
 
     // 'pencilled': penned in, not yet asked. day_rate is deliberately not sent —
     // a trigger sets the show-wide rate for (show, person, role), and the write
     // guard drops any rate supplied by someone without permission anyway.
-    const { error: e } = await supabase.from('timecards').insert({
-      room_id: roomId,
-      crew_member_id: c.id,
-      crew_member_name: c.name,
-      role: positionRole,
-      call_position_id: positionId,
-      booking_status: 'pencilled',
-    })
+    // One insert for every day: all of them land or none do.
+    const rows = [{ room_id: roomId, call_position_id: positionId }, ...extra.map(s => ({ room_id: s.roomId, call_position_id: s.id }))]
+      .map(r => ({
+        ...r,
+        crew_member_id: c.id,
+        crew_member_name: c.name,
+        role: positionRole,
+        booking_status: 'pencilled',
+      }))
+    const { data, error: e } = await supabase.from('timecards').insert(rows).select('id')
     setBusy(false)
 
-    if (e) {
-      // 23505 = the partial unique index: somebody else filled this position
-      // between the list loading and this click.
-      setError(e.code === '23505'
-        ? 'Somebody already filled this position. Close and reopen the call to see who.'
-        : e.message)
+    if (e || !data?.length) {
+      // 23505 = a unique index: either somebody else filled one of these
+      // positions between the list loading and this click, or the person is
+      // already in that room that day. Postgres names the clashing key, so say
+      // which day rather than making them guess.
+      setError(e?.code === '23505' ? clashMessage(e.details ?? '', c, extra) : (e?.message ?? 'That did not save.'))
       return
     }
     onFilled()
+  }
+
+  function clashMessage(details: string, c: Candidate, extra: SiblingSlot[]) {
+    const slot = /\(call_position_id\)=\(([0-9a-f-]+)\)/i.exec(details)?.[1]
+    const room = /\(room_id, crew_member_id\)=\(([0-9a-f-]+),/i.exec(details)?.[1]
+    const day = slot
+      ? (slot === positionId ? date : extra.find(s => s.id === slot)?.date)
+      : room
+        ? (room === roomId ? date : extra.find(s => s.roomId === room)?.date)
+        : undefined
+    if (room) return `${c.name} is already in this room on ${day ? fmtDay(day) : 'one of these days'}. Untick that day and try again.`
+    return `Somebody already filled ${day ? fmtDay(day) : 'one of these days'}. Close and reopen to see who.`
   }
 
   return (
@@ -168,19 +250,58 @@ export default function FillPositionPicker({
         <button onClick={onCancel} className="text-xs text-muted hover:text-ink">Cancel</button>
       </div>
 
-      <input
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder="Search crew…"
-        className="mb-2 w-full rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-      />
+      {!plan && (
+        <>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search crew…"
+            className="mb-2 w-full rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+          />
 
-      <label className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-xs text-muted">Only show {positionRole}s</span>
-        <Toggle checked={onlyRole} onChange={setOnlyRole} />
-      </label>
+          <label className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-xs text-muted">Only show {positionRole}s</span>
+            <Toggle checked={onlyRole} onChange={setOnlyRole} />
+          </label>
+        </>
+      )}
 
-      {loading ? (
+      {plan ? (
+        <div>
+          <p className="mb-1 text-sm font-semibold text-ink">{plan.c.name}&rsquo;s days</p>
+          <p className="mb-2 text-xs text-muted">
+            This position runs on {siblings.length + 1} days. Untick any {plan.c.name.split(' ')[0]} is not doing.
+          </p>
+          <ul className="divide-y divide-line rounded-field border border-line">
+            <li className="flex items-center justify-between gap-2 px-3 py-2">
+              <span className="text-sm text-ink">{fmtDay(date)} <span className="text-xs text-muted">· this one</span></span>
+              <Toggle checked disabled onChange={() => {}} label={`${fmtDay(date)}, always included`} />
+            </li>
+            {siblings.map(s => (
+              <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="text-sm text-ink">{fmtDay(s.date)}</span>
+                <Toggle
+                  checked={plan.picked.has(s.id)}
+                  disabled={busy}
+                  label={fmtDay(s.date)}
+                  onChange={on => setPlan(p => {
+                    if (!p) return p
+                    const picked = new Set(p.picked)
+                    if (on) picked.add(s.id); else picked.delete(s.id)
+                    return { ...p, picked }
+                  })}
+                />
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex items-center gap-2">
+            <Button size="sm" disabled={busy} onClick={() => book(plan.c, siblings.filter(s => plan.picked.has(s.id)))}>
+              {busy ? 'Booking…' : `Book ${plan.picked.size + 1} day${plan.picked.size === 0 ? '' : 's'}`}
+            </Button>
+            <button type="button" className="text-xs text-muted hover:text-ink" disabled={busy} onClick={() => setPlan(null)}>Back</button>
+          </div>
+        </div>
+      ) : loading ? (
         <p className="py-4 text-center text-sm text-muted">Loading crew…</p>
       ) : shown.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">
