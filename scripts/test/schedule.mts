@@ -642,10 +642,11 @@ console.log('\n--- ready email: day compression ---')
   const { text: blankRoleText } = buildReadyEmail({
     to: 'pm@x.test', pmName: 'Sam Okafor', showName: 'Northwind', dates: 'Sep 8–10', venue: 'Moscone West',
     orgName: 'Wood & Waves', link: 'https://crewtracker.app/dashboard/shows/1',
-    days: [],
+    days: [{ date: '2026-09-08', label: 'Load-in', rooms: [{ name: 'Ballroom', people: [{ name: 'Jamie Lee', role: '', phone: '(555) 123-4567' }] }] }],
     perPerson: [{ name: 'Jamie Lee', role: '', days: 'Tue 8 – Thu 10' }], waiting: 0,
   })
   check('blank role reads Crew', blankRoleText.includes('Jamie Lee · Crew · Tue 8 – Thu 10'), true)
+  check('blank role reads Crew on the roster line too', blankRoleText.includes('Jamie Lee · Crew · (555) 123-4567'), true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

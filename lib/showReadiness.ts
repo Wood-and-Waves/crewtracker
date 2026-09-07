@@ -82,7 +82,12 @@ export async function maybeSendReadyEmail(admin: SupabaseClient, showId: string)
 
     const { error } = await sendReadyEmail(input)
     if (error) {
-      await admin.from('shows').update({ ready_email_sent_at: null }).eq('id', show.id)
+      // A stuck claim means every later call sees "already sent" — surface the release error.
+      const { error: releaseError } = await admin.from('shows').update({ ready_email_sent_at: null }).eq('id', show.id)
+      if (releaseError) {
+        console.error(`ready email: send failed (${error}) AND the claim could not be released (${releaseError.message}); show ${show.id} is stamped sent without an email`)
+        return { sent: false, reason: `send failed and claim stuck: ${error}` }
+      }
       return { sent: false, reason: error }
     }
     return { sent: true, reason: 'sent' }
