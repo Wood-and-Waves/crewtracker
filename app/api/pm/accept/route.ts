@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
-import { maybeSendReadyEmail } from '@/lib/showReadiness'
+import { maybeSendReadyEmail, isExpectedReadyReason } from '@/lib/showReadiness'
 
 // The production manager accepting a show. THIS is the only thing that grants
 // them access: it writes the show_assignments row (source='pm') that the shows
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   // The show may already have been fully staffed before the PM accepted —
   // that's the second path into the ready email. Never fails accepting.
   const { sent, reason } = await maybeSendReadyEmail(admin, show.id)
-  if (!sent && !['already sent', 'no accepted PM', 'closed', 'no show'].includes(reason) && !/^\d+ open, \d+ waiting$/.test(reason)) {
+  if (!sent && !isExpectedReadyReason(reason)) {
     console.error('maybeSendReadyEmail failed after a PM accept:', reason)
   }
 

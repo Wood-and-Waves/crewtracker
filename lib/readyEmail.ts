@@ -88,7 +88,7 @@ export function buildReadyEmail(input: ReadyEmailInput): { subject: string; text
     for (const room of day.rooms) {
       lines.push(room.name)
       for (const p of room.people) {
-        lines.push(`  ${p.name} · ${p.role ?? 'Crew'} · ${p.phone ?? 'no phone on file'}`)
+        lines.push(`  ${p.name} · ${p.role || 'Crew'} · ${p.phone ?? 'no phone on file'}`)
       }
       roomsHtml.push(
         `<p style="font-size:14px;font-weight:600;margin:12px 0 4px">${escapeHtml(room.name)}</p>` +
@@ -96,7 +96,7 @@ export function buildReadyEmail(input: ReadyEmailInput): { subject: string; text
           room.people
             .map(
               p =>
-                `<li>${escapeHtml(p.name)} · ${escapeHtml(p.role ?? 'Crew')} · ${escapeHtml(
+                `<li>${escapeHtml(p.name)} · ${escapeHtml(p.role || 'Crew')} · ${escapeHtml(
                   p.phone ?? 'no phone on file',
                 )}</li>`,
             )
@@ -108,9 +108,9 @@ export function buildReadyEmail(input: ReadyEmailInput): { subject: string; text
     htmlDayBlocks.push(`<h3 style="font-size:15px;margin:20px 0 4px">${escapeHtml(heading)}</h3>` + roomsHtml.join(''))
   }
 
-  const perPersonText = input.perPerson.map(p => `${p.name} · ${p.role ?? 'Crew'} · ${p.days}`)
+  const perPersonText = input.perPerson.map(p => `${p.name} · ${p.role || 'Crew'} · ${p.days}`)
   const perPersonHtml = input.perPerson
-    .map(p => `<li>${escapeHtml(p.name)} · ${escapeHtml(p.role ?? 'Crew')} · ${escapeHtml(p.days)}</li>`)
+    .map(p => `<li>${escapeHtml(p.name)} · ${escapeHtml(p.role || 'Crew')} · ${escapeHtml(p.days)}</li>`)
     .join('')
 
   const text = [

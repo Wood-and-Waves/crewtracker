@@ -635,6 +635,17 @@ console.log('\n--- ready email: day compression ---')
   check('roster line carries name, role, phone', text.includes('Alex Reyes · A1 · (312) 555-0100'), true)
   check('per-person line', text.includes('Alex Reyes · A1 · Tue 8 – Thu 10'), true)
   check('waiting count', text.includes('0 waiting on a reply'), true)
+
+  // A blank role (role: '') is a documented real state, not "no role given" —
+  // only null/undefined should fall back to 'Crew'. `role ?? 'Crew'` would
+  // wrongly print an empty role as "· ·"; `role || 'Crew'` prints "· Crew ·".
+  const { text: blankRoleText } = buildReadyEmail({
+    to: 'pm@x.test', pmName: 'Sam Okafor', showName: 'Northwind', dates: 'Sep 8–10', venue: 'Moscone West',
+    orgName: 'Wood & Waves', link: 'https://crewtracker.app/dashboard/shows/1',
+    days: [],
+    perPerson: [{ name: 'Jamie Lee', role: '', days: 'Tue 8 – Thu 10' }], waiting: 0,
+  })
+  check('blank role reads Crew', blankRoleText.includes('Jamie Lee · Crew · Tue 8 – Thu 10'), true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
