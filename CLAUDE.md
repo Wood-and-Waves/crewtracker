@@ -331,9 +331,8 @@ scripts/
                        · 0034 position_defs (a role, for these kinds of day) + derived slots
                        via sync_position_slots() + position_slot_flags; the PM invitation
                        (shows.pm_*, pm_invites, show_assignments.source). Writes NO existing rows.
-                       0018–0033 applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0033 2026-09-07). **0034 is on DEV only**
-                       until its cutover (backup → --prod → db:grants → db:schema → merge).
+                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06, 0028–0034 2026-09-07). Nothing is dev-only.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A

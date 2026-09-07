@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict YdmTEhM9xiKB8zuIAIlxu1Xbh0W2rhdhY9dQ3c68iaohefM7lhSxhEKC0bALZVi
+\restrict b8aILizdIsrPou2wytWtUlceD6FttS0ceQE68RTDicx30Wcvj2LjfElW2FLHPiK
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -634,6 +634,22 @@ $$;
 
 
 --
+-- Name: position_def_wants("text", "date"[], "text"[], "date"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."position_def_wants"("p_kind" "text", "p_custom" "date"[], "p_activities" "text"[], "p_date" "date") RETURNS boolean
+    LANGUAGE "sql" IMMUTABLE
+    AS $$
+  select case p_kind
+    when 'all'    then true
+    when 'show'   then 'show' = any(coalesce(p_activities, '{}'))
+    when 'load'   then coalesce(p_activities, '{}') && array['load_in','load_out']
+    when 'custom' then p_date = any(coalesce(p_custom, '{}'))
+    else false end;
+$$;
+
+
+--
 -- Name: propagate_show_day_rate(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -931,6 +947,52 @@ $$;
 
 
 --
+-- Name: sync_position_slots("uuid"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."sync_position_slots"("p_show_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  d public.position_defs%rowtype;
+  r record;
+  have integer;
+begin
+  for d in select * from position_defs where show_id = p_show_id loop
+    -- Wanted room-days: top up to count.
+    for r in
+      select rm.id as room_id
+      from rooms rm join work_days wd on wd.id = rm.work_day_id
+      where wd.show_id = p_show_id and rm.name = d.room_name
+        and position_def_wants(d.day_kind, d.custom_dates, wd.activities, wd.date)
+    loop
+      select count(*) into have from crew_call_positions where position_def_id = d.id and room_id = r.room_id;
+      if have < d.count then
+        insert into crew_call_positions (room_id, role, sort_order, position_def_id, created_by)
+        select r.room_id, d.role, d.sort_order, d.id, auth.uid() from generate_series(1, d.count - have);
+      elsif have > d.count then
+        -- Too many: drop UNFILLED extras only.
+        delete from crew_call_positions p
+        where p.id in (
+          select p2.id from crew_call_positions p2
+          where p2.position_def_id = d.id and p2.room_id = r.room_id
+            and not exists (select 1 from timecards t where t.call_position_id = p2.id and t.booking_status is distinct from 'declined')
+          order by p2.created_at desc limit (have - d.count));
+      end if;
+    end loop;
+    -- Unwanted room-days: drop UNFILLED slots. Filled ones stay and show as flags.
+    delete from crew_call_positions p
+    where p.position_def_id = d.id
+      and not exists (select 1 from timecards t where t.call_position_id = p.id and t.booking_status is distinct from 'declined')
+      and not exists (
+        select 1 from rooms rm join work_days wd on wd.id = rm.work_day_id
+        where rm.id = p.room_id and rm.name = d.room_name
+          and position_def_wants(d.day_kind, d.custom_dates, wd.activities, wd.date));
+  end loop;
+end; $$;
+
+
+--
 -- Name: timecards_crew_access_tg(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1044,7 +1106,8 @@ CREATE TABLE "public"."crew_call_positions" (
     "sort_order" integer DEFAULT 0 NOT NULL,
     "note" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "created_by" "uuid"
+    "created_by" "uuid",
+    "position_def_id" "uuid"
 );
 
 
@@ -1257,6 +1320,125 @@ CREATE TABLE "public"."payroll_rulesets" (
 
 
 --
+-- Name: pm_invites; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."pm_invites" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "token" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "show_id" "uuid" NOT NULL,
+    "profile_id" "uuid" NOT NULL,
+    "organization_id" "uuid" NOT NULL,
+    "sent_by" "uuid",
+    "sent_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "accepted_at" timestamp with time zone
+);
+
+ALTER TABLE ONLY "public"."pm_invites" FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: position_defs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."position_defs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "show_id" "uuid" NOT NULL,
+    "room_name" "text" NOT NULL,
+    "role" "text" NOT NULL,
+    "count" integer DEFAULT 1 NOT NULL,
+    "day_kind" "text" DEFAULT 'all'::"text" NOT NULL,
+    "custom_dates" "date"[],
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "position_defs_count_check" CHECK ((("count" >= 1) AND ("count" <= 99))),
+    CONSTRAINT "position_defs_day_kind_check" CHECK (("day_kind" = ANY (ARRAY['all'::"text", 'show'::"text", 'load'::"text", 'custom'::"text"])))
+);
+
+ALTER TABLE ONLY "public"."position_defs" FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rooms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."rooms" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "work_day_id" "uuid" NOT NULL,
+    "name" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "show_id" "uuid" NOT NULL
+);
+
+
+--
+-- Name: timecards; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."timecards" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "room_id" "uuid" NOT NULL,
+    "crew_member_id" "uuid",
+    "crew_member_name" "text" NOT NULL,
+    "role" "text",
+    "day_rate" numeric DEFAULT 0.0,
+    "is_travel_day" boolean DEFAULT false,
+    "travel_in_day" boolean DEFAULT false,
+    "travel_out_day" boolean DEFAULT false,
+    "pay_as_half_day" boolean DEFAULT false,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "call_position_id" "uuid",
+    "booking_status" "text" DEFAULT 'pencilled'::"text" NOT NULL,
+    "booking_invited_at" timestamp with time zone,
+    "booking_responded_at" timestamp with time zone,
+    "show_id" "uuid" NOT NULL,
+    "absence" "text",
+    CONSTRAINT "timecards_absence_check" CHECK (("absence" = ANY (ARRAY['no_show'::"text", 'cancelled'::"text"]))),
+    CONSTRAINT "timecards_booking_status_check" CHECK (("booking_status" = ANY (ARRAY['pencilled'::"text", 'invited'::"text", 'confirmed'::"text", 'declined'::"text"])))
+);
+
+
+--
+-- Name: work_days; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."work_days" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "show_id" "uuid" NOT NULL,
+    "date" "date" NOT NULL,
+    "day_number" integer NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "day_type" "text",
+    "activities" "text"[] DEFAULT '{}'::"text"[] NOT NULL,
+    CONSTRAINT "work_days_activities_check" CHECK (("activities" <@ ARRAY['travel'::"text", 'load_in'::"text", 'rehearsal'::"text", 'show'::"text", 'load_out'::"text"])),
+    CONSTRAINT "work_days_day_type_check" CHECK ((("day_type" IS NULL) OR ("day_type" = ANY (ARRAY['travel_load_in'::"text", 'load_in'::"text", 'load_in_show'::"text", 'rehearsal'::"text", 'show'::"text", 'show_load_out'::"text", 'load_out_travel'::"text", 'travel'::"text"]))))
+);
+
+
+--
+-- Name: position_slot_flags; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW "public"."position_slot_flags" WITH ("security_invoker"='true') AS
+ SELECT "p"."id" AS "slot_id",
+    "wd"."show_id",
+    "p"."position_def_id",
+    "rm"."name" AS "room_name",
+    "wd"."date",
+    "p"."role",
+    "t"."id" AS "timecard_id",
+    "t"."crew_member_name"
+   FROM (((("public"."crew_call_positions" "p"
+     JOIN "public"."position_defs" "d" ON (("d"."id" = "p"."position_def_id")))
+     JOIN "public"."rooms" "rm" ON (("rm"."id" = "p"."room_id")))
+     JOIN "public"."work_days" "wd" ON (("wd"."id" = "rm"."work_day_id")))
+     JOIN "public"."timecards" "t" ON ((("t"."call_position_id" = "p"."id") AND ("t"."booking_status" IS DISTINCT FROM 'declined'::"text"))))
+  WHERE (NOT (("rm"."name" = "d"."room_name") AND "public"."position_def_wants"("d"."day_kind", "d"."custom_dates", "wd"."activities", "wd"."date")));
+
+
+--
 -- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1320,19 +1502,6 @@ ALTER TABLE ONLY "public"."rate_limits" FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: rooms; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE "public"."rooms" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "work_day_id" "uuid" NOT NULL,
-    "name" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "show_id" "uuid" NOT NULL
-);
-
-
---
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1351,7 +1520,9 @@ CREATE TABLE "public"."show_assignments" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "show_id" "uuid" NOT NULL,
     "profile_id" "uuid" NOT NULL,
-    "organization_id" "uuid"
+    "organization_id" "uuid",
+    "source" "text" DEFAULT 'manual'::"text" NOT NULL,
+    CONSTRAINT "show_assignments_source_check" CHECK (("source" = ANY (ARRAY['manual'::"text", 'pm'::"text"])))
 );
 
 
@@ -1394,7 +1565,10 @@ CREATE TABLE "public"."shows" (
     "final_report_recipients" "text",
     "scheduler_id" "uuid",
     "call_approved_at" timestamp with time zone,
-    "call_approved_by" "uuid"
+    "call_approved_by" "uuid",
+    "pm_profile_id" "uuid",
+    "pm_invited_at" timestamp with time zone,
+    "pm_accepted_at" timestamp with time zone
 );
 
 
@@ -1424,51 +1598,6 @@ CREATE TABLE "public"."subscriptions" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     CONSTRAINT "subscriptions_plan_check" CHECK (("plan" = ANY (ARRAY['trial'::"text", 'starter'::"text", 'pro'::"text", 'enterprise'::"text"]))),
     CONSTRAINT "subscriptions_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'past_due'::"text", 'cancelled'::"text", 'trialing'::"text"])))
-);
-
-
---
--- Name: timecards; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE "public"."timecards" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "room_id" "uuid" NOT NULL,
-    "crew_member_id" "uuid",
-    "crew_member_name" "text" NOT NULL,
-    "role" "text",
-    "day_rate" numeric DEFAULT 0.0,
-    "is_travel_day" boolean DEFAULT false,
-    "travel_in_day" boolean DEFAULT false,
-    "travel_out_day" boolean DEFAULT false,
-    "pay_as_half_day" boolean DEFAULT false,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "call_position_id" "uuid",
-    "booking_status" "text" DEFAULT 'pencilled'::"text" NOT NULL,
-    "booking_invited_at" timestamp with time zone,
-    "booking_responded_at" timestamp with time zone,
-    "show_id" "uuid" NOT NULL,
-    "absence" "text",
-    CONSTRAINT "timecards_absence_check" CHECK (("absence" = ANY (ARRAY['no_show'::"text", 'cancelled'::"text"]))),
-    CONSTRAINT "timecards_booking_status_check" CHECK (("booking_status" = ANY (ARRAY['pencilled'::"text", 'invited'::"text", 'confirmed'::"text", 'declined'::"text"])))
-);
-
-
---
--- Name: work_days; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE "public"."work_days" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "show_id" "uuid" NOT NULL,
-    "date" "date" NOT NULL,
-    "day_number" integer NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "day_type" "text",
-    "activities" "text"[] DEFAULT '{}'::"text"[] NOT NULL,
-    CONSTRAINT "work_days_activities_check" CHECK (("activities" <@ ARRAY['travel'::"text", 'load_in'::"text", 'rehearsal'::"text", 'show'::"text", 'load_out'::"text"])),
-    CONSTRAINT "work_days_day_type_check" CHECK ((("day_type" IS NULL) OR ("day_type" = ANY (ARRAY['travel_load_in'::"text", 'load_in'::"text", 'load_in_show'::"text", 'rehearsal'::"text", 'show'::"text", 'show_load_out'::"text", 'load_out_travel'::"text", 'travel'::"text"]))))
 );
 
 
@@ -1615,6 +1744,30 @@ ALTER TABLE ONLY "public"."payroll_rulesets"
 
 ALTER TABLE ONLY "public"."payroll_rulesets"
     ADD CONSTRAINT "payroll_rulesets_show_id_key" UNIQUE ("show_id");
+
+
+--
+-- Name: pm_invites pm_invites_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."pm_invites"
+    ADD CONSTRAINT "pm_invites_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: pm_invites pm_invites_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."pm_invites"
+    ADD CONSTRAINT "pm_invites_token_key" UNIQUE ("token");
+
+
+--
+-- Name: position_defs position_defs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."position_defs"
+    ADD CONSTRAINT "position_defs_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -1808,6 +1961,13 @@ CREATE UNIQUE INDEX "clock_links_venue_uniq" ON "public"."clock_links" USING "bt
 
 
 --
+-- Name: crew_call_positions_def_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "crew_call_positions_def_idx" ON "public"."crew_call_positions" USING "btree" ("position_def_id");
+
+
+--
 -- Name: crew_call_positions_room_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1854,6 +2014,20 @@ CREATE UNIQUE INDEX "payroll_presets_one_default_per_org" ON "public"."payroll_p
 --
 
 CREATE UNIQUE INDEX "payroll_presets_org_name_uniq" ON "public"."payroll_presets" USING "btree" ("organization_id", "lower"("name"));
+
+
+--
+-- Name: pm_invites_show_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "pm_invites_show_idx" ON "public"."pm_invites" USING "btree" ("show_id");
+
+
+--
+-- Name: position_defs_show_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "position_defs_show_idx" ON "public"."position_defs" USING "btree" ("show_id");
 
 
 --
@@ -2238,6 +2412,14 @@ ALTER TABLE ONLY "public"."crew_call_positions"
 
 
 --
+-- Name: crew_call_positions crew_call_positions_position_def_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."crew_call_positions"
+    ADD CONSTRAINT "crew_call_positions_position_def_id_fkey" FOREIGN KEY ("position_def_id") REFERENCES "public"."position_defs"("id") ON DELETE SET NULL;
+
+
+--
 -- Name: crew_call_positions crew_call_positions_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2307,6 +2489,54 @@ ALTER TABLE ONLY "public"."payroll_presets"
 
 ALTER TABLE ONLY "public"."payroll_rulesets"
     ADD CONSTRAINT "payroll_rulesets_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: pm_invites pm_invites_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."pm_invites"
+    ADD CONSTRAINT "pm_invites_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: pm_invites pm_invites_profile_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."pm_invites"
+    ADD CONSTRAINT "pm_invites_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: pm_invites pm_invites_sent_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."pm_invites"
+    ADD CONSTRAINT "pm_invites_sent_by_fkey" FOREIGN KEY ("sent_by") REFERENCES "public"."profiles"("id");
+
+
+--
+-- Name: pm_invites pm_invites_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."pm_invites"
+    ADD CONSTRAINT "pm_invites_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: position_defs position_defs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."position_defs"
+    ADD CONSTRAINT "position_defs_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "public"."profiles"("id");
+
+
+--
+-- Name: position_defs position_defs_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."position_defs"
+    ADD CONSTRAINT "position_defs_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
 
 
 --
@@ -2459,6 +2689,14 @@ ALTER TABLE ONLY "public"."shows"
 
 ALTER TABLE ONLY "public"."shows"
     ADD CONSTRAINT "shows_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: shows shows_pm_profile_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."shows"
+    ADD CONSTRAINT "shows_pm_profile_id_fkey" FOREIGN KEY ("pm_profile_id") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
 
 
 --
@@ -2729,6 +2967,14 @@ CREATE POLICY "Users create call positions for their org shows" ON "public"."cre
 
 
 --
+-- Name: pm_invites Users create pm invites for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users create pm invites for their shows" ON "public"."pm_invites" FOR INSERT WITH CHECK ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"))));
+
+
+--
 -- Name: rate_cards Users create rate cards for their org crew; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2769,11 +3015,28 @@ CREATE POLICY "Users delete call positions for their org shows" ON "public"."cre
 
 
 --
+-- Name: pm_invites Users delete pm invites for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users delete pm invites for their shows" ON "public"."pm_invites" FOR DELETE USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"))));
+
+
+--
 -- Name: rate_cards Users delete rate cards for their org crew; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Users delete rate cards for their org crew" ON "public"."rate_cards" FOR DELETE USING (("crew_member_id" IN ( SELECT "crew_members"."id"
    FROM "public"."crew_members")));
+
+
+--
+-- Name: position_defs Users manage position defs for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users manage position defs for their shows" ON "public"."position_defs" USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"))) WITH CHECK (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
@@ -2805,6 +3068,22 @@ CREATE POLICY "Users see crew in their org" ON "public"."crew_members" FOR SELEC
 CREATE POLICY "Users see organizations they belong to" ON "public"."organizations" FOR SELECT USING ((EXISTS ( SELECT 1
    FROM "public"."memberships" "m"
   WHERE (("m"."profile_id" = ( SELECT "auth"."uid"() AS "uid")) AND ("m"."organization_id" = "organizations"."id") AND ("m"."deactivated_at" IS NULL)))));
+
+
+--
+-- Name: pm_invites Users see pm invites for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users see pm invites for their shows" ON "public"."pm_invites" FOR SELECT USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows"))));
+
+
+--
+-- Name: position_defs Users see position defs for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users see position defs for their shows" ON "public"."position_defs" FOR SELECT USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
 
 
 --
@@ -3005,6 +3284,18 @@ ALTER TABLE "public"."payroll_presets" ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE "public"."payroll_rulesets" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: pm_invites; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."pm_invites" ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: position_defs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."position_defs" ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: payroll_presets presets_delete_own_org; Type: POLICY; Schema: public; Owner: -
@@ -3332,6 +3623,15 @@ GRANT ALL ON FUNCTION "public"."my_pm_show_ids"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "position_def_wants"("p_kind" "text", "p_custom" "date"[], "p_activities" "text"[], "p_date" "date"); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."position_def_wants"("p_kind" "text", "p_custom" "date"[], "p_activities" "text"[], "p_date" "date") TO "anon";
+GRANT ALL ON FUNCTION "public"."position_def_wants"("p_kind" "text", "p_custom" "date"[], "p_activities" "text"[], "p_date" "date") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."position_def_wants"("p_kind" "text", "p_custom" "date"[], "p_activities" "text"[], "p_date" "date") TO "service_role";
+
+
+--
 -- Name: FUNCTION "propagate_show_day_rate"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3445,6 +3745,15 @@ GRANT ALL ON FUNCTION "public"."set_timecard_show_id"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."show_id_for_room"("p_room_id" "uuid") TO "service_role";
+
+
+--
+-- Name: FUNCTION "sync_position_slots"("p_show_id" "uuid"); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION "public"."sync_position_slots"("p_show_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."sync_position_slots"("p_show_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."sync_position_slots"("p_show_id" "uuid") TO "service_role";
 
 
 --
@@ -3613,30 +3922,21 @@ GRANT ALL ON TABLE "public"."payroll_rulesets" TO "service_role";
 
 
 --
--- Name: TABLE "profiles"; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE "pm_invites"; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE "public"."profiles" TO "anon";
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."profiles" TO "authenticated";
-GRANT ALL ON TABLE "public"."profiles" TO "service_role";
-
-
---
--- Name: TABLE "punches"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE "public"."punches" TO "anon";
-GRANT ALL ON TABLE "public"."punches" TO "authenticated";
-GRANT ALL ON TABLE "public"."punches" TO "service_role";
+GRANT ALL ON TABLE "public"."pm_invites" TO "anon";
+GRANT ALL ON TABLE "public"."pm_invites" TO "authenticated";
+GRANT ALL ON TABLE "public"."pm_invites" TO "service_role";
 
 
 --
--- Name: TABLE "rate_limits"; Type: ACL; Schema: public; Owner: -
+-- Name: TABLE "position_defs"; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT ALL ON TABLE "public"."rate_limits" TO "anon";
-GRANT ALL ON TABLE "public"."rate_limits" TO "authenticated";
-GRANT ALL ON TABLE "public"."rate_limits" TO "service_role";
+GRANT ALL ON TABLE "public"."position_defs" TO "anon";
+GRANT ALL ON TABLE "public"."position_defs" TO "authenticated";
+GRANT ALL ON TABLE "public"."position_defs" TO "service_role";
 
 
 --
@@ -3646,49 +3946,6 @@ GRANT ALL ON TABLE "public"."rate_limits" TO "service_role";
 GRANT ALL ON TABLE "public"."rooms" TO "anon";
 GRANT ALL ON TABLE "public"."rooms" TO "authenticated";
 GRANT ALL ON TABLE "public"."rooms" TO "service_role";
-
-
---
--- Name: TABLE "schema_migrations"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE "public"."schema_migrations" TO "service_role";
-
-
---
--- Name: TABLE "show_assignments"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE "public"."show_assignments" TO "anon";
-GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."show_assignments" TO "authenticated";
-GRANT ALL ON TABLE "public"."show_assignments" TO "service_role";
-
-
---
--- Name: TABLE "show_crew_access"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE "public"."show_crew_access" TO "anon";
-GRANT ALL ON TABLE "public"."show_crew_access" TO "authenticated";
-GRANT ALL ON TABLE "public"."show_crew_access" TO "service_role";
-
-
---
--- Name: TABLE "shows"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE "public"."shows" TO "anon";
-GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."shows" TO "authenticated";
-GRANT ALL ON TABLE "public"."shows" TO "service_role";
-
-
---
--- Name: TABLE "subscriptions"; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE "public"."subscriptions" TO "anon";
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."subscriptions" TO "authenticated";
-GRANT ALL ON TABLE "public"."subscriptions" TO "service_role";
 
 
 --
@@ -3842,6 +4099,85 @@ GRANT UPDATE("activities") ON TABLE "public"."work_days" TO "authenticated";
 
 
 --
+-- Name: TABLE "position_slot_flags"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."position_slot_flags" TO "anon";
+GRANT ALL ON TABLE "public"."position_slot_flags" TO "authenticated";
+GRANT ALL ON TABLE "public"."position_slot_flags" TO "service_role";
+
+
+--
+-- Name: TABLE "profiles"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."profiles" TO "anon";
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."profiles" TO "authenticated";
+GRANT ALL ON TABLE "public"."profiles" TO "service_role";
+
+
+--
+-- Name: TABLE "punches"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."punches" TO "anon";
+GRANT ALL ON TABLE "public"."punches" TO "authenticated";
+GRANT ALL ON TABLE "public"."punches" TO "service_role";
+
+
+--
+-- Name: TABLE "rate_limits"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."rate_limits" TO "anon";
+GRANT ALL ON TABLE "public"."rate_limits" TO "authenticated";
+GRANT ALL ON TABLE "public"."rate_limits" TO "service_role";
+
+
+--
+-- Name: TABLE "schema_migrations"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."schema_migrations" TO "service_role";
+
+
+--
+-- Name: TABLE "show_assignments"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."show_assignments" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."show_assignments" TO "authenticated";
+GRANT ALL ON TABLE "public"."show_assignments" TO "service_role";
+
+
+--
+-- Name: TABLE "show_crew_access"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."show_crew_access" TO "anon";
+GRANT ALL ON TABLE "public"."show_crew_access" TO "authenticated";
+GRANT ALL ON TABLE "public"."show_crew_access" TO "service_role";
+
+
+--
+-- Name: TABLE "shows"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."shows" TO "anon";
+GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."shows" TO "authenticated";
+GRANT ALL ON TABLE "public"."shows" TO "service_role";
+
+
+--
+-- Name: TABLE "subscriptions"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."subscriptions" TO "anon";
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."subscriptions" TO "authenticated";
+GRANT ALL ON TABLE "public"."subscriptions" TO "service_role";
+
+
+--
 -- Name: TABLE "timecard_day_rates"; Type: ACL; Schema: public; Owner: -
 --
 
@@ -3913,5 +4249,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict YdmTEhM9xiKB8zuIAIlxu1Xbh0W2rhdhY9dQ3c68iaohefM7lhSxhEKC0bALZVi
+\unrestrict b8aILizdIsrPou2wytWtUlceD6FttS0ceQE68RTDicx30Wcvj2LjfElW2FLHPiK
 
