@@ -513,6 +513,14 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   forward first. The reverted code is in git history (commits 1f2d6aa…20f8380 on `scheduling`,
   reverted immediately after) and `docs/superpowers/plans/2026-09-07-schedule-grid.md` records
   the design. Do not rebuild it until the earlier steps of that flow exist.
+- **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
+  real guard against an accident: a warning that spells out what goes with it (every day, room,
+  timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
+  confirmation. Recommend typing the SHOW'S NAME rather than a password: Google sign-ins have no
+  password to re-enter, and naming the thing you are about to lose is the stronger check. Admin
+  only, refused on a finalized show unless unlocked first, and never from the tracker — Edit Show,
+  at the bottom, below Archive. Cascades already exist on every child table, so the write is one
+  verified delete on `shows`; the work is the dialog and the permission.
 - **Booking status is not shown beside the role on a tracker crew row.** The column is fetched (`booking_status` is in `TIMECARD_SELECT` as of 2026-08-02), so this is pure display work — reuse the chip renderer in `CrewCallModal.tsx` rather than writing a second label/tone mapping.
 
 - **Declined bookings are filtered on read, in one place.** A declined person keeps their `timecards` row on purpose (migration 0012: it records that we asked and they said no) and does not hold their position. Nothing taught the *read* side that, so until 2026-08-02 a decliner rendered as ordinary staffed crew on the tracker, in reports, and in the emailed Final Report — while the same position also showed as Open. `lib/timecardFields.ts` now owns the rule via `fetchLiveTimecards()` and `liveBookings()`, applied in SQL (`.neq`) so a caller who forgets to select the column can't silently compare `undefined`. **Some queries must still see declined rows** and say so in a comment: `lib/crew.ts` (a write that nulls the FK before delete), the duplicate-staffing guards in `StaffRoomModal`/`CopyCrewButton` (`timecards_room_crew_uniq` has no `booking_status` predicate, so a declined row still occupies the slot), the booking API routes that set the status, and `lib/bookingInvite.ts` (the page a person declines *on*). `lib/payroll.ts` must never read `booking_status` — filter the input set, never the calculator.
