@@ -540,6 +540,69 @@ try {
   })
   await q(`update work_days set activities='{}', day_type=null where id=$1`, [wdA.id])
 
+  console.log('\n=== positions by kind: slots derived from the day grid (0034) ===')
+  {
+    const [sh] = await q(`insert into shows (organization_id, name, start_date, end_date) values ($1,'Eight Day','2026-11-02','2026-11-09') returning id`, [orgA])
+    const acts = [['travel'],['load_in'],['load_in','rehearsal'],['rehearsal','show'],['show'],['show'],['show','load_out'],['load_out','travel']]
+    const dayIds: string[] = []
+    for (let i = 0; i < 8; i++) {
+      const [d] = await q(`insert into work_days (show_id, date, day_number, activities) values ($1, ('2026-11-02'::date + $2::int)::date, $3, $4) returning id`, [sh.id, i, i + 1, acts[i]])
+      dayIds.push(d.id)
+      await q(`insert into rooms (work_day_id, name) values ($1,'Ballroom')`, [d.id])
+    }
+    const [dAll] = await q(`insert into position_defs (show_id, room_name, role, count, day_kind) values ($1,'Ballroom','A1',1,'all') returning id`, [sh.id])
+    const [dShow] = await q(`insert into position_defs (show_id, room_name, role, count, day_kind) values ($1,'Ballroom','Camera Op',2,'show') returning id`, [sh.id])
+    const [dLoad] = await q(`insert into position_defs (show_id, room_name, role, count, day_kind) values ($1,'Ballroom','Stagehand',3,'load') returning id`, [sh.id])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    const count = async (def: string) => (await q(`select count(*)::int n from crew_call_positions where position_def_id=$1`, [def]))[0].n as number
+    check('all days: one slot per day', await count(dAll.id) === 8, `${await count(dAll.id)}`)
+    check('show days: 2 × the 4 show days', await count(dShow.id) === 8, `${await count(dShow.id)}`)
+    check('load days: 3 × the 4 load days (in: Tue,Wed · out: Sun,Mon)', await count(dLoad.id) === 12, `${await count(dLoad.id)}`)
+    await q(`select sync_position_slots($1)`, [sh.id])
+    check('sync is idempotent', await count(dLoad.id) === 12, `${await count(dLoad.id)}`)
+
+    // Book a stagehand on Sunday (day 7, show+load_out), then retag Sunday to plain show.
+    const [sunRoom] = await q(`select id from rooms where work_day_id=$1`, [dayIds[6]])
+    const [slot] = await q(`select id from crew_call_positions where position_def_id=$1 and room_id=$2 limit 1`, [dLoad.id, sunRoom.id])
+    const [cmA] = await q(`select id from crew_members where organization_id=$1 and full_name='A Crew'`, [orgA])
+    await q(`insert into timecards (room_id, crew_member_id, crew_member_name, role, call_position_id, booking_status) values ($1,$2,'A Crew','Stagehand',$3,'confirmed')`, [sunRoom.id, cmA.id, slot.id])
+    await q(`update work_days set activities='{show}' where id=$1`, [dayIds[6]])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    const sunSlots = await q(`select id from crew_call_positions where position_def_id=$1 and room_id=$2`, [dLoad.id, sunRoom.id])
+    check('retagging removes the UNFILLED Sunday stagehand slots', sunSlots.length === 1 && sunSlots[0].id === slot.id, `${sunSlots.length} left`)
+    const flags = await q(`select role, crew_member_name from position_slot_flags where show_id=$1`, [sh.id])
+    check('and the booked one becomes a flag for a human', flags.length === 1 && flags[0].crew_member_name === 'A Crew', JSON.stringify(flags))
+
+    // Add a ninth day as load_out: open stagehand slots appear, nobody is added.
+    const [d9] = await q(`insert into work_days (show_id, date, day_number, activities) values ($1,'2026-11-10',9,'{load_out}') returning id`, [sh.id])
+    await q(`insert into rooms (work_day_id, name) values ($1,'Ballroom')`, [d9.id])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    const [r9] = await q(`select id from rooms where work_day_id=$1`, [d9.id])
+    const n9 = (await q(`select count(*)::int n from crew_call_positions where position_def_id=$1 and room_id=$2`, [dLoad.id, r9.id]))[0].n
+    check('a new load-out day grows 3 open stagehand slots', n9 === 3, `${n9}`)
+    const a9 = (await q(`select count(*)::int n from crew_call_positions where position_def_id=$1 and room_id=$2`, [dAll.id, r9.id]))[0].n
+    check('and 1 open A1 slot', a9 === 1, `${a9}`)
+    const booked9 = (await q(`select count(*)::int n from timecards t join rooms r on r.id=t.room_id where r.work_day_id=$1`, [d9.id]))[0].n
+    check('nobody was booked by the app', booked9 === 0, `${booked9}`)
+
+    // Lowering a count deletes unfilled extras only: 4 load days × 1 + the booked Sunday one.
+    await q(`update position_defs set count=1 where id=$1`, [dLoad.id])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    check('count 3 → 1 keeps one slot per load day plus the booked flag', await count(dLoad.id) === 5, `${await count(dLoad.id)}`)
+
+    // Custom dates ignore the grid.
+    const [dCus] = await q(`insert into position_defs (show_id, room_name, role, count, day_kind, custom_dates) values ($1,'Ballroom','Runner',1,'custom','{2026-11-04,2026-11-05}') returning id`, [sh.id])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    check('custom dates: exactly those days', await count(dCus.id) === 2, `${await count(dCus.id)}`)
+
+    // A signed-in editor can run the sync (policies decide the rows).
+    await asUser(alice, async () => {
+      const r = await probe(`select sync_position_slots($1)`, [sh.id])
+      check('a signed-in member can run the sync on a show they see', r.ok, r.ok ? '' : r.code)
+    })
+    await q(`delete from shows where id=$1`, [sh.id])
+  }
+
   console.log('\n=== signed out, nothing is visible ===')
   await c.query('begin'); await c.query('set local role anon')
   for (const t of ['shows', 'crew_members', 'timecards', 'punches', 'memberships', 'profiles', 'organizations']) {
