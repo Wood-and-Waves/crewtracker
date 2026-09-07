@@ -352,9 +352,13 @@ scripts/
                        staffing_events; extend_all_day_positions(); position_slot_flags learns
                        crew_member_id. WRITES EXISTING ROWS (backfills sent_to_scheduling_at
                        from call_approved_at).
+                       · 0036 staffing_events INSERT requires can_edit_timecards (0035 let any
+                       viewer of a show — crew-side logins included — write digest lines);
+                       extend_all_day_positions() keeps the person's booking_status. No rows.
                        0018–0034 applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0034 2026-09-07). **0035 is on DEV only**
-                       until its cutover (backup → --prod → db:grants → db:schema → merge).
+                       0021–0027 2026-09-06, 0028–0034 2026-09-07). **0035 and 0036 are on DEV
+                       only** until their cutover (backup → the pre-cutover scheduler check in
+                       the piece-C section → --prod → db:grants → db:schema → merge).
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -370,7 +374,7 @@ scripts/
 - `invitations` — token-based invites; `token`/`expires_at` have DB defaults
 - `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to); the scheduling-queue trio (0035): `sent_to_scheduling_at` / `sent_to_scheduling_by` (send-to-scheduling stamp — nobody OWNS a sent show, every member with `can_manage_scheduling` sees it) and `ready_email_sent_at` (the ready-email claim, see piece C below). `scheduler_id`, `call_approved_at`, `call_approved_by` are **history** — the single-scheduler handoff they supported is gone; nothing reads or writes them since 0035, they're kept only because 0035 backfills `sent_to_scheduling_at` FROM `call_approved_at` and dropping the source columns first would lose that.
 - `show_assignments` — links users to specific shows (the PM-side access list); carries a denormalized `organization_id` (see Past incidents); `source` (`manual|pm`, 0034) says whether an admin granted it by hand or the person accepted a PM invitation — replacing the PM deletes only `pm` rows
-- `staffing_events` — (0035) the digest's diary: show_id, organization_id (trigger-filled, same shape as `show_assignments`), at, kind (`booked|accepted|declined|released|days_changed|moved|extended`), crew_member_id/name, role, days, actor, sent_at. Select+insert for anyone who can see the show; only the digest cron (service role) marks `sent_at`.
+- `staffing_events` — (0035) the digest's diary: show_id, organization_id (trigger-filled, same shape as `show_assignments`), at, kind (`booked|accepted|declined|released|days_changed|moved|extended`), crew_member_id/name, role, days, actor, sent_at. Select for anyone who can see the show; insert needs `can_edit_timecards` too (0036 — a staffing event is a staffing act); only the digest cron (service role) marks `sent_at`.
 - `position_defs` — (0034) show_id, room_name, role, count 1–99, day_kind (`all|show|load|custom`), custom_dates, sort_order. "2 stagehands, Ballroom, load-in and load-out". `sync_position_slots(show_id)` derives `crew_call_positions` rows from these against `work_days.activities`: tops up wanted room-days, deletes only UNFILLED extras, never a booked person. Filled slots whose day no longer fits are the `position_slot_flags` view. `crew_call_positions.position_def_id` (null = a legacy or one-off slot the sync never touches).
 - `pm_invites` — (0034) token, show_id, profile_id, organization_id, sent_by, sent_at, accepted_at. Readable only in-org for a visible show, so an invitee cannot read their own token; the email carries it. `shows.pm_profile_id / pm_invited_at / pm_accepted_at` mirror the state for display.
 - `show_crew_access` — (show_id, profile_id, organization_id): a linked login is staffed on this show. Trigger-owned (0029); the app never writes it; its own policy is `profile_id = auth.uid()` so it can never form a cycle.
@@ -909,7 +913,29 @@ For every `day_kind = 'all'` definition, it books whoever held one of its slots 
 before into the first open slot of that definition on the new day (SECURITY INVOKER, so the
 ordinary `timecards` write policy still decides who may call it) and returns who it booked —
 `AddDayButton` logs an `extended` staffing event for each and offers the crew change notice
-for the same people, because their schedule just grew without them being asked.
+for the same people, because their schedule just grew without them being asked. The extended
+booking KEEPS the person's `booking_status` (0036) — somebody confirmed for the whole run is not
+re-asked because the run got a day longer. **On the tracker the refresh WAITS for the notice**:
+the tracker renders the Add Day circle only on the last day, so refreshing the moment the new
+day exists unmounts the button — and the notice with it — from the day the PM is still looking
+at (found on the phone tracker 2026-09-07; Edit Show keeps its button, so it never showed
+there). `AddDayButton` therefore refreshes from the notice's `onDone`, not before.
+
+**Known limit, awaiting Dan's call (2026-09-07):** `timecards.booking_status` defaults to
+`pencilled` and only `/book/[token]` ever writes `confirmed`, so a show staffed by hand
+(`StaffRoomModal`, Copy Crew, the extension above) never reaches "ready" — no ready email and
+therefore no digest for it. Either pencilled counts as staffed for readiness, or hand-staffed
+crew need a way to be marked confirmed. Decide before relying on those two emails.
+
+**Cutover of 0035 needs one extra step.** The backfill turns every show handed to ONE named
+scheduler into a show visible to everyone with `can_manage_scheduling` — and INVISIBLE to that
+named scheduler if they do not hold the permission (they had access through `scheduler_id`
+alone). Before `--prod`, run read-only:
+`select s.id, s.name, s.scheduler_id from shows s where s.call_approved_at is not null and not
+exists (select 1 from memberships m where m.profile_id = s.scheduler_id and m.organization_id =
+s.organization_id and m.can_manage_scheduling)` and grant the permission (or a manual
+`show_assignments` row) to anyone it returns. After: the count of `sent_to_scheduling_at is not
+null` must equal the old `call_approved_at` count.
 
 **Crew change notices are offered, never automatic, from three places**: `PositionDefsSection`
 (a Move or a Release), `RoomActionsMenu` (removing someone from a room) and `AddDayButton` (the

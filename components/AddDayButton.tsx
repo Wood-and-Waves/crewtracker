@@ -109,11 +109,21 @@ export default function AddDayButton({
             days: extendedDay,
           })
         }
-        setExtended(
-          ((extendedRows ?? []) as { crew_member_id: string | null; crew_member_name: string }[])
-            .filter((r): r is { crew_member_id: string; crew_member_name: string } => !!r.crew_member_id)
-            .map(r => ({ id: r.crew_member_id, name: r.crew_member_name })),
-        )
+        const people = ((extendedRows ?? []) as { crew_member_id: string | null; crew_member_name: string }[])
+          .filter((r): r is { crew_member_id: string; crew_member_name: string } => !!r.crew_member_id)
+          .map(r => ({ id: r.crew_member_id, name: r.crew_member_name }))
+        setExtended(people)
+        if (people.length > 0) {
+          // HOLD the refresh until the notice is answered. The tracker renders
+          // this button only on the LAST day; once the new day exists, a
+          // refresh drops the button (and the notice with it) from the day the
+          // PM is still looking at. Verified on dev: the notice vanished on the
+          // phone tracker and survived on Edit Show, where the button stays.
+          // onDone below refreshes.
+          setBusy(false)
+          setAsking(false)
+          return
+        }
       } else {
         setError(extendError.message)
       }
@@ -201,7 +211,7 @@ export default function AddDayButton({
           Floated (see the wrapper above) rather than in normal flow. */}
       {extended.length > 0 && (
         <div className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] border-2 border-ink bg-surface p-3 shadow-edge">
-          <CrewChangeNotice showId={showId} people={extended} onDone={() => setExtended([])} />
+          <CrewChangeNotice showId={showId} people={extended} onDone={() => { setExtended([]); router.refresh() }} />
         </div>
       )}
     </span>
