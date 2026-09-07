@@ -331,8 +331,13 @@ try {
       !hidden.ok || hidden.n === 0, hidden.ok ? `inserted ${hidden.n}` : '')
   })
 
-  // The scheduler_id arm 0013 added to the shows policy.
-  await q(`update shows set scheduler_id=$2 where id=$1`, [showA2.id, dave])
+  // The scheduler arm 0013 added to the shows policy — SUPERSEDED by 0035,
+  // which retires scheduler_id in favor of "holds can_manage_scheduling AND
+  // the show has been sent" (sent_to_scheduling_at). Same coverage, expressed
+  // the new way; this is the same rates-view gap 0026 fixed, now on the new
+  // gate instead of the old pointer.
+  await q(`update shows set sent_to_scheduling_at=now() where id=$1`, [showA2.id])
+  await q(`update memberships set can_manage_scheduling=true where profile_id=$1 and organization_id=$2`, [dave, orgA])
   await q(`update timecards set day_rate=321 where id=$1`, [tcA2.id])
   await asUser(dave, async () => {
     const days = await q(`select count(*)::int n from work_days where show_id=$1`, [showA2.id])
@@ -351,7 +356,8 @@ try {
     const v = await q(`select count(*)::int n from timecard_day_rates where timecard_id=$1`, [tcA2.id])
     check('but never without it', v[0].n === 0, `${v[0].n}`)
   })
-  await q(`update shows set scheduler_id=null where id=$1`, [showA2.id])
+  await q(`update memberships set can_manage_scheduling=false where profile_id=$1 and organization_id=$2`, [dave, orgA])
+  await q(`update shows set sent_to_scheduling_at=null where id=$1`, [showA2.id])
 
   console.log('\n=== a login links to its directory entry by email (0028) ===')
   {
@@ -628,6 +634,76 @@ try {
     check('replacing the PM drops the accepted-by-invite row and keeps a hand-granted one', before.n === 2 && after.n === 1, `${before.n} → ${after.n}`)
     await q(`delete from pm_invites where show_id=$1`, [showA2.id])
     await q(`update shows set pm_profile_id=null, pm_invited_at=null where id=$1`, [showA2.id])
+  }
+
+  console.log('\n=== schedulers see only shows sent to scheduling (0035) ===')
+  {
+    // dave gets the scheduling permission but is assigned only to showA.
+    await q(`update memberships set can_manage_scheduling=true where profile_id=$1 and organization_id=$2`, [dave, orgA])
+    await asUser(dave, async () => {
+      const s = await q(`select count(*)::int n from shows where id=$1`, [showA2.id])
+      check('a scheduler does NOT see a show that has not been sent', s[0].n === 0, `${s[0].n}`)
+    })
+    await q(`update shows set sent_to_scheduling_at=now() where id=$1`, [showA2.id])
+    await asUser(dave, async () => {
+      const s = await q(`select count(*)::int n from shows where id=$1`, [showA2.id])
+      check('once sent, a scheduler sees it', s[0].n === 1, `${s[0].n}`)
+      const t = await q(`select count(*)::int n from timecards where show_id=$1`, [showA2.id])
+      check('and every timecard on it (PM-side)', t[0].n === 1, `${t[0].n}`)
+      const pm = await q(`select count(*)::int n from my_pm_show_ids() f where f = $1`, [showA2.id])
+      check('my_pm_show_ids() agrees', pm[0].n === 1, `${pm[0].n}`)
+      const ins = await probe(`insert into staffing_events (show_id, kind, crew_member_name, role, days) values ($1,'booked','Sam','A1','Tue 3')`, [showA2.id])
+      check('a scheduler can log a staffing event on a sent show', ins.ok && ins.n === 1, ins.ok ? `${ins.n}` : ins.code)
+    })
+    await q(`update memberships set can_manage_scheduling=false where profile_id=$1 and organization_id=$2`, [dave, orgA])
+    await asUser(dave, async () => {
+      const s = await q(`select count(*)::int n from shows where id=$1`, [showA2.id])
+      check('without the permission a sent show is invisible again', s[0].n === 0, `${s[0].n}`)
+      const ins = await probe(`insert into staffing_events (show_id, kind, crew_member_name, role, days) values ($1,'booked','Sam','A1','Tue 3')`, [showA2.id])
+      check('and nobody can log events on a show they cannot see', !ins.ok || ins.n === 0, ins.ok ? `inserted ${ins.n}` : '')
+    })
+    await q(`update shows set scheduler_id=$2 where id=$1`, [showA2.id, dave])
+    await asUser(dave, async () => {
+      const s = await q(`select count(*)::int n from shows where id=$1`, [showA2.id])
+      check('the old scheduler_id pointer no longer opens anything', s[0].n === 0, `${s[0].n}`)
+    })
+    await q(`update shows set scheduler_id=null, sent_to_scheduling_at=null where id=$1`, [showA2.id])
+    await q(`delete from staffing_events where show_id=$1`, [showA2.id])
+  }
+
+  console.log('\n=== Add Day extends all-day people (0035) ===')
+  {
+    // A 2-day show, one room, an all-day A1 def and a show-day Camera def.
+    const [sh] = await q(`insert into shows (organization_id, name, start_date, end_date, created_by) values ($1,'Extend Me','2026-11-02','2026-11-03',$2) returning id`, [orgA, alice])
+    const [d1] = await q(`insert into work_days (show_id, date, day_number, activities) values ($1,'2026-11-02',1,'{show}') returning id`, [sh.id])
+    const [d2] = await q(`insert into work_days (show_id, date, day_number, activities) values ($1,'2026-11-03',2,'{show}') returning id`, [sh.id])
+    await q(`insert into rooms (work_day_id, name) values ($1,'Main'),($2,'Main')`, [d1.id, d2.id])
+    await q(`insert into position_defs (show_id, room_name, role, count, day_kind, sort_order) values ($1,'Main','A1',1,'all',0),($1,'Main','Camera Op',1,'show',1)`, [sh.id])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    // Book Sam into the A1 slot and Pat into the Camera slot on day 2.
+    const slots = await q(`select p.id, p.room_id, p.role from crew_call_positions p join rooms r on r.id=p.room_id where r.work_day_id=$1`, [d2.id])
+    for (const s of slots) {
+      await q(`insert into timecards (room_id, crew_member_name, role, call_position_id, booking_status) values ($1,$2,$3,$4,'confirmed')`,
+        [s.room_id, s.role === 'A1' ? 'Sam' : 'Pat', s.role, s.id])
+    }
+    // Day 3 arrives, tagged load-out (not a show day).
+    const [d3] = await q(`insert into work_days (show_id, date, day_number, activities) values ($1,'2026-11-04',3,'{load_out}') returning id`, [sh.id])
+    await q(`insert into rooms (work_day_id, name) values ($1,'Main')`, [d3.id])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    // asUser() always rolls back (see its own doc comment), so the write and
+    // the checks that depend on its effect — including the "run it twice"
+    // idempotency check — have to happen inside the SAME asUser transaction;
+    // a second asUser call opens a fresh transaction that never saw the first
+    // call's (rolled-back) insert and would just repeat it. Same shape as the
+    // "Add Day (copy crew) still works" check above.
+    await asUser(alice, async () => {
+      const n = (await q(`select count(*)::int n from extend_all_day_positions($1,$2)`, [sh.id, d3.id]))[0].n
+      const who = await q(`select t.crew_member_name from timecards t join rooms r on r.id=t.room_id where r.work_day_id=$1 order by 1`, [d3.id])
+      check('extends exactly the all-day person, not the show-day one', n === 1 && who.length === 1 && who[0].crew_member_name === 'Sam', JSON.stringify(who))
+      const again = (await q(`select count(*)::int n from extend_all_day_positions($1,$2)`, [sh.id, d3.id]))[0].n
+      check('running it twice adds nobody twice', again === 0, `${again}`)
+    })
+    await q(`delete from shows where id=$1`, [sh.id])
   }
 
   console.log('\n=== signed out, nothing is visible ===')
