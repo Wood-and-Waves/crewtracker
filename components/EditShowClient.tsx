@@ -53,7 +53,7 @@ export default function EditShowClient({
   crewRateEntries: any[]
   /** Handoff state, fetched server-side. Omitted for a caller who shouldn't
    *  see the Scheduling section at all. */
-  scheduling?: { schedulerName: string | null; positionCount: number; callSize: string }
+  scheduling?: { schedulerName: string | null; positionCount: number; callSize: string; openHandoff?: boolean }
   /** Positions by kind (piece B): definitions, flags and the role list. Omitted without the scheduling module. */
   positions?: { defs: DefRow[]; flags: SlotFlag[]; roles: string[] }
   /** The named production manager and where the invitation stands (piece B). */
@@ -555,6 +555,7 @@ export default function EditShowClient({
             schedulerName={scheduling.schedulerName}
             positionCount={scheduling.positionCount}
             callSize={scheduling.callSize}
+            initialOpen={scheduling.openHandoff}
           />
         </section>
       )}

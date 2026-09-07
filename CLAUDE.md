@@ -192,6 +192,7 @@ app/
     shows/[id]/page.tsx        — Show workspace: day nav, room columns, tracker console
     shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset, Crew Clock links
     shows/[id]/clock/print/page.tsx — printable venue QR sign (AppShell chrome is print:hidden)
+    shows/[id]/edit?handoff=1   — the same page with the handoff dialog already open ("Create show and send to scheduler")
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
     shows/new/page.tsx          — create a show: details, payroll preset, and the rooms×days positions grid
     schedule/page.tsx           — company-wide calendar across shows
@@ -201,10 +202,13 @@ app/
     invite/accept/route.ts       — finalizes invite acceptance for password sign-in path
     clock/identify/route.ts      — trades a venue QR for one person's personal link (POST only)
     clock/punch/route.ts         — the public punch write; owns every rule the DB doesn't (POST only)
+    pm/invite/route.ts           — name / clear / re-invite the PM (session; the shows UPDATE policy is the authorization)
+    pm/accept/route.ts           — the PM accepting: the ONLY writer of show_assignments(source='pm') (public, POST only, rate-limited)
     beta-signup/route.ts         — Join the Beta form submissions -> Resend
     reports/final/route.ts       — Final Report: renders CSV+PDF server-side, emails admin-designated recipients, locks the show
     keepalive/route.ts           — daily cron ping so Supabase's free tier doesn't pause (see Notes)
   clock/[token]/page.tsx       — PUBLIC crew clock: personal link punches, venue QR picks room then name
+  pm/[token]/page.tsx          — PUBLIC PM invitation: one Accept button; nothing is granted until it is pressed
   invite/[token]/page.tsx      — invite landing page
   invite/[token]/InviteAuthForm.tsx — client auth form for invite flow
   login/page.tsx               — Google SSO + email/password + magic link + forgot-password link
@@ -232,6 +236,8 @@ components/
   ExportCSVButton.tsx / ExportPDFButton.tsx — gated by financials permission
   SendHoursButton.tsx            — per-crew timesheet via Text / Share / Copy, hours only, never dollars
   CrewClockPanel.tsx / CrewClockSign.tsx — mint/copy/revoke crew clock links on Edit Show, and the printable venue QR
+  PositionDefsEditor.tsx / PositionDefsSection.tsx — positions by kind of day: the controlled editor (New Show) and the self-saving Edit Show section with the Move / Keep / Release flags
+  PmField.tsx                    — the production manager picker: an INVITATION on both New Show and Edit Show, with Invited/Accepted/Resend
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
@@ -260,7 +266,9 @@ lib/
   siteOrigin.ts — the origin for every link the app EMAILS; fixed per environment, never the Host header
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
   dayActivities.ts — what the show does each day: five activities, any set; label and tint DERIVED; the legacy day_type mapping (fromLegacy/toLegacy). lib/dayTypes.ts is a shim over it.
-proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, the keepalive cron, and exactly "/")
+  positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
+  pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
+proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, /book, /clock + /api/clock, /pm + /api/pm/accept, the keepalive cron, and exactly "/")
 scripts/
   run-sql.mjs   — runs a .sql file; dev by default, --prod for production (npm run db:sql)
   db-dump.mjs   — pg_dump wrapper, always production (npm run db:dump / db:schema)
@@ -271,7 +279,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 398 assertions as of 2026-09-07.
+                  helper, no framework. 424 assertions as of 2026-09-07.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -320,8 +328,12 @@ scripts/
                        which stays as a trigger-maintained mirror both ways; column grant
                        · 0033 editing a day requires can_edit_timecards (0015's policy
                        checked only visibility — a view-only member could retag days)
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0033 2026-09-07). Nothing is dev-only.
+                       · 0034 position_defs (a role, for these kinds of day) + derived slots
+                       via sync_position_slots() + position_slot_flags; the PM invitation
+                       (shows.pm_*, pm_invites, show_assignments.source). Writes NO existing rows.
+                       0018–0033 applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06, 0028–0033 2026-09-07). **0034 is on DEV only**
+                       until its cutover (backup → --prod → db:grants → db:schema → merge).
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -336,7 +348,9 @@ scripts/
 - `subscriptions` — one per org, auto-created via `handle_new_organization()` trigger
 - `invitations` — token-based invites; `token`/`expires_at` have DB defaults
 - `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to)
-- `show_assignments` — links users to specific shows (the PM-side access list); carries a denormalized `organization_id` (see Past incidents)
+- `show_assignments` — links users to specific shows (the PM-side access list); carries a denormalized `organization_id` (see Past incidents); `source` (`manual|pm`, 0034) says whether an admin granted it by hand or the person accepted a PM invitation — replacing the PM deletes only `pm` rows
+- `position_defs` — (0034) show_id, room_name, role, count 1–99, day_kind (`all|show|load|custom`), custom_dates, sort_order. "2 stagehands, Ballroom, load-in and load-out". `sync_position_slots(show_id)` derives `crew_call_positions` rows from these against `work_days.activities`: tops up wanted room-days, deletes only UNFILLED extras, never a booked person. Filled slots whose day no longer fits are the `position_slot_flags` view. `crew_call_positions.position_def_id` (null = a legacy or one-off slot the sync never touches).
+- `pm_invites` — (0034) token, show_id, profile_id, organization_id, sent_by, sent_at, accepted_at. Readable only in-org for a visible show, so an invitee cannot read their own token; the email carries it. `shows.pm_profile_id / pm_invited_at / pm_accepted_at` mirror the state for display.
 - `show_crew_access` — (show_id, profile_id, organization_id): a linked login is staffed on this show. Trigger-owned (0029); the app never writes it; its own policy is `profile_id = auth.uid()` so it can never form a cycle.
 - `payroll_rulesets` — one per show; mirrors iOS `PayrollRuleset`, plus `continuous_time_enabled`
 - `payroll_presets` — org-level named rule sets (one flagged `is_default`), **copied** into a show's `payroll_rulesets` at creation. Never a live link — a live link would retroactively rewrite closed shows. Writes gated on `can_manage_rulesets`.
@@ -750,6 +764,40 @@ day"). The column-grant trap: `work_days` UPDATE is column-granted, so 0032 gran
 explicitly; 0033 closed the pre-existing hole that let a view-only member retag days.
 `lib/payroll.ts` never reads any of it. Spec: `docs/superpowers/specs/2026-09-07-show-flow-design.md`.
 
+### Positions by kind and the PM invitation (piece B of the show flow, 2026-09-07)
+
+**A position is "a role, for these kinds of day", not a cell in a grid.** Sales says "2 stagehands
+in the Ballroom for load-in and load-out"; `position_defs` records exactly that, and the database
+derives the per-day slots (`crew_call_positions`) from the definitions and the day grid with
+`sync_position_slots(show_id)`. The slots stay what the scheduler fills; they simply gained a
+parent that says why they exist, so they follow the day grid when it changes. `lib/positionDefs.ts`
+is the browser twin (New Show previews the counts before the show exists; the grid's cells are
+read-only there). **THE ONE RULE: the app adds open slots freely and NEVER removes a booked
+person.** The sync deletes only unfilled slots; a booked slot whose day no longer fits its
+definition is a FLAG (`position_slot_flags`), listed on Edit Show → Positions with three human
+choices — Move (to one of the definition's open days), Keep (the slot detaches from the
+definition and becomes a one-off), Release (the booking is removed). The sync runs after every
+definition change, every day-activity toggle on Edit Show, and Add Day. Legacy slots
+(`position_def_id` null — everything that existed before 0034 and anything the room's ⋮ →
+Positions panel creates) are untouched by it. **Fill position** on a definition slot asks which
+of the definition's other open days the person is doing (all ticked; one slot per room-day, never
+the clicked slot's own room) and books them in ONE multi-row insert; a 23505 names the clashing
+day. A slot without a definition fills one day, exactly as before.
+
+**The PM is INVITED, and accepting is the only thing that grants access** (Dan: a silent accept
+is dangerous). Naming somebody — `PmField` on New Show or Edit Show, confirmed in words —
+writes `shows.pm_profile_id` through the caller's session (the shows UPDATE policy is the
+authorization) and mints a `pm_invites` token, then emails `/pm/<token>`. Nothing opens until
+`/api/pm/accept` (public, POST only, rate-limited per token and per IP) writes the
+`show_assignments` row with `source='pm'`. Replacing or clearing the PM deletes only `source='pm'`
+rows, so an admin's hand-granted access is never touched. `rls.mts` pins all of that: named-but-
+not-accepted sees nothing and cannot read the token; accepted sees the show; replacing keeps a
+manual assignment. **Two finish buttons on New Show**: "Create show" lands on the tracker;
+"Create show and send to scheduler" (disabled until the definitions produce at least one slot,
+the handoff route's own rule) lands on `/edit?handoff=1` with the handoff dialog open — today's
+pick-a-scheduler handoff, until piece C replaces it with the scheduling queue. Plan:
+`docs/superpowers/plans/2026-09-07-positions-by-kind-and-pm.md`.
+
 ### Already built — do not rebuild these
 
 - **Scheduling (2026-07-28; in production since the 2026-08-06 cutover).** The whole workflow:
@@ -757,7 +805,7 @@ explicitly; 0033 closed the pre-existing hole that let a view-only member retag 
   - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
   - **Handoff to a scheduler** — `shows.scheduler_id` / `call_approved_at`, approved from the show page, emails the scheduler. Requires at least one position.
   - **Booking requests** — `booking_invites`, emailed confirm/decline link at `/book/[token]` with no login, plus an SMS-ready text with deliberately no link. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
-  - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reachable from the positions panel **and** from open-position rows in the tracker.
+  - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reachable from the positions panel **and** from open-position rows in the tracker. Since piece B it books a definition's other open days too (a checklist, one insert).
 
 This list drifted badly once and sent a session off to re-implement finished work. If something here looks missing, search the repo before believing it.
 

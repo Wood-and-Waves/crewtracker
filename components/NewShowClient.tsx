@@ -154,8 +154,18 @@ export default function NewShowClient({
   const canCreate =
     !!name.trim() && !!startDate && !!endDate && dates.length > 0 && !loading &&
     badRoomKeys.length === 0
+  // Slots the definitions work out to. Zero means there is nothing to hand a
+  // scheduler — the same rule the handoff route enforces.
+  const previewTotal = useMemo(
+    () => Object.values(preview).reduce((n, byDay) => n + Object.values(byDay).reduce((a, b) => a + b, 0), 0),
+    [preview],
+  )
 
-  async function createShow() {
+  /**
+   * @param sendToScheduler  land on Edit Show with the handoff dialog open,
+   *   instead of on the tracker. Same create path either way.
+   */
+  async function createShow(sendToScheduler = false) {
     // Naming a PM sends them an email, so it is asked out loud, once, before
     // anything is written. Not on a retry: the invitation went with the first
     // attempt or the person is already told where to send it from.
@@ -331,7 +341,7 @@ export default function NewShowClient({
       }
     }
 
-    router.push(`/dashboard/shows/${showId}`)
+    router.push(sendToScheduler ? `/dashboard/shows/${showId}/edit?handoff=1` : `/dashboard/shows/${showId}`)
   }
 
   return (
@@ -499,12 +509,26 @@ export default function NewShowClient({
           height — it was sitting on top of the crew call grid. A full-width bar
           with its own background reads as chrome instead of debris, and it sits
           above the tab-bar, since two fixed-bottom elements otherwise collide. */}
-      <div className="fixed inset-x-0 bottom-20 z-40 border-t border-line bg-bg px-4 py-3 lg:inset-x-auto lg:bottom-6 lg:left-1/2 lg:w-auto lg:-translate-x-1/2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
-        <Button onClick={createShow} disabled={!canCreate} className="w-full lg:w-auto">
+      <div className="fixed inset-x-0 bottom-20 z-40 flex flex-col gap-2 border-t border-line bg-bg px-4 py-3 sm:flex-row lg:inset-x-auto lg:bottom-6 lg:left-1/2 lg:w-auto lg:-translate-x-1/2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+        <Button onClick={() => createShow(false)} disabled={!canCreate} className="w-full lg:w-auto">
           {/* "Try saving again" once the show exists: pressing this no longer
               creates a second one, and saying "Create show" would imply it did. */}
           {loading ? 'Saving…' : createdShowId ? 'Try saving again' : 'Create show'}
         </Button>
+        {/* Two finish buttons (Dan, 2026-09-07): the second is the same
+            creation and then straight into the handoff, for the person who
+            builds a show and hands it over in one sitting. */}
+        {schedulingEnabled && !createdShowId && (
+          <Button
+            variant="ghost"
+            onClick={() => createShow(true)}
+            disabled={!canCreate || previewTotal === 0}
+            title={previewTotal === 0 ? 'Add positions first — there is nothing to hand over yet.' : undefined}
+            className="w-full bg-bg lg:w-auto"
+          >
+            Create show and send to scheduler
+          </Button>
+        )}
       </div>
     </div>
   )

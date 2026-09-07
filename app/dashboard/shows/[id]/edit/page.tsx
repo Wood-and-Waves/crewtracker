@@ -7,8 +7,15 @@ import CrewClockPanel from '@/components/CrewClockPanel'
 import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
-export default async function EditShowPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditShowPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ handoff?: string }>
+}) {
   const { id } = await params
+  // "Create show and send to scheduler" lands here with ?handoff=1.
+  const { handoff } = await searchParams
   const supabase = await createClient()
 
   // The caller and show/ruleset/workDays are independent of each other (none
@@ -173,6 +180,7 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
         schedulerName: (scheduler as any)?.full_name || (scheduler as any)?.email || null,
         positionCount: callSummary.total,
         callSize: describeCallSize(callSummary),
+        openHandoff: handoff === '1',
       } : undefined}
       pm={pmState}
       positions={schedulingOn ? {

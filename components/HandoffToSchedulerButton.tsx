@@ -28,6 +28,7 @@ export default function HandoffToSchedulerButton({
   positionCount,
   callSize,
   compact = false,
+  initialOpen = false,
 }: {
   showId: string
   approvedAt: string | null
@@ -38,10 +39,13 @@ export default function HandoffToSchedulerButton({
   callSize: string
   /** Inline in a horizontal toolbar rather than stacked in a sidebar. */
   compact?: boolean
+  /** Open the dialog at once — New Show's "Create show and send to scheduler"
+   *  lands here with ?handoff=1 so the next step is already on screen. */
+  initialOpen?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(initialOpen && !approvedAt && positionCount > 0)
   const [members, setMembers] = useState<Member[]>([])
   const [schedulerId, setSchedulerId] = useState('')
   const [busy, setBusy] = useState(false)
