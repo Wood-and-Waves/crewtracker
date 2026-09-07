@@ -921,11 +921,14 @@ day exists unmounts the button — and the notice with it — from the day the P
 at (found on the phone tracker 2026-09-07; Edit Show keeps its button, so it never showed
 there). `AddDayButton` therefore refreshes from the notice's `onDone`, not before.
 
-**Known limit, awaiting Dan's call (2026-09-07):** `timecards.booking_status` defaults to
-`pencilled` and only `/book/[token]` ever writes `confirmed`, so a show staffed by hand
-(`StaffRoomModal`, Copy Crew, the extension above) never reaches "ready" — no ready email and
-therefore no digest for it. Either pencilled counts as staffed for readiness, or hand-staffed
-crew need a way to be marked confirmed. Decide before relying on those two emails.
+**A hand-staffed person is NOT staffed until somebody has said yes** (Dan, 2026-09-07: "We
+can't count them as staffed if they haven't confirmed"). `timecards.booking_status` defaults to
+`pencilled`, and only two things ever write `confirmed`: the person pressing Confirm on
+`/book/[token]`, or the scheduler recording the answer they were given — the Positions panel's
+**Yes / No** beside anyone `pencilled` OR `invited` (`POST /api/bookings/record`, through the
+caller's session, show-wide like a decline). That route logs the `accepted`/`declined` staffing
+event and runs `maybeSendReadyEmail`, so a yes written down by phone can be the one that
+completes the show exactly as a clicked Confirm can. Do not make readiness count pencilled crew.
 
 **Cutover of 0035 needs one extra step.** The backfill turns every show handed to ONE named
 scheduler into a show visible to everyone with `can_manage_scheduling` — and INVISIBLE to that

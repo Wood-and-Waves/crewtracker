@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling } from '@/lib/session'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { maybeSendReadyEmail, isExpectedReadyReason } from '@/lib/showReadiness'
+import { logStaffingEvent } from '@/lib/staffingEvents'
 
 // The scheduler recording an answer somebody gave them by phone or text.
 //
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
 
   const { data: theirs, error: readError } = await supabase
     .from('timecards')
-    .select('id, rooms!inner ( work_days!inner ( show_id ) )')
+    .select('id, role, crew_member_name, rooms!inner ( work_days!inner ( show_id ) )')
     .eq('crew_member_id', crewMemberId)
     .eq('rooms.work_days.show_id', showId)
 
@@ -101,6 +104,26 @@ export async function POST(request: Request) {
     })
     .eq('show_id', showId)
     .eq('crew_member_id', crewMemberId)
+
+  // The digest's diary, through the caller (their session, their actor id).
+  await logStaffingEvent(supabase, {
+    showId,
+    kind: response === 'confirmed' ? 'accepted' : 'declined',
+    crewMemberId,
+    crewMemberName: (theirs?.[0] as any)?.crew_member_name ?? 'A crew member',
+    role: (theirs?.[0] as any)?.role ?? null,
+  })
+
+  // A confirm recorded by hand can be the LAST one the show needed — the same
+  // check the public response route runs. Dan (2026-09-07): hand-staffed crew
+  // do not count as staffed until somebody has actually said yes, and this is
+  // where the scheduler writes that yes down. Never fails the response.
+  if (response === 'confirmed') {
+    const { sent, reason } = await maybeSendReadyEmail(createAdminClient(), showId)
+    if (!sent && !isExpectedReadyReason(reason)) {
+      console.error('maybeSendReadyEmail failed after a recorded confirm:', reason)
+    }
+  }
 
   return NextResponse.json({ ok: true, response, days: updated.length })
 }

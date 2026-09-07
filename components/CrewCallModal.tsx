@@ -337,8 +337,11 @@ export default function CrewCallModal({
                         </button>
                       )}
                       {/* Answers usually arrive by phone; recording one has to
-                          be as quick as reading it out. */}
-                      {p.filledBy && p.crewMemberId && !locked && p.status === 'invited' && (
+                          be as quick as reading it out. Offered for a PENCILLED
+                          person too (Dan, 2026-09-07): somebody staffed by hand
+                          is not confirmed until they have actually said yes, and
+                          the scheduler who heard it is the one to write it down. */}
+                      {p.filledBy && p.crewMemberId && !locked && (p.status === 'invited' || p.status === 'pencilled') && (
                         <>
                           <button
                             onClick={() => recordAnswer(p.crewMemberId!, 'confirmed')}
