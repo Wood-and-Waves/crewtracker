@@ -223,6 +223,7 @@ components/
   BatchPunchBar.tsx / BatchTimeModal.tsx — room-level batch punch actions and batch time entry
   MobileRoomTracker.tsx          — the <1024px tracker layout
   LayoutCookie.tsx               — tells the server which tracker tree (desktop/mobile) to render, so it sends ONE
+  ShowScheduleGrid.tsx           — Edit Show's crew × days grid (a cell is a timecard); ScheduleGrid.tsx is the company-wide Schedule page, a different thing
   CrewDirectoryClient.tsx / EditCrewMemberClient.tsx — Directory goes to a real data table on desktop
   TeamListClient.tsx / EditMemberClient.tsx / PermissionsEditor.tsx / InviteTeammateModal.tsx — org member admin
   EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode; two-column on desktop
@@ -255,6 +256,7 @@ lib/
   phone.ts      — phone formatting/normalisation
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
   trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
+  scheduleGrid.ts — the schedule grid's model: what a tap on a cell means (insert / flags / move / delete / refuse), pure and tested
   rateLimit.ts  — the throttle for the three public write routes; counters live in the database (0025)
   siteOrigin.ts — the origin for every link the app EMAILS; fixed per environment, never the Host header
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
@@ -269,7 +271,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 346 assertions as of 2026-09-06.
+                  helper, no framework. 370 assertions as of 2026-09-07 (payroll, schedule, clock, grid, rls).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
@@ -710,6 +712,29 @@ one show and an A1 on another, so what a login may do is decided PER SHOW, not p
 - Proven by `rls.mts` fixtures `sam` (crew on showA, assigned on showA2) and `samCrewA/B`:
   link exactly-one/never-cross-org/relink, own rows only, own punches only, no flags, PM-side
   on the assigned show, decline and unlink revoke, unlock matrix. 86 checks.
+
+### The schedule grid (Section 4, 2026-09-07)
+
+**Edit Show → Schedule: crew down the side, the show's days across, one cell per day.** Dan:
+*"Not everyone on the show works the same dates."* The data already handled it — a person is
+on a show one DAY at a time (a timecard per person × room-day, travel flags on it) — so the
+grid invents nothing: **a cell IS a timecard.** Tapping cycles Work → Travel In → Travel Out →
+Travel → empty; right-click / long-press picks directly; arrow keys walk the cells. Each tap is
+a verified write with optimistic paint (insert / update flags / move room / delete), the same
+rows the tracker's Staff room and Reset write, so the two can never disagree. `lib/scheduleGrid.ts`
+is the pure, tested model (`planChange()`); `components/ShowScheduleGrid.tsx` is the screen —
+NOT `ScheduleGrid.tsx`, which is the company-wide Schedule page and was overwritten by mistake
+once.
+- **The Room picker** above the grid decides which room a tapped cell goes into; each cell
+  shows its room's initials. Tapping into a room that does not run that day CREATES it there
+  (the header dims where the room is missing). Rooms are never deleted from the grid.
+- **Two refusals**, both with a plain sentence: a day with punches is never removed or moved
+  ("Clear Sam's punches on Wednesday first…"), and an absent day (no-show / cancelled) is the
+  tracker's to change, not the grid's.
+- **"+ Add crew"** is `StaffRoomModal` pointed at the selected room's first day with "apply to
+  all remaining days" — every show day as Work; travel is then set by tapping. No guessing.
+- **Desktop first** (Dan): verified at 1440×900; on a phone the grid scrolls inside itself.
+- New Show's finish lands on `/edit#schedule`.
 
 ### Already built — do not rebuild these
 

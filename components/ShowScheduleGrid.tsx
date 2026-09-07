@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Select from '@/components/ui/Select'
+import Button from '@/components/ui/Button'
+import StaffRoomModal from '@/components/StaffRoomModal'
 import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import { dayTypeBgClass, dayTypeLabel } from '@/lib/dayTypes'
@@ -62,8 +64,12 @@ export default function ShowScheduleGrid({
   const router = useRouter()
   const supabase = createClient()
   const [timecards, setTimecards] = useState(initial)
+  // Re-seed when the server's rows change — a router.refresh() after Add crew
+  // or after one of this grid's own writes. A useEffect on the PROP, not a
+  // key: remounting would drop the open menu and the room picker's state.
+  useEffect(() => { setTimecards(initial) }, [initial])
   const [error, setError] = useState('')
-  void showId; void organizationId; void canEditRates
+  void showId
 
   // Room NAMES, across every day.
   const roomNames = useMemo(() => [...new Set(rooms.map(r => r.name))].sort((a, b) => a.localeCompare(b)), [rooms])
@@ -91,6 +97,16 @@ export default function ShowScheduleGrid({
   }
 
   const [busyCell, setBusyCell] = useState<string | null>(null)   // `${personKey}|${dayId}`
+  // "+ Add crew" is the tracker's Staff room dialog, pointed at the selected
+  // room's FIRST day with "apply to all remaining days" — which is exactly
+  // "every show day as Work in this room". Travel is then set here, by tapping:
+  // guessing it would be wrong more often than blank.
+  const [adding, setAdding] = useState(false)
+  const roomInstances = useMemo(
+    () => days.map(d => roomIdOn(d.id, roomName)).filter((x): x is string => !!x),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [days, rooms, roomName],
+  )
   const [menu, setMenu] = useState<{ personKey: string; day: Day; x: number; y: number } | null>(null)
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -192,14 +208,41 @@ export default function ShowScheduleGrid({
     <section id="schedule" className="mb-8">
       <div className={cn(BAND, 'flex flex-wrap items-center justify-between gap-3 px-4 py-2')}>
         <h2 className="font-display text-lg font-bold uppercase tracking-wide">Schedule</h2>
-        {roomNames.length > 1 && (
-          <label className="flex items-center gap-2 text-xs uppercase tracking-wide text-band-ink/80">
-            Room
-            <Select ariaLabel="Room" size="sm" value={roomName} onChange={setRoomName}
-              options={roomNames.map(n => ({ value: n, label: n }))} />
-          </label>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {roomNames.length > 1 && (
+            <label className="flex items-center gap-2 text-xs uppercase tracking-wide text-band-ink/80">
+              Room
+              <Select ariaLabel="Room" size="sm" value={roomName} onChange={setRoomName}
+                options={roomNames.map(n => ({ value: n, label: n }))} />
+            </label>
+          )}
+          {canEdit && (
+            <Button
+              size="sm"
+              onClick={() => setAdding(true)}
+              disabled={locked || roomInstances.length === 0}
+              title={locked ? 'Times are locked' : roomInstances.length === 0 ? 'Add a room first' : undefined}
+            >
+              + Add crew
+            </Button>
+          )}
+        </div>
       </div>
+      {canEdit && roomInstances.length > 0 && (
+        <StaffRoomModal
+          locked={locked}
+          organizationId={organizationId}
+          roomId={roomInstances[0]}
+          roomName={roomName}
+          currentWorkDayId={roomById.get(roomInstances[0])!.work_day_id}
+          remainingRoomIdsSameName={roomInstances.slice(1)}
+          dayAssignments={[]}
+          canEditRates={canEditRates}
+          open={adding}
+          onOpenChange={setAdding}
+          hideTrigger
+        />
+      )}
 
       <div className="overflow-x-auto" onKeyDown={onGridKeyDown}>
         <div style={{ minWidth: 220 + days.length * 64 }}>
