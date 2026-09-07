@@ -192,10 +192,10 @@ app/
     shows/[id]/page.tsx        — Show workspace: day nav, room columns, tracker console
     shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset, Crew Clock links
     shows/[id]/clock/print/page.tsx — printable venue QR sign (AppShell chrome is print:hidden)
-    shows/[id]/edit?handoff=1   — the same page with the handoff dialog already open ("Create show and send to scheduler")
+    shows/[id]/edit?handoff=1   — the same page with the send-to-scheduling confirm already open ("Create show and send to scheduler")
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
     shows/new/page.tsx          — create a show: details, payroll preset, and the rooms×days positions grid
-    schedule/page.tsx           — company-wide calendar across shows
+    schedule/page.tsx           — company-wide calendar across shows, plus the Needs-scheduling queue
     settings/page.tsx           — personal prefs, org settings, AV Roles editor, payroll presets
   api/
     admin/create-invite/route.ts — server-side invite creation (service role, bypasses RLS)
@@ -204,6 +204,9 @@ app/
     clock/punch/route.ts         — the public punch write; owns every rule the DB doesn't (POST only)
     pm/invite/route.ts           — name / clear / re-invite the PM (session; the shows UPDATE policy is the authorization)
     pm/accept/route.ts           — the PM accepting: the ONLY writer of show_assignments(source='pm') (public, POST only, rate-limited)
+    shows/send-to-scheduling/route.ts — sends a show to every member with can_manage_scheduling, or takes it back (replaced approve-call)
+    crew/days-changed/route.ts   — emails the crew change notice; session, scheduling-gated, caller's RLS decides who's readable
+    digest/route.ts              — the evening staffing digest, one email per staffed show (GET, CRON_SECRET bearer, see piece C below)
     beta-signup/route.ts         — Join the Beta form submissions -> Resend
     reports/final/route.ts       — Final Report: renders CSV+PDF server-side, emails admin-designated recipients, locks the show
     keepalive/route.ts           — daily cron ping so Supabase's free tier doesn't pause (see Notes)
@@ -238,6 +241,9 @@ components/
   CrewClockPanel.tsx / CrewClockSign.tsx — mint/copy/revoke crew clock links on Edit Show, and the printable venue QR
   PositionDefsEditor.tsx / PositionDefsSection.tsx — positions by kind of day: the controlled editor (New Show) and the self-saving Edit Show section with the Move / Keep / Release flags
   PmField.tsx                    — the production manager picker: an INVITATION on both New Show and Edit Show, with Invited/Accepted/Resend
+  SendToSchedulingButton.tsx     — sends a show to the scheduling queue or takes it back, in-place confirm (replaced HandoffToSchedulerButton)
+  NeedsSchedulingList.tsx        — the schedule screen's queue: sent shows with open slots, replies waiting, or flags, oldest first
+  CrewChangeNotice.tsx           — the offered-never-forced "tell the crew whose days changed" bar, posted from PositionDefsSection, RoomActionsMenu and AddDayButton
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
@@ -268,7 +274,12 @@ lib/
   dayActivities.ts — what the show does each day: five activities, any set; label and tint DERIVED; the legacy day_type mapping (fromLegacy/toLegacy). lib/dayTypes.ts is a shim over it.
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
   pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
-proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, /book, /clock + /api/clock, /pm + /api/pm/accept, the keepalive cron, and exactly "/")
+  schedulingQueue.ts — the Needs-scheduling list: summarizeQueue (pure) + fetchSchedulingQueue, scoped by the caller's RLS
+  readyEmail.ts / showReadiness.ts — the "fully staffed" email to the PM (compressDays/buildReadyEmail/sendReadyEmail) and the ONE gate that decides whether to send it (maybeSendReadyEmail)
+  staffingEvents.ts — logStaffingEvent(): best-effort, never throws, the digest's diary
+  digestEmail.ts  — the evening digest's copy (describeEvent, sendDigestEmail)
+  daysChangedEmail.ts — the crew change notice's email (sendDaysChangedEmail)
+proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, /book, /clock + /api/clock, /pm + /api/pm/accept, /api/digest, the keepalive cron, and exactly "/")
 scripts/
   run-sql.mjs   — runs a .sql file; dev by default, --prod for production (npm run db:sql)
   db-dump.mjs   — pg_dump wrapper, always production (npm run db:dump / db:schema)
@@ -279,9 +290,10 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 424 assertions as of 2026-09-07.
+                  helper, no framework. 455 assertions as of 2026-09-07.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
-    schedule.mts  — date arithmetic, the call grid, canUseScheduling (npm run test:schedule)
+    schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
+                    the ready email, and the crew-days-changed copy (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
                     two-check punch guard (npm run test:clock)
     rls.mts       — real anon/authenticated sessions against DEV; the ONLY test that can
@@ -290,6 +302,9 @@ scripts/
                     every fixture either saw all shows or was in another company, so the
                     show_assignments branch of the shows policy was never exercised.
     alias-loader.mjs — resolves `@/` imports so the .mts files can import from lib/
+    preview-show-emails.mts — prints every show-flow email (`npm run preview:emails`) —
+                    the handoff, the ready email, the digest, and the crew days-changed
+                    notice — without sending one, for reading the copy over
   sql/
     schema.sql       — generated baseline; the shape of the database. Do not hand-edit.
     out-of-schema.sql— generated; triggers pg_dump --schema=public can't see
@@ -331,8 +346,15 @@ scripts/
                        · 0034 position_defs (a role, for these kinds of day) + derived slots
                        via sync_position_slots() + position_slot_flags; the PM invitation
                        (shows.pm_*, pm_invites, show_assignments.source). Writes NO existing rows.
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0034 2026-09-07). Nothing is dev-only.
+                       · 0035 the scheduling queue: shows.sent_to_scheduling_at/_by +
+                       ready_email_sent_at; the can_manage_scheduling-and-sent arm of every
+                       shows/timecards/punches visibility rule and timecard_day_rates;
+                       staffing_events; extend_all_day_positions(); position_slot_flags learns
+                       crew_member_id. WRITES EXISTING ROWS (backfills sent_to_scheduling_at
+                       from call_approved_at).
+                       0018–0034 applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06, 0028–0034 2026-09-07). **0035 is on DEV only**
+                       until its cutover (backup → --prod → db:grants → db:schema → merge).
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -346,8 +368,9 @@ scripts/
 - `profiles` — id (= auth.uid), organization_id, full_name, email, base_role, use_24_hour_time (bool), shoulder_surfer_mode (bool), + permission booleans
 - `subscriptions` — one per org, auto-created via `handle_new_organization()` trigger
 - `invitations` — token-based invites; `token`/`expires_at` have DB defaults
-- `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to)
+- `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to); the scheduling-queue trio (0035): `sent_to_scheduling_at` / `sent_to_scheduling_by` (send-to-scheduling stamp — nobody OWNS a sent show, every member with `can_manage_scheduling` sees it) and `ready_email_sent_at` (the ready-email claim, see piece C below). `scheduler_id`, `call_approved_at`, `call_approved_by` are **history** — the single-scheduler handoff they supported is gone; nothing reads or writes them since 0035, they're kept only because 0035 backfills `sent_to_scheduling_at` FROM `call_approved_at` and dropping the source columns first would lose that.
 - `show_assignments` — links users to specific shows (the PM-side access list); carries a denormalized `organization_id` (see Past incidents); `source` (`manual|pm`, 0034) says whether an admin granted it by hand or the person accepted a PM invitation — replacing the PM deletes only `pm` rows
+- `staffing_events` — (0035) the digest's diary: show_id, organization_id (trigger-filled, same shape as `show_assignments`), at, kind (`booked|accepted|declined|released|days_changed|moved|extended`), crew_member_id/name, role, days, actor, sent_at. Select+insert for anyone who can see the show; only the digest cron (service role) marks `sent_at`.
 - `position_defs` — (0034) show_id, room_name, role, count 1–99, day_kind (`all|show|load|custom`), custom_dates, sort_order. "2 stagehands, Ballroom, load-in and load-out". `sync_position_slots(show_id)` derives `crew_call_positions` rows from these against `work_days.activities`: tops up wanted room-days, deletes only UNFILLED extras, never a booked person. Filled slots whose day no longer fits are the `position_slot_flags` view. `crew_call_positions.position_def_id` (null = a legacy or one-off slot the sync never touches).
 - `pm_invites` — (0034) token, show_id, profile_id, organization_id, sent_by, sent_at, accepted_at. Readable only in-org for a visible show, so an invitee cannot read their own token; the email carries it. `shows.pm_profile_id / pm_invited_at / pm_accepted_at` mirror the state for display.
 - `show_crew_access` — (show_id, profile_id, organization_id): a linked login is staffed on this show. Trigger-owned (0029); the app never writes it; its own policy is `profile_id = auth.uid()` so it can never form a cycle.
@@ -482,19 +505,11 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   planning session**, not separately: that session is "how a show gets built and handed out"
   and this is its staffing step.
 
-- **Change notices to a staffed show's crew — recommended, never forced.** Raised by Dan
-  2026-09-06: when a show that is fully or partly staffed changes in a way the crew need to know
-  — a day added or removed, the venue or city changed, times moved — the app should *offer* to
-  email everyone on the show an update, from the screen where the change was made. Not
-  automatic: the PM may be mid-edit, or the change may not matter to crew, so it is a
-  recommendation they accept or dismiss ("Notify 14 crew about this change?"). Not designed
-  yet. Things to settle: which edits count (Add Day, delete day, venue/city/date changes on
-  Edit Show; probably not room renames); who is "on the show" (everyone with a live timecard —
-  the same `liveBookings()` set the reports use; declined excluded); one email per person, not
-  per day; what the email says (the change, plus their current days — reuse the timesheet's
-  day list); and whether it needs the scheduling module (it uses email like booking requests
-  do, so it probably sits behind the same entitlement). Reuse `lib/bookingEmail.ts`'s sender
-  and `siteOrigin()` for links.
+- ~~Change notices to a staffed show's crew — recommended, never forced.~~ **DONE 2026-09-07
+  (piece C).** Offered — never automatic — from `PositionDefsSection` (move/release),
+  `RoomActionsMenu` (remove) and `AddDayButton` (the all-day extension); `CrewChangeNotice`
+  posts to `/api/crew/days-changed`, which lists only that person's LIVE days and never resends
+  the same name twice. See "The scheduling queue and the PM emails" below.
 
 - **Per-organization branding of outward-facing email and pages (white-label).** Raised by Dan 2026-07-28 after seeing the handoff and crew-request emails, and again 2026-09-06 with the crew clock in mind: *"Company should be able to add their logo, name, etc."* A production company sending a booking request to its own crew, or handing crew a punch link, will want it to look like *their* company, not CrewTracker. Affects every outward surface — `lib/inviteEmail.ts`, `lib/callHandoffEmail.ts`, `lib/bookingEmail.ts`, the Final Report PDF, the public `/book/[token]` page, and now the crew clock pages (`/clock/[token]`, the venue QR sign, the identify screen). Deferred, not designed. Shape when it comes: `organizations` gains `brand_name`, `brand_logo` (stored via Supabase Storage, public read) and maybe an accent colour, edited on Settings → Organization by `can_manage_users`; every outward surface reads them through one helper so a missing logo falls back to the CrewTracker mark, never to a broken image. Two things make it more than a logo swap: the sender domain (Resend needs a verified domain per sender, so `noreply@contact.crewtracker.app` cannot simply become the customer's address without them proving ownership), and the fact that a crew member working for three companies should see three different-looking asks. Build the surfaces so the org name and mark are already data rather than constants, and this stays a change of values rather than a rewrite.
 
@@ -568,7 +583,7 @@ It lives in permissions.ts because it is pure and session.ts is server-only — 
 session.ts into a test drags in `next/headers` and dies.
 
 **What is in the module**: positions (`crew_call_positions`) and the New Show positions grid ·
-room ⋮ → Positions · Fill position · open-position rows on the tracker · handoff to scheduler ·
+room ⋮ → Positions · Fill position · open-position rows on the tracker · the scheduling queue ·
 booking requests (emails, SMS text, `/book/[token]`, record-by-phone) · `/dashboard/schedule` ·
 the shows list's **Staffing** column and its sort. **What is NOT**: everything else, including
 **day types** (they label what the production is doing and belong to the show) and staffing crew
@@ -580,8 +595,8 @@ the UI is hidden and switching back on restores the feature whole. This is why
 so the decline filter is simply inert. **Not enforced in RLS**, deliberately, matching the call
 recorded for `disabled_at`: a commercial state is not a security boundary, and an RLS gate would
 risk cutting a downgraded customer off from exports they are still owed. The API routes
-(`api/bookings/*`, `api/shows/approve-call`) re-check server-side and 403; `/book/[token]` stays
-public and ungated so an invite already sent can still be answered.
+(`api/bookings/*`, `api/shows/send-to-scheduling`, `api/crew/days-changed`) re-check server-side
+and 403; `/book/[token]` stays public and ungated so an invite already sent can still be answered.
 
 **The trap worth knowing**: `CrewCallGrid` is also the ONLY room editor on New Show. With the
 module off it collapses to a rooms-only editor (`schedulingEnabled={false}`) rather than being
@@ -816,16 +831,109 @@ rows, so an admin's hand-granted access is never touched. `rls.mts` pins all of 
 not-accepted sees nothing and cannot read the token; accepted sees the show; replacing keeps a
 manual assignment. **Two finish buttons on New Show**: "Create show" lands on the tracker;
 "Create show and send to scheduler" (disabled until the definitions produce at least one slot,
-the handoff route's own rule) lands on `/edit?handoff=1` with the handoff dialog open — today's
-pick-a-scheduler handoff, until piece C replaces it with the scheduling queue. Plan:
+the send-to-scheduling route's own rule) lands on `/edit?handoff=1` with the send-to-scheduling
+confirm already open — piece C (below) replaced the pick-a-scheduler handoff with the queue.
+Plan:
 `docs/superpowers/plans/2026-09-07-positions-by-kind-and-pm.md`.
+
+### The scheduling queue and the PM emails (piece C of the show flow, 2026-09-07)
+
+**Sending a show to scheduling no longer names one person — it opens the show to everyone
+who can schedule.** The old handoff picked a single scheduler (`shows.scheduler_id`); that
+became a bottleneck the moment more than one person in a company did scheduling work, and it
+meant a PM had to know WHO to hand a show to rather than just "is it ready for someone to
+schedule." `SendToSchedulingButton` (replaced `HandoffToSchedulerButton`) just stamps
+`shows.sent_to_scheduling_at` and emails every live member holding `can_manage_scheduling`
+via `lib/callHandoffEmail.ts` (reworded "needs scheduling," not "call"). **Nobody owns a sent
+show** — first scheduler to open it works it, same as the tracker never assigning a room to
+one PM. Taking it back (`takeBack: true` on the same route) clears the stamp. The `shows`
+UPDATE policy deliberately has NO scheduler arm: sending and taking back are the show
+builder's acts, not the scheduler's.
+
+**`shows.scheduler_id`, `call_approved_at`, `call_approved_by` are history — written and read
+by nothing.** They stay in the schema only because migration 0035 backfills
+`sent_to_scheduling_at`/`_by` FROM them, so a show handed off under the old system keeps its
+state. Don't resurrect them for anything new; `lib/showStatus.ts` reads `sent_to_scheduling_at`
+exclusively now.
+
+**The permission door — "holds `can_manage_scheduling` AND the show is sent" — replaced the
+old `scheduler_id` arm in the SAME five places**, because all five had grown their own copy of
+"can a scheduler see this": the `shows` SELECT policy, `my_pm_show_ids()` (so a scheduler
+counts as PM-side once a show reaches them), the `timecards` and `punches` SELECT policies, and
+the `timecard_day_rates` view (SECURITY DEFINER, so it always needs its own copy of the shows
+rule — the same lesson 0026 already taught once). Miss one of the five and a scheduler can see
+a show's roster but not its punches, or the reverse — pinned by `rls.mts`.
+
+**`/dashboard/schedule` gets a Needs-scheduling list** (`lib/schedulingQueue.ts`,
+`components/NeedsSchedulingList.tsx`): every sent show that still has an open slot, a booking
+waiting on a reply (pencilled/invited), or a position-slot flag, oldest-sent first — scoping
+is RLS, so a scheduler's session only ever returns shows they're entitled to. A sent show with
+nothing left to do simply doesn't appear; it isn't a "done" list, it's a work queue.
+
+**The ready email has ONE gate: `lib/showReadiness.ts`'s `maybeSendReadyEmail(admin, showId)`.**
+Two callers — `/api/bookings/respond` after a confirmation, `/api/pm/accept` after the PM's
+acceptance stamps land — because either one can be the event that completes a show (the last
+open slot gets confirmed, or a PM accepts a show that was already full). "Ready" means an
+accepted PM AND no open slot AND no booking still pencilled/invited; a show with no positions
+and no timecards at all is "nothing to staff," not ready. **The stamp is claimed BEFORE
+sending, with a conditional `UPDATE ... WHERE ready_email_sent_at IS NULL`** — two confirmations
+landing at once would otherwise both read the column as null and both fire Resend; only the
+first claim's `UPDATE` matches any rows, so the loser sees "already sent" and does nothing. If
+the send itself then fails, the claim is released so the next trigger can retry — and a failed
+release is logged loudly rather than silently leaving a show stamped sent with no email ever
+sent. Once sent it never resends, even if a slot later reopens — this is a "you're staffed,
+go" email, not a live status page. The function never throws into its callers; every branch
+returns `{ sent, reason }`, and both call sites' error logging shares `isExpectedReadyReason()`
+so "already sent" doesn't spam the log next to a real failure.
+
+**`staffing_events` (0035) is the digest's diary, and the digest is a SEPARATE email from the
+ready email — it only starts once the ready email has already gone.** `lib/staffingEvents.ts`'s
+`logStaffingEvent()` is best-effort (never throws, console.error and move on — it runs after
+the write it's annotating has already landed, so it must never make that write look failed);
+writers are `/api/bookings/respond`, `FillPositionPicker`, `PositionDefsSection`,
+`RoomActionsMenu` and `StaffRoomModal`. `app/api/digest` (GET, `CRON_SECRET` bearer like
+keepalive, allowlisted in `proxy.ts`, `vercel.json` cron `30 23 * * *` — 11:30pm UTC) finds
+every show with an accepted PM, a `ready_email_sent_at`, not finalized or archived, that has
+unsent `staffing_events` rows, builds one email per show, and marks those rows sent. Each
+line's status is looked up FRESH against the show's current timecards at send time, not frozen
+at the moment the event happened — a person booked and then later declined shows as "declined,"
+not "accepted," even though the event that triggered the line said "booked." A failure on one
+show (bad PM email, a send error, an unexpected exception) is logged and skipped; the run
+still processes every other show, and the unsent rows stay unsent so the next day's run tries
+again rather than losing the event.
+
+**`extend_all_day_positions(show, work_day)`** is Add Day's answer to "positions by kind"
+making plain copy-crew stop making sense: once a show has position DEFINITIONS, adding a day
+should top up the all-day ones automatically rather than asking the PM to re-staff by hand.
+For every `day_kind = 'all'` definition, it books whoever held one of its slots the day
+before into the first open slot of that definition on the new day (SECURITY INVOKER, so the
+ordinary `timecards` write policy still decides who may call it) and returns who it booked —
+`AddDayButton` logs an `extended` staffing event for each and offers the crew change notice
+for the same people, because their schedule just grew without them being asked.
+
+**Crew change notices are offered, never automatic, from three places**: `PositionDefsSection`
+(a Move or a Release), `RoomActionsMenu` (removing someone from a room) and `AddDayButton` (the
+extension above). `components/CrewChangeNotice.tsx` is the same in-place confirm-bar shape as
+`PmField` — a suggestion, not a dialog blocking anything — and posts to
+`POST /api/crew/days-changed { showId, crewMemberIds }` (session, scheduling-gated, the
+caller's RLS decides what's readable — no service role, because this only reads and emails).
+`lib/daysChangedEmail.ts` lists only that person's LIVE days (a declined day is never one of
+theirs) and the route de-dupes so nobody named in two rooms on the same show gets counted, or
+named, twice.
+
+**`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
+piece introduced — plus the reworded handoff email — without sending one, the same shape as the
+existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 232 +
+clock 61 + rls 120 = 455 assertions.
+
+Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
 ### Already built — do not rebuild these
 
 - **Scheduling (2026-07-28; in production since the 2026-08-06 cutover).** The whole workflow:
   - `/dashboard/schedule` — company-wide calendar, rooms×days grid on desktop, agenda on mobile. `lib/schedule.ts` holds the cross-show query.
   - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
-  - **Handoff to a scheduler** — `shows.scheduler_id` / `call_approved_at`, approved from the show page, emails the scheduler. Requires at least one position.
+  - **The scheduling queue** — `shows.sent_to_scheduling_at`, sent from the show page to EVERY member holding `can_manage_scheduling` (nobody owns a sent show; see piece C below). Requires at least one position. `shows.scheduler_id` / `call_approved_at` are history, superseded 2026-09-07.
   - **Booking requests** — `booking_invites`, emailed confirm/decline link at `/book/[token]` with no login, plus an SMS-ready text with deliberately no link. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
   - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reachable from the positions panel **and** from open-position rows in the tracker. Since piece B it books a definition's other open days too (a checklist, one insert).
 
