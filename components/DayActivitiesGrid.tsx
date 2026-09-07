@@ -31,7 +31,10 @@ function dayHead(date: string) {
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-const COLS = 'grid-cols-[minmax(96px,1fr)_repeat(5,32px)_minmax(110px,1.2fr)] sm:grid-cols-[130px_repeat(5,36px)_1fr]'
+// Columns sized for the WORDS in the header, not just the squares: at 36px
+// "Rehearsal" truncated to "REH…" on Dan's first look. Phone widths keep the
+// squares tight and let the header wrap.
+const COLS = 'grid-cols-[minmax(96px,1fr)_repeat(5,34px)_minmax(110px,1.2fr)] sm:grid-cols-[130px_repeat(5,84px)_minmax(160px,1fr)]'
 
 export default function DayActivitiesGrid({
   rows, value, onToggle, busyKey = null, error,
@@ -48,7 +51,7 @@ export default function DayActivitiesGrid({
     <div>
       <div className={cn('grid items-center gap-x-2 border-b-2 border-ink pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted', COLS)}>
         <div>Day</div>
-        {ACTIVITIES.map(a => <div key={a} className="truncate text-center">{ACTIVITY_LABELS[a]}</div>)}
+        {ACTIVITIES.map(a => <div key={a} className="text-center leading-tight">{ACTIVITY_LABELS[a]}</div>)}
         <div>Reads as</div>
       </div>
       {rows.map(r => {
