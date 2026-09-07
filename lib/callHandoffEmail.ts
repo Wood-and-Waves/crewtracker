@@ -53,10 +53,10 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
     '',
     `${input.showName} has been sent to scheduling${sentBy}. Any scheduler can fill its positions; it's first come, first served.`,
     '',
-    `Show:   ${input.showName}`,
-    input.venue ? `Venue:  ${input.venue}` : null,
-    `Dates:  ${dates}`,
-    `Call:   ${positions}`,
+    `Show:       ${input.showName}`,
+    input.venue ? `Venue:      ${input.venue}` : null,
+    `Dates:      ${dates}`,
+    `Positions:  ${positions}`,
     '',
     `Open it here: ${input.link}`,
     '',
@@ -74,7 +74,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
     <tr><td style="padding:6px 0;color:#71717a;width:80px">Show</td><td style="padding:6px 0">${escapeHtml(input.showName)}</td></tr>
     ${input.venue ? `<tr><td style="padding:6px 0;color:#71717a">Venue</td><td style="padding:6px 0">${escapeHtml(input.venue)}</td></tr>` : ''}
     <tr><td style="padding:6px 0;color:#71717a">Dates</td><td style="padding:6px 0">${escapeHtml(dates)}</td></tr>
-    <tr><td style="padding:6px 0;color:#71717a">Call</td><td style="padding:6px 0">${escapeHtml(positions)}</td></tr>
+    <tr><td style="padding:6px 0;color:#71717a">Positions</td><td style="padding:6px 0">${escapeHtml(positions)}</td></tr>
   </table>
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.link)}"

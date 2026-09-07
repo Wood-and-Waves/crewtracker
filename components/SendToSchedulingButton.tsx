@@ -86,29 +86,22 @@ export default function SendToSchedulingButton({
     router.refresh()
   }
 
-  if (sentAt) {
-    return (
-      <div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <Chip tone="good">With scheduling</Chip>
-          <span>since {fmt(sentAt)}</span>
-          <button
-            type="button"
-            className="font-semibold text-accent hover:underline disabled:opacity-40"
-            disabled={busy}
-            onClick={takeBack}
-          >
-            Take back
-          </button>
-        </div>
-        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-      </div>
-    )
-  }
-
   const nothingToSend = positionCount === 0
 
-  return (
+  const stateBlock = sentAt ? (
+    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+      <Chip tone="good">With scheduling</Chip>
+      <span>since {fmt(sentAt)}</span>
+      <button
+        type="button"
+        className="font-semibold text-accent hover:underline disabled:opacity-40"
+        disabled={busy}
+        onClick={takeBack}
+      >
+        Take back
+      </button>
+    </div>
+  ) : (
     <div>
       <Button
         variant="ghost"
@@ -131,7 +124,12 @@ export default function SendToSchedulingButton({
           </div>
         </div>
       )}
+    </div>
+  )
 
+  return (
+    <div>
+      {stateBlock}
       {notice && <p className="mt-2 text-xs text-muted">{notice}</p>}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
     </div>
