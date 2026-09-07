@@ -13,9 +13,11 @@ import Select from '@/components/ui/Select'
 import { BAND } from '@/lib/panel'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
+import PositionDefsEditor from '@/components/PositionDefsEditor'
+import { derivedCounts, type PositionDef } from '@/lib/positionDefs'
 import { cn } from '@/lib/cn'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
-import { plannedPositions, roomDayIndices, validateRooms, type CallModel } from '@/lib/crewCallGrid'
+import { roomDayIndices, validateRooms, type CallModel } from '@/lib/crewCallGrid'
 
 // Creating a show, as a page rather than a dialog.
 //
@@ -93,6 +95,9 @@ export default function NewShowClient({
   // changes, and a day that is still in the run should keep the type it was
   // given rather than inherit whatever the day in that position used to be.
   const [activities, setActivities] = useState<Record<string, Activity[]>>({})
+  // Positions by KIND of day (piece B): the definitions; the per-day slots are
+  // derived by the database after the show exists (sync_position_slots).
+  const [defs, setDefs] = useState<PositionDef[]>([])
   const [presetId, setPresetId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -124,9 +129,22 @@ export default function NewShowClient({
   // silently discarding: the way to lose work here was to add a room, build a
   // three-role call in it, forget to type the name, and press Create.
   const roomProblems = useMemo(() => validateRooms(rooms, call), [rooms, call])
+  // Rooms carrying definitions also need a real, unique name — the definition
+  // is keyed to the room by NAME in the database.
+  const defRoomProblems = useMemo(() => {
+    const withDefs = new Set(defs.map(d => d.roomKey))
+    const names = new Map<string, number>()
+    for (const r of rooms) { const n = r.name.trim().toLowerCase(); if (n) names.set(n, (names.get(n) ?? 0) + 1) }
+    return rooms.filter(r => withDefs.has(r.key) && (!r.name.trim() || (names.get(r.name.trim().toLowerCase()) ?? 0) > 1)).map(r => r.key)
+  }, [rooms, defs])
+  const gridDays = useMemo(() => dates.map(date => ({ date, activities: activities[date] ?? [] })), [dates, activities])
+  const preview = useMemo(
+    () => derivedCounts(defs, gridDays, (roomKey, i) => roomDayIndices(call, roomKey, dates.length).includes(i)),
+    [defs, gridDays, call, dates.length],
+  )
   const badRoomKeys = useMemo(
-    () => [...roomProblems.blank, ...roomProblems.duplicate],
-    [roomProblems],
+    () => [...new Set([...roomProblems.blank, ...roomProblems.duplicate, ...defRoomProblems])],
+    [roomProblems, defRoomProblems],
   )
 
   const canCreate =
@@ -263,17 +281,22 @@ export default function NewShowClient({
       )
       const nameByKey = new Map(finalRooms.map(r => [r.key, r.name.trim()]))
 
-      const positionRows = plannedPositions(call, totalDays).flatMap(p => {
-        const roomName = nameByKey.get(p.roomKey)
-        const dayId = dayIdByIndex.get(p.dayIndex)
-        if (!roomName || !dayId) return []
-        const roomId = roomIdByNameAndDay.get(`${roomName}|${dayId}`)
-        if (!roomId) return []
-        return [{ room_id: roomId, role: p.role, sort_order: p.sortOrder }]
+      void dayIdByIndex; void roomIdByNameAndDay
+      // Positions by kind: write the DEFINITIONS, then let the database derive
+      // the per-day slots from the day grid (piece B).
+      const defRows = defs.flatMap((d, i) => {
+        const roomName = nameByKey.get(d.roomKey)
+        if (!roomName || !d.role.trim()) return []
+        return [{
+          show_id: showId, room_name: roomName, role: d.role.trim(), count: d.count,
+          day_kind: d.dayKind, custom_dates: d.dayKind === 'custom' ? d.customDates : null, sort_order: i,
+        }]
       })
 
-      if (positionRows.length > 0) {
-        const { error: posError } = await supabase.from('crew_call_positions').insert(positionRows)
+      if (defRows.length > 0) {
+        const { error: defError } = await supabase.from('position_defs').insert(defRows)
+        const { error: syncError } = defError ? { error: null } : await supabase.rpc('sync_position_slots', { p_show_id: showId })
+        const posError = defError ?? syncError
         // The show and its rooms exist by now, so this is reported rather than
         // failing the whole creation — sending someone back to an empty form
         // would lose everything they typed.
@@ -412,6 +435,7 @@ export default function NewShowClient({
           </p>
         </section>
       ) : (
+        <section>
         <CrewCallGrid
           rooms={rooms}
           dates={dates}
@@ -423,7 +447,23 @@ export default function NewShowClient({
           dayActivities={activities}
           invalidRoomKeys={badRoomKeys}
           sectionNumber="4"
+          derivedCounts={schedulingEnabled ? preview : undefined}
         />
+        {schedulingEnabled && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs text-muted">
+              Say what each room needs and on which kinds of day; the grid above shows the days that works out to.
+            </p>
+            <PositionDefsEditor
+              rooms={rooms}
+              roles={roles}
+              days={gridDays}
+              defs={defs}
+              onChange={setDefs}
+            />
+          </div>
+        )}
+        </section>
       )}
 
       {/* A bar on mobile, a floating pill on desktop.

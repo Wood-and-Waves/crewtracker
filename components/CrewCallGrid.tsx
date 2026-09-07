@@ -67,6 +67,7 @@ export default function CrewCallGrid({
   sectionNumber,
   readOnly = false,
   schedulingEnabled = true,
+  derivedCounts,
 }: {
   rooms: GridRoom[]
   dates: string[]
@@ -95,7 +96,16 @@ export default function CrewCallGrid({
    * is exactly the no-scheduling behaviour.
    */
   schedulingEnabled?: boolean
+  /**
+   * Positions by KIND of day (piece B, 2026-09-07): when present, the cells
+   * are a read-only preview of the slots the definitions derive — roomKey →
+   * dayIndex → count — and the per-cell editor and bulk add are hidden. The
+   * definitions live in PositionDefsEditor, rendered under the grid. Absent,
+   * the grid is the editor as before (CrewCallModal-style per-day slots).
+   */
+  derivedCounts?: Record<string, Record<number, number>>
 }) {
+  const derived = derivedCounts !== undefined
   const [selected, setSelected] = useState<{ roomKey: string; day: number } | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
   const editorRef = useRef<HTMLDivElement | null>(null)
@@ -115,7 +125,10 @@ export default function CrewCallGrid({
     ? `${NAME_COL}px repeat(${totalDays}, minmax(${MIN_DAY_COL}px, 1fr))`
     : 'minmax(0, 1fr)'
   const minWidth = schedulingEnabled ? NAME_COL + totalDays * MIN_DAY_COL : undefined
-  const perDay = peakPerDay(call, totalDays)
+  const perDay = derived
+    ? Math.max(0, ...Array.from({ length: totalDays }, (_, i) =>
+        rooms.reduce((n, r) => n + (derivedCounts?.[r.key]?.[i] ?? 0), 0)))
+    : peakPerDay(call, totalDays)
 
   function addRoom() {
     // Functional update, not [...rooms, x]: the array form reads whatever the
@@ -150,7 +163,7 @@ export default function CrewCallGrid({
       >
         {/* The labelled way in. Until this existed the only way to add a
             position was to discover that grid cells are clickable. */}
-        {!readOnly && schedulingEnabled && (
+        {!readOnly && schedulingEnabled && !derived && (
           <Button
             type="button"
             size="sm"
@@ -164,7 +177,7 @@ export default function CrewCallGrid({
 
       {/* Opens above the grid, so the grid slides down and stays visible as the
           live preview of what this is about to do. */}
-      {bulkOpen && !readOnly && schedulingEnabled && (
+      {bulkOpen && !readOnly && schedulingEnabled && !derived && (
         <PositionsBulkAdd
           rooms={rooms}
           dates={dates}
@@ -257,7 +270,25 @@ export default function CrewCallGrid({
                 )}
               </div>
 
-              {schedulingEnabled && dates.map((date, day) => {
+              {schedulingEnabled && derived && dates.map((date, day) => {
+                const n = derivedCounts?.[room.key]?.[day] ?? 0
+                const l = dayLabel(date)
+                return (
+                  <div
+                    key={date}
+                    className={cn(
+                      'flex min-h-[54px] flex-col items-center justify-center border-l border-line px-1 py-1.5',
+                      l.isWeekend && 'bg-surface-2/40',
+                    )}
+                    aria-label={`${room.name || 'Room'} ${l.weekday} ${l.day}: ${n} positions`}
+                  >
+                    {n === 0
+                      ? <span className="text-[11px] text-muted">—</span>
+                      : <span className="text-[13px] font-bold text-ink">{n}</span>}
+                  </div>
+                )
+              })}
+              {schedulingEnabled && !derived && dates.map((date, day) => {
                 const lines = cellLines(call, room.key, day)
                 const isSelected = selected?.roomKey === room.key && selected.day === day
                 const l = dayLabel(date)
@@ -303,7 +334,7 @@ export default function CrewCallGrid({
           rooms on a phone the editor was rendering past the bottom of the
           viewport, so tapping a cell appeared to do nothing at all. The
           scrollIntoView below is the belt to that braces. */}
-      {selected && !readOnly && schedulingEnabled && (
+      {selected && !readOnly && schedulingEnabled && !derived && (
         <div ref={editorRef} className="mt-3 rounded-card border border-accent bg-surface p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-[13px] font-semibold text-ink">

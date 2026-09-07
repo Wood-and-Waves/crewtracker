@@ -110,6 +110,16 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
       ])
     : [{ data: null }, { data: null }]
 
+  // Positions by kind (piece B): the definitions, the flags, and the role list
+  // for the editor. Only with the scheduling module, like the slots above.
+  const [{ data: positionDefs }, { data: slotFlags }, { data: avRoles }] = schedulingOn
+    ? await Promise.all([
+        supabase.from('position_defs').select('id, room_name, role, count, day_kind, custom_dates, sort_order').eq('show_id', id).order('sort_order'),
+        supabase.from('position_slot_flags').select('slot_id, position_def_id, room_name, date, role, timecard_id, crew_member_name').eq('show_id', id).order('date'),
+        supabase.from('av_roles').select('name').eq('organization_id', user.organizationId!).order('name'),
+      ])
+    : [{ data: null }, { data: null }, { data: null }]
+
   const callSummary = summarizeCall((positionRows ?? []).map((p: any) => {
     const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
     const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
@@ -152,6 +162,11 @@ export default async function EditShowPage({ params }: { params: Promise<{ id: s
         schedulerName: (scheduler as any)?.full_name || (scheduler as any)?.email || null,
         positionCount: callSummary.total,
         callSize: describeCallSize(callSummary),
+      } : undefined}
+      positions={schedulingOn ? {
+        defs: (positionDefs ?? []) as any[],
+        flags: (slotFlags ?? []) as any[],
+        roles: (avRoles ?? []).map((r: any) => r.name as string),
       } : undefined}
     >
       {canEditTimecards && (

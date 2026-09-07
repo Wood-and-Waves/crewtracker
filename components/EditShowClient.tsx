@@ -9,6 +9,7 @@ import { SHOW_TIMEZONES } from '@/lib/timezones'
 import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
+import PositionDefsSection, { type DefRow, type SlotFlag } from '@/components/PositionDefsSection'
 import HandoffToSchedulerButton from '@/components/HandoffToSchedulerButton'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
@@ -40,6 +41,7 @@ export default function EditShowClient({
   canViewRates = false,
   canEditRates = false,
   scheduling,
+  positions,
   children,
 }: {
   show: any
@@ -50,6 +52,8 @@ export default function EditShowClient({
   /** Handoff state, fetched server-side. Omitted for a caller who shouldn't
    *  see the Scheduling section at all. */
   scheduling?: { schedulerName: string | null; positionCount: number; callSize: string }
+  /** Positions by kind (piece B): definitions, flags and the role list. Omitted without the scheduling module. */
+  positions?: { defs: DefRow[]; flags: SlotFlag[]; roles: string[] }
   shoulderSurferMode?: boolean
   organizationId?: string
   canManageRulesets?: boolean
@@ -90,6 +94,9 @@ export default function EditShowClient({
       setDayError(error?.message ?? "Couldn't save — you may not have permission to change this show.")
       return
     }
+    // The day's activities decide which positions want it: re-derive the
+    // slots (open ones appear, unfilled ones go; booked people never do).
+    await supabase.rpc('sync_position_slots', { p_show_id: show.id })
     router.refresh()
   }
   const [saveError, setSaveError] = useState('')
@@ -512,6 +519,18 @@ export default function EditShowClient({
       {/* Handing the show to a scheduler — an admin act, so it belongs here
           rather than in the tracker's header where it sat beside the punch
           controls it has nothing to do with. */}
+      {positions && (
+        <PositionDefsSection
+          showId={show.id}
+          roomNames={[...new Set((rooms as any[]).map(r => r.name as string))].sort((a, b) => a.localeCompare(b))}
+          roles={positions.roles}
+          days={workDays.map((wd: any) => ({ date: wd.date, activities: wd.activities ?? [] }))}
+          defs={positions.defs}
+          flags={positions.flags}
+          locked={!!show.finalized_at}
+        />
+      )}
+
       {scheduling && (
         <section className="mb-6">
           <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Scheduling</p>

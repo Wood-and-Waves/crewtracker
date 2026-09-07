@@ -59,9 +59,13 @@ export default function AddDayButton({
       p_copy_crew: copyCrew,
     })
 
-    setBusy(false)
-    if (rpcError) { setError(rpcError.message); return }
+    if (rpcError) { setBusy(false); setError(rpcError.message); return }
 
+    // Positions by kind: the new day gets its open slots (piece B). Nobody is
+    // booked into them — that is a human's call.
+    await supabase.rpc('sync_position_slots', { p_show_id: showId })
+
+    setBusy(false)
     setAsking(false)
     router.refresh()
   }
