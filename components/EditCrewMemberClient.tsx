@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -22,8 +22,14 @@ export default function EditCrewMemberClient({
   shoulderSurferMode = false,
   canViewRates = false,
   canEditRates = false,
+  login = null,
+  emailSharedBy = 0,
 }: {
   crew: CrewMember
+  /** The CrewTracker login this entry is linked to (0028), matched by email. */
+  login?: { email: string | null } | null
+  /** Directory entries in this company sharing this email; 2+ blocks linking. */
+  emailSharedBy?: number
   availableRoles: AVRole[]
   shoulderSurferMode?: boolean
   /** profiles.can_view_pay_rates. Without it the amounts are hidden entirely
@@ -52,6 +58,28 @@ export default function EditCrewMemberClient({
 
   async function saveField(field: 'full_name' | 'phone' | 'email', value: string) {
     await supabase.from('crew_members').update({ [field]: value || null }).eq('id', crew.id)
+    // An email change can make or break the login link (0028) — re-read it.
+    if (field === 'email') router.refresh()
+  }
+
+  const [linked, setLinked] = useState(login)
+  const [linkError, setLinkError] = useState('')
+  useEffect(() => { setLinked(login) }, [login])
+
+  // The app only ever writes profile_id to NULL. Every other value is set by
+  // the database from the email (migration 0028), so a wrong link is fixed by
+  // fixing the email, and an unwanted one by this button.
+  async function unlinkLogin() {
+    if (!confirm('Unlink this login? They will lose access to shows they are staffed on until the emails match again.')) return
+    setLinkError('')
+    const { data, error } = await supabase
+      .from('crew_members').update({ profile_id: null }).eq('id', crew.id).select('id')
+    if (error || !data || data.length === 0) {
+      setLinkError(error?.message ?? 'That did not save — you may not have permission to edit the directory.')
+      return
+    }
+    setLinked(null)
+    router.refresh()
   }
 
   function saveToContacts() {
@@ -159,6 +187,24 @@ export default function EditCrewMemberClient({
             onBlur={() => saveField('email', email)}
             className={inputCls}
           />
+          {/* Login — which CrewTracker account this person is. Matched by email
+              automatically (0028); shown so a wrong match is visible and a
+              click away from undone. */}
+          <div className="mt-3 flex items-center justify-between gap-3 border-b border-line py-2.5">
+            <span className="text-sm text-ink">Login</span>
+            {linked ? (
+              <span className="flex items-center gap-2 text-sm text-ink">
+                {linked.email}
+                <button type="button" onClick={unlinkLogin} aria-label="Unlink login"
+                  className="rounded-pill border border-line px-2 py-0.5 text-xs text-muted hover:text-danger">✕ Unlink</button>
+              </span>
+            ) : emailSharedBy >= 2 ? (
+              <span className="text-right text-xs text-muted">Two people in the directory share this email, so no login is linked. Fix the emails to link one.</span>
+            ) : (
+              <span className="text-sm text-muted">No login</span>
+            )}
+          </div>
+          {linkError && <p className="mt-1 text-xs text-danger">{linkError}</p>}
         </section>
       </div>
 
