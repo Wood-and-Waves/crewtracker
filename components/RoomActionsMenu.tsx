@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { logStaffingEvent } from '@/lib/staffingEvents'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import CrewCallModal from '@/components/CrewCallModal'
@@ -26,6 +27,7 @@ export default function RoomActionsMenu({
   locked = false,
   onBand = false,
   schedulingEnabled = false,
+  showId,
 }: {
   roomId: string
   roomName: string
@@ -41,6 +43,9 @@ export default function RoomActionsMenu({
   /** Scheduling module available to this caller — gates the Positions panel.
    *  The other four actions are core tracker and always available. */
   schedulingEnabled?: boolean
+  /** For logging a 'released' staffing event on removeCrew — optional so a
+   *  caller that doesn't have it handy doesn't break; without it, no event. */
+  showId?: string
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -105,6 +110,16 @@ export default function RoomActionsMenu({
     const { error } = await supabase.from('timecards').delete().eq('id', tc.id)
     setLoading(false)
     if (error) { setError(error.message); return }
+    if (showId) {
+      await logStaffingEvent(supabase, {
+        showId,
+        kind: 'released',
+        crewMemberId: tc.crewMemberId,
+        crewMemberName: tc.name,
+        role: tc.role,
+        days: null,
+      })
+    }
     setCrewList(prev => prev.filter(c => c.id !== tc.id))
     router.refresh()
   }

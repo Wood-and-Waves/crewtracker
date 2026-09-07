@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { liveBookings } from '@/lib/timecardFields'
+import { logStaffingEvent } from '@/lib/staffingEvents'
+import { compressDays } from '@/lib/readyEmail'
 import Button from '@/components/ui/Button'
 import Chip from '@/components/ui/Chip'
 import Toggle from '@/components/ui/Toggle'
@@ -80,14 +82,20 @@ export default function FillPositionPicker({
   const [siblings, setSiblings] = useState<SiblingSlot[]>([])
   // Step two: the chosen person and which of those days stay ticked.
   const [plan, setPlan] = useState<{ c: Candidate; picked: Set<string> } | null>(null)
+  // The show this position belongs to — the picker only ever knows roomId,
+  // and logging a staffing event needs the show. Read once per room.
+  const [showId, setShowId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
     setSiblings([])
     setPlan(null)
     ;(async () => {
-      const { data: me } = await supabase
-        .from('crew_call_positions').select('position_def_id').eq('id', positionId).maybeSingle()
+      const [{ data: me }, { data: room }] = await Promise.all([
+        supabase.from('crew_call_positions').select('position_def_id').eq('id', positionId).maybeSingle(),
+        supabase.from('rooms').select('show_id').eq('id', roomId).maybeSingle(),
+      ])
+      if (active) setShowId((room as any)?.show_id ?? null)
       const defId = (me as any)?.position_def_id
       if (!defId || !active) return
       const { data: slots } = await supabase
@@ -225,6 +233,16 @@ export default function FillPositionPicker({
       // which day rather than making them guess.
       setError(e?.code === '23505' ? clashMessage(e.details ?? '', c, extra) : (e?.message ?? 'That did not save.'))
       return
+    }
+    if (showId) {
+      await logStaffingEvent(supabase, {
+        showId,
+        kind: 'booked',
+        crewMemberId: c.id,
+        crewMemberName: c.name,
+        role: positionRole,
+        days: compressDays([date, ...extra.map(s => s.date)]),
+      })
     }
     onFilled()
   }

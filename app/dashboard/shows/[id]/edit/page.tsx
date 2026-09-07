@@ -117,7 +117,7 @@ export default async function EditShowPage({
   const [{ data: positionDefs }, { data: slotFlags }, { data: avRoles }] = schedulingOn
     ? await Promise.all([
         supabase.from('position_defs').select('id, room_name, role, count, day_kind, custom_dates, sort_order').eq('show_id', id).order('sort_order'),
-        supabase.from('position_slot_flags').select('slot_id, position_def_id, room_name, date, role, timecard_id, crew_member_name').eq('show_id', id).order('date'),
+        supabase.from('position_slot_flags').select('slot_id, position_def_id, room_name, date, role, timecard_id, crew_member_name, crew_member_id').eq('show_id', id).order('date'),
         supabase.from('av_roles').select('name').eq('organization_id', user.organizationId!).order('name'),
       ])
     : [{ data: null }, { data: null }, { data: null }]

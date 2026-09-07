@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { logStaffingEvent } from '@/lib/staffingEvents'
+import { compressDays } from '@/lib/readyEmail'
 import { cn } from '@/lib/cn'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
@@ -61,6 +63,9 @@ export default function StaffRoomModal({
   // an insert supplies (see scripts/sql/applied/show-wide-day-rate.sql). Loading them
   // here keeps the form from advertising a directory rate that won't be used.
   const [showRates, setShowRates] = useState<Record<string, number>>({})
+  // The show this room belongs to — read once when the modal opens, so a
+  // successful staffing insert can log a staffing_events row per person.
+  const [showId, setShowId] = useState<string | null>(null)
   const [roles, setRoles] = useState<string[]>([])
   // `other` puts the role field into free-text mode for a one-off title.
   const [selected, setSelected] = useState<Record<string, Sel>>({})
@@ -122,6 +127,8 @@ export default function StaffRoomModal({
         .select('show_id')
         .eq('id', currentWorkDayId)
         .single()
+
+      setShowId(dayRow?.show_id ?? null)
 
       if (dayRow?.show_id) {
         // Two queries: the timecards give (crew, role) per timecard id, the view
@@ -347,6 +354,37 @@ export default function StaffRoomModal({
       await supabase
         .from('rate_cards')
         .upsert(rc, { onConflict: 'crew_member_id,role' })
+    }
+
+    // One 'booked' staffing event per distinct crew member, with all of the
+    // days just inserted for them compressed into one string. Room ids ->
+    // dates isn't something this modal already tracks, so it's looked up
+    // fresh from the rooms just written to.
+    if (showId) {
+      const roomIdsUsed = [...new Set(timecardRows.map(r => r.room_id))]
+      const { data: roomDays } = await supabase.from('rooms').select('id, work_days(date)').in('id', roomIdsUsed)
+      const dateByRoom = new Map<string, string>()
+      for (const r of (roomDays ?? []) as any[]) {
+        const wd = Array.isArray(r.work_days) ? r.work_days[0] : r.work_days
+        if (wd?.date) dateByRoom.set(r.id, wd.date)
+      }
+      const datesByCrew = new Map<string, string[]>()
+      for (const row of timecardRows) {
+        const date = dateByRoom.get(row.room_id)
+        if (!date) continue
+        datesByCrew.set(row.crew_member_id, [...(datesByCrew.get(row.crew_member_id) ?? []), date])
+      }
+      await Promise.all([...datesByCrew.entries()].map(([crewId, dates]) => {
+        const row = timecardRows.find(r => r.crew_member_id === crewId)
+        return logStaffingEvent(supabase, {
+          showId,
+          kind: 'booked',
+          crewMemberId: crewId,
+          crewMemberName: row?.crew_member_name ?? 'Someone',
+          role: row?.role ?? null,
+          days: compressDays(dates),
+        })
+      }))
     }
 
     setLoading(false)

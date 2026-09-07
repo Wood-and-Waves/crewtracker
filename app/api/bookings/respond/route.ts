@@ -4,6 +4,7 @@ import { sendDeclineNoticeEmail } from '@/lib/bookingEmail'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 import { siteOrigin } from '@/lib/siteOrigin'
 import { maybeSendReadyEmail, isExpectedReadyReason } from '@/lib/showReadiness'
+import { logStaffingEvent } from '@/lib/staffingEvents'
 
 // A crew member's answer to a booking request. No login: the token is the
 // authorization, so this runs with the service role.
@@ -90,9 +91,14 @@ export async function POST(request: Request) {
   // cannot be used as the target of an update.
   const { data: theirs } = await admin
     .from('timecards')
-    .select('id, rooms!inner ( work_days!inner ( show_id ) )')
+    .select('id, role, rooms!inner ( work_days!inner ( show_id ) )')
     .eq('crew_member_id', invite.crew_member_id)
     .eq('rooms.work_days.show_id', invite.show_id)
+
+  // Hoisted above the confirm/decline split — both branches log a staffing
+  // event with this person's name, and the decline notice email below needs
+  // it too.
+  const { data: crew } = await admin.from('crew_members').select('full_name').eq('id', invite.crew_member_id).maybeSingle()
 
   const ids = (theirs ?? []).map((t: any) => t.id)
   if (ids.length > 0) {
@@ -105,6 +111,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: tcError.message }, { status: 500 })
     }
   }
+
+  await logStaffingEvent(admin, {
+    showId: invite.show_id,
+    kind: response === 'confirmed' ? 'accepted' : 'declined',
+    crewMemberId: invite.crew_member_id,
+    crewMemberName: crew?.full_name ?? 'A crew member',
+    role: (theirs?.[0] as any)?.role ?? null,
+  })
 
   // A confirm can be the LAST position on the show — check whether it just
   // went fully staffed. Never fails the response either way: the answer is
@@ -141,8 +155,6 @@ export async function POST(request: Request) {
       people = []
     }
     people = people.filter(p => p.email)
-
-    const { data: crew } = await admin.from('crew_members').select('full_name').eq('id', invite.crew_member_id).maybeSingle()
 
     if (people.length) {
       const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts

@@ -31,6 +31,7 @@ import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDa
 import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
+import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -647,6 +648,17 @@ console.log('\n--- ready email: day compression ---')
   })
   check('blank role reads Crew', blankRoleText.includes('Jamie Lee · Crew · Tue 8 – Thu 10'), true)
   check('blank role reads Crew on the roster line too', blankRoleText.includes('Jamie Lee · Crew · (555) 123-4567'), true)
+}
+
+console.log('\n--- evening digest ---')
+{
+  check('booked line', describeEvent({ kind: 'booked', crewMemberName: 'Alex Reyes', role: 'A1', days: 'Tue 8 – Thu 10' }), 'Alex Reyes booked as A1, Tue 8 – Thu 10')
+  check('declined line', describeEvent({ kind: 'declined', crewMemberName: 'Bo Ellery', role: 'Stagehand', days: null }), 'Bo Ellery declined Stagehand')
+  check('moved line', describeEvent({ kind: 'moved', crewMemberName: 'Bo Ellery', role: 'Stagehand', days: 'Mon 9' }), 'Bo Ellery moved to Mon 9 (Stagehand)')
+  const { subject, text } = buildDigestEmail({ to: 'pm@x.test', pmName: 'Sam', showName: 'Northwind', date: 'Sep 7', link: 'https://crewtracker.app/dashboard/shows/1',
+    lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
+  check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
+  check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

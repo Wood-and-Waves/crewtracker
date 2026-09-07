@@ -9,6 +9,7 @@
 import { buildCallHandoffEmail } from '../../lib/callHandoffEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import { buildReadyEmail, compressDays } from '../../lib/readyEmail.ts'
+import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 
 console.log('=== Send to scheduling ===\n')
 
@@ -91,3 +92,26 @@ const ready = buildReadyEmail({
 
 console.log(`Subject: ${ready.subject}\n`)
 console.log(ready.text)
+
+console.log('\n\n=== Evening digest ===\n')
+
+// One show, a mixed day: a straightforward booking still waiting on a
+// reply, a decline that got re-filled by someone else before the digest
+// went out (so the LINE still says "declined" but the status reads
+// "accepted" — that gap is the whole point of computing status at send
+// time), a move, and a release with no day in scope.
+const digestEvents = [
+  { kind: 'booked' as const, crewMemberName: 'Alex Reyes', role: 'A1', days: compressDays(['2026-09-08', '2026-09-09', '2026-09-10']), status: 'waiting on reply' as const, time: '9:02 am' },
+  { kind: 'declined' as const, crewMemberName: 'Bo Ellery', role: 'Stagehand', days: null, status: 'accepted' as const, time: '11:47 am' },
+  { kind: 'moved' as const, crewMemberName: 'Casey Nguyen', role: 'A2', days: compressDays(['2026-09-09']), status: 'accepted' as const, time: '1:15 pm' },
+  { kind: 'released' as const, crewMemberName: 'Jordan Blake', role: 'Stagehand', days: null, status: 'released' as const, time: '4:30 pm' },
+]
+
+const digest = buildDigestEmail({
+  to: 'sam@example.test', pmName: 'Sam Okafor', showName: 'Northwind User Conference', date: 'Sep 8',
+  link: 'https://crewtracker.app/dashboard/shows/abc123',
+  lines: digestEvents.map(e => ({ time: e.time, text: describeEvent(e), status: e.status })),
+})
+
+console.log(`Subject: ${digest.subject}\n`)
+console.log(digest.text)

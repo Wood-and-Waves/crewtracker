@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { logStaffingEvent } from '@/lib/staffingEvents'
+import { compressDays } from '@/lib/readyEmail'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import PositionDefsEditor from '@/components/PositionDefsEditor'
@@ -24,7 +26,7 @@ export type DefRow = {
 }
 export type SlotFlag = {
   slot_id: string; position_def_id: string | null; room_name: string; date: string; role: string
-  timecard_id: string; crew_member_name: string
+  timecard_id: string; crew_member_name: string; crew_member_id: string | null
 }
 type OpenSlot = { id: string; room_id: string; date: string; room_name: string }
 
@@ -142,6 +144,14 @@ export default function PositionDefsSection({
       .update({ room_id: slot.room_id, call_position_id: slot.id }).eq('id', moving.timecard_id).select('id')
     setBusy(false)
     if (error || !data?.length) { setError(error?.message ?? 'That did not move.'); return }
+    await logStaffingEvent(supabase, {
+      showId,
+      kind: 'moved',
+      crewMemberId: moving.crew_member_id,
+      crewMemberName: moving.crew_member_name,
+      role: moving.role,
+      days: compressDays([slot.date]),
+    })
     setMoving(null)
     await supabase.rpc('sync_position_slots', { p_show_id: showId })
     router.refresh()
@@ -161,6 +171,14 @@ export default function PositionDefsSection({
     setBusy(true); setError('')
     const { data, error } = await supabase.from('timecards').delete().eq('id', f.timecard_id).select('id')
     if (error || !data?.length) { setBusy(false); setError(error?.message ?? 'That did not release.'); return }
+    await logStaffingEvent(supabase, {
+      showId,
+      kind: 'released',
+      crewMemberId: f.crew_member_id,
+      crewMemberName: f.crew_member_name,
+      role: f.role,
+      days: compressDays([f.date]),
+    })
     await supabase.rpc('sync_position_slots', { p_show_id: showId })
     setBusy(false)
     router.refresh()

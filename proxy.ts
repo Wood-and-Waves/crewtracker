@@ -19,6 +19,7 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/invite") ||
     path.startsWith("/api/beta-signup") ||
     path.startsWith("/api/keepalive") ||
+    path.startsWith("/api/digest") ||
     // Booking requests. Crew have no login and never will under the current
     // plan, so both the page and the route it posts to must be reachable
     // signed-out — the token is the authorization. Omitting either is the
