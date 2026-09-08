@@ -15,6 +15,7 @@
     "db:migrate": "node --env-file=.env.local scripts/db-migrate.mjs",
     "dev:login": "node --env-file=.env.local scripts/dev-login.mjs",
     "dev:password": "node --env-file=.env.local scripts/dev-set-password.mjs",
+    "demo:team": "node --no-warnings --env-file=.env.local --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/demo-team.mts",
     "test:payroll": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/payroll.mts",
     "test:rls": "node --no-warnings --env-file=.env.local --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/rls.mts",
     "test:schedule": "node --no-warnings --import ./scripts/test/alias-loader.mjs --experimental-strip-types scripts/test/schedule.mts",

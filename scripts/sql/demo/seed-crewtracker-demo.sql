@@ -29,6 +29,7 @@ declare
   v_org  constant uuid := 'e24655eb-5514-42d3-b248-3a879677dde9';  -- CrewTracker Demo
   v_dan  constant uuid := '28d3ae69-15bb-42bc-a478-5d9b43b737de';  -- dan@theaudiosmith.com
   v_name text;
+  v_pm   uuid;
   v_show uuid;
   v_start date := current_date + 7;   -- always next week
   v_day  record;
@@ -46,6 +47,15 @@ begin
     raise exception 'Refusing to seed: % is "%", not the demo organization.',
       v_org, coalesce(v_name, 'missing');
   end if;
+
+  -- The production manager is Ray Delgado if his login exists (npm run
+  -- demo:team makes it), so the PM's own view can be demonstrated by somebody
+  -- who is not the admin. Falls back to Dan so this script stands alone.
+  select m.profile_id into v_pm
+  from memberships m join profiles p on p.id = m.profile_id
+  where m.organization_id = v_org and m.deactivated_at is null
+    and p.email = 'dan+ray@theaudiosmith.com';
+  v_pm := coalesce(v_pm, v_dan);
 
   -- Clear the org. Shows cascade to days, rooms, timecards, punches,
   -- positions, invites and staffing events; crew cascade to rate cards and
@@ -187,7 +197,7 @@ begin
 
   -- The production manager said yes, which is the only thing that opens a show.
   update shows set
-    pm_profile_id         = v_dan,
+    pm_profile_id         = v_pm,
     pm_invited_at         = now() - interval '3 days',
     pm_accepted_at        = now() - interval '3 days',
     sent_to_scheduling_at = now() - interval '2 days',
@@ -195,10 +205,10 @@ begin
   where id = v_show;
 
   insert into pm_invites (show_id, profile_id, organization_id, sent_by, sent_at, accepted_at)
-  values (v_show, v_dan, v_org, v_dan, now() - interval '3 days', now() - interval '3 days');
+  values (v_show, v_pm, v_org, v_dan, now() - interval '3 days', now() - interval '3 days');
 
   insert into show_assignments (show_id, profile_id, organization_id, source)
-  values (v_show, v_dan, v_org, 'pm');
+  values (v_show, v_pm, v_org, 'pm');
 
   raise notice 'Demo show built: %', v_show;
 end $$;

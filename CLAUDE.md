@@ -1372,9 +1372,31 @@ Two things it deliberately does NOT have, so nobody goes looking:
 - **No punches, so no tracker or reports demo.** The show is next week; a future show with hours
   on it would be a lie. Demonstrating the tracker and Reports needs a SECOND show, finished and
   punched, seeded the same way — worth adding the next time the demo needs to cover payroll.
-- **One login.** Dan is the admin, the PM and (through the aliases) every crew member. Showing the
-  scheduler's own view, or a crew login, needs more members, which the invite flow can mint under
-  plus-addressed aliases whenever that demo is wanted.
+
+**Five logins, one per view of the app** (`npm run demo:team`, `scripts/demo-team.mts`), because
+one login cannot show what this product does — the permissions model's whole point is that these
+people open the same show and see different apps. All four new addresses are aliases of
+dan@theaudiosmith.com, all share one password, and all are members of the DEMO org only, so no
+password on this list can reach the real company:
+
+| Login | Is | Sees |
+|---|---|---|
+| `dan@theaudiosmith.com` | Admin | Everything: builds the show, writes positions, names the PM. |
+| `dan+sasha@…` | Scheduler (staff + `can_manage_scheduling`) | The queue and the Scheduling screen. Books and asks crew. No pay rates, cannot build a show. |
+| `dan+ray@…` | PM (the `pm` preset) | The tracker, punches, reports, rates — on his shows only. He is the demo show's ACCEPTED PM. |
+| `dan+meredith@…` | The office (staff, reports and money, no editing) | Reads and exports reports, sees rates, cannot touch a punch or staff anybody. |
+| `dan+alex@…` | Crew | Their own six days and their own punches. Nothing else exists for them. |
+
+Two things make that table work and would break quietly if changed. The crew login's address is
+**the same address as the Alex Reyes row in the crew directory** — migration 0028 links
+`crew_members.profile_id` by email inside one company, and that link is the entire crew-side
+story; the seed prints whether it landed. And the seed script makes **Ray** the PM when his login
+exists (falling back to Dan when it does not), so the two scripts compose in either order and
+re-running the seed does not hand the show back to the admin.
+
+The PM invitation itself is already accepted, so Ray's view works out of the box; to demonstrate
+the invitation arriving, use the PM chip's "Send the invitation again" — it lands in Dan's inbox
+like everything else.
 
 ## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
 
