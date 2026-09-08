@@ -103,8 +103,12 @@ export default function ScheduleBoard({
     const flag = e.flag
     return (
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          <span className="truncate text-sm text-ink">{b.crewMemberName}</span>
+        {/* The chip ALWAYS sits under the name, never beside it. Wrapping only
+            when the name was long meant the control moved from cell to cell
+            depending on how somebody is called, and a grid you scan down a
+            column cannot have its buttons wandering (Dan, 2026-09-08). */}
+        <div className="truncate text-sm text-ink">{b.crewMemberName}</div>
+        <div className="mt-0.5">
           <BookingStatusChip
             context="scheduling"
             showId={showId}

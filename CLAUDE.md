@@ -1113,7 +1113,9 @@ shows Open on the line's day, and a day the position is not needed is simply bla
 shifts because a stagehand joins on Tuesday. Lines are packed, so two people who never work the
 same day share a line rather than each holding a mostly empty row; the busiest person takes the
 top line. Roles keep the room's own order (where each first appears in its slot list); a role
-that only exists because somebody was hand-staffed sorts last.
+that only exists because somebody was hand-staffed sorts last. Inside a cell the chip ALWAYS sits
+under the name rather than beside it: wrapping only when a name was long put the control in a
+different place in every cell, and a column you scan cannot have its buttons wandering.
 
 **The counting rules are in `lib/scheduleBoard.ts` and are unit-tested, because the units are
 what got misread before** (Dan on a "12 waiting" that was person-days: *"There are not 12 people
