@@ -137,6 +137,14 @@ Converted in the Signal era (historical record): the **shows list** (a real tabl
 
 The app was fully redesigned from the original pure-black/zinc/iOS-blue look to a direction called **Signal**: near-true-black (light theme also fully supported, both first-class), bold white headers, the brand's electric blue as the sole accent, no glow effects (tried in an early mockup round, Dan rejected it — use a crisp `ring-1 ring-inset ring-accent` instead), minimal monospace (tried "everywhere," Dan found it too techy — reserve mono for places digits must align in columns).
 
+**The browser's own chrome follows the theme** (2026-09-08). `:root` sets `color-scheme: light`
+and every dark block sets `dark`, so scrollbars, focus rings and the native date/time pickers are
+painted dark on a dark screen instead of arriving as a bright slab (Dan, seeing the Scheduling
+grid's scroll bar: *"Can the scroll bar be improved in dark mode?"*). On top of that,
+`.paper-scroll` in globals.css gives a scroll area a thin token-coloured thumb on no track at all
+— `--scroll-thumb` / `--scroll-thumb-hover`, defined in all four theme blocks. Use it on any new
+scroll box; `color-scheme` alone is the fallback everywhere else.
+
 **Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
 
 **Reusable primitives** in `components/ui/`: `Button` (variants: primary/ghost/danger), `Chip` (tones: neutral/live/ot/good/danger — semantic status color, kept separate from the brand accent), `Toggle` (squared on/off switch, replaces native checkboxes everywhere), `Select` (the Showbill picker — replaces native `<select>` everywhere; zero native selects remain in the app), `NumberedHead` (numbered section head on a 3px rule), `ThemeToggle`, `AccountMenu`, and legacy `Card` (splash/onboarding/superadmin only — never new work). The old `Dropdown` primitive is deleted; `Select` is its replacement. Compose new UI from these rather than writing raw styled `<button>`/`<div>` markup.
@@ -1055,6 +1063,12 @@ invitation, or goes to Edit Show to change who it is. Below it, the definitions 
 from Edit Show, and from every Needs-scheduling row, so **a scheduler never has to open a
 tracker**. Desktop-first, like New Show; it scrolls sideways on an iPad and is not built for a
 phone.
+
+**The fill picker scrolls itself into view.** It opens under the row it belongs to, and the grid
+is its own scroll box, so on a row near the bottom it opened out of sight and the only thing that
+happened on screen was the button reading "Filling…" (Dan, 2026-09-08). The scroll is instant,
+not smooth: a smooth scroll is driven by animation frames and silently does nothing in a
+backgrounded tab.
 
 **The day header and the position column stay put** (Dan, 2026-09-08: *"Can the position date
 header be sticky to the top?"*). The grid is its OWN scroll box to make that possible: a

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/cn'
 import BookingStatusChip from '@/components/BookingStatusChip'
@@ -49,6 +49,18 @@ export default function ScheduleBoard({
   const [picker, setPicker] = useState<{ slotId: string; roomId: string; role: string; date: string; roomName: string } | null>(null)
   const [openFlag, setOpenFlag] = useState<string | null>(null)
   const [changed, setChanged] = useState<{ id: string; name: string }[]>([])
+
+  // The picker opens under the row it belongs to, and the grid is its own
+  // scroll box — so on a row near the bottom it opened out of sight and the
+  // only thing that happened on screen was the button reading "Filling…"
+  // (Dan, 2026-09-08). Bring it to where the person is looking.
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    // Instant, not smooth: a smooth scroll is driven by animation frames, so it
+    // silently does nothing in a backgrounded tab — and the point here is that
+    // the picker is on screen the moment it opens, not a second later.
+    if (picker) pickerRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [picker?.slotId])
 
   const cols = { gridTemplateColumns: `minmax(140px, 190px) repeat(${board.days.length}, minmax(150px, 1fr))` }
   // The grid is wider than the box on anything but a big screen, and the rows
@@ -156,7 +168,7 @@ export default function ScheduleBoard({
             {/* The picker, full width under the line it belongs to. */}
             {picker && picker.roomName === room.name && line.byDate[picker.date]?.kind === 'open'
               && (line.byDate[picker.date] as Extract<BoardEntry, { kind: 'open' }>).slotId === picker.slotId && (
-              <div className="border-b border-line bg-surface-2/40 px-3 py-3">
+              <div ref={pickerRef} className="border-b border-line bg-surface-2/40 px-3 py-3">
                 <p className="mb-2 text-xs text-muted">{room.name} · {line.role} · {dayHead(picker.date)}</p>
                 <FillPositionPicker
                   positionId={picker.slotId}
@@ -180,7 +192,7 @@ export default function ScheduleBoard({
           definitions editor below is still reachable by scrolling the page.
           The bottom tab bar owns the last 6rem below lg, so the box is shorter
           there. */}
-      <div className="max-h-[calc(100vh-19rem)] overflow-auto lg:max-h-[calc(100vh-16rem)]">
+      <div className="paper-scroll max-h-[calc(100vh-19rem)] overflow-auto lg:max-h-[calc(100vh-16rem)]">
         <div style={gridWidth}>
           {/* Day header — a LIGHT strip, because the show masthead above is the
               screen's one solid band. Each day carries its activities label:
