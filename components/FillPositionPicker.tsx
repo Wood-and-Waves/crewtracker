@@ -241,29 +241,74 @@ export default function FillPositionPicker({
     setBusy(true)
     setError('')
 
+    const targets = [
+      { room_id: roomId, call_position_id: positionId, date },
+      ...extra.map(s => ({ room_id: s.roomId, call_position_id: s.id, date: s.date })),
+    ]
+
+    // BOOKING SOMEBODY WHO DECLINED IS AN UPDATE, NOT AN INSERT.
+    // A decline keeps its timecard on purpose (migration 0012 — it records that
+    // we asked and they said no), and timecards_room_crew_uniq has NO status
+    // predicate, so that row still occupies (room, person). Inserting a second
+    // one is refused by the index, which made "Book anyway" on a decliner
+    // impossible however many times it was pressed, with a clash message that
+    // named nobody. Reviving their own row is what "they changed their mind"
+    // actually means, and it keeps THE ONE RULE: nothing is deleted.
+    const { data: mine, error: readErr } = await supabase
+      .from('timecards').select('id, room_id, booking_status')
+      .eq('crew_member_id', c.id).in('room_id', targets.map(t => t.room_id))
+    if (readErr) { setBusy(false); setError(readErr.message); return }
+    const existingByRoom = new Map((mine ?? []).map((r: any) => [r.room_id as string, r]))
+
+    // Already in that room and NOT declined: a real double-booking. Say which day.
+    const blocked = targets.find(t => {
+      const r = existingByRoom.get(t.room_id)
+      return r && r.booking_status !== 'declined'
+    })
+    if (blocked) {
+      setBusy(false)
+      setError(`${c.name} is already in this room on ${fmtDay(blocked.date)}. Untick that day and try again.`)
+      return
+    }
+
     // 'pencilled': penned in, not yet asked. day_rate is deliberately not sent —
     // a trigger sets the show-wide rate for (show, person, role), and the write
     // guard drops any rate supplied by someone without permission anyway.
-    // One insert for every day: all of them land or none do.
-    const rows = [{ room_id: roomId, call_position_id: positionId }, ...extra.map(s => ({ room_id: s.roomId, call_position_id: s.id }))]
-      .map(r => ({
-        ...r,
+    // One insert for every NEW day: all of them land or none do.
+    const rows = targets
+      .filter(t => !existingByRoom.has(t.room_id))
+      .map(t => ({
+        room_id: t.room_id,
+        call_position_id: t.call_position_id,
         crew_member_id: c.id,
         crew_member_name: c.name,
         role: positionRole,
         booking_status: 'pencilled',
       }))
-    const { data, error: e } = await supabase.from('timecards').insert(rows).select('id')
-    setBusy(false)
-
-    if (e || !data?.length) {
-      // 23505 = a unique index: either somebody else filled one of these
-      // positions between the list loading and this click, or the person is
-      // already in that room that day. Postgres names the clashing key, so say
-      // which day rather than making them guess.
-      setError(e?.code === '23505' ? clashMessage(e.details ?? '', c, extra) : (e?.message ?? 'That did not save.'))
-      return
+    if (rows.length > 0) {
+      const { data, error: e } = await supabase.from('timecards').insert(rows).select('id')
+      if (e || !data?.length) {
+        setBusy(false)
+        // 23505 = a unique index: somebody else filled one of these positions
+        // between the list loading and this click. Postgres names the clashing
+        // key, so say which day rather than making them guess.
+        setError(e?.code === '23505' ? clashMessage(e.details ?? '', c, extra) : (e?.message ?? 'That did not save.'))
+        return
+      }
     }
+    for (const t of targets) {
+      const r = existingByRoom.get(t.room_id)
+      if (!r) continue
+      const { data, error: e } = await supabase.from('timecards')
+        .update({ booking_status: 'pencilled', call_position_id: t.call_position_id, role: positionRole })
+        .eq('id', r.id).select('id')
+      if (e || !data?.length) {
+        setBusy(false)
+        setError(e?.message ?? 'That did not save.')
+        return
+      }
+    }
+    setBusy(false)
     if (showId) {
       await logStaffingEvent(supabase, {
         showId,
