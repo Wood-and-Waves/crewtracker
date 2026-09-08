@@ -57,7 +57,9 @@ const base = {
 }
 
 function show(title: string, days: EngagementDay[]) {
-  const { subject, text } = buildBookingRequestEmail({ ...base, days, to: 'a@b.test', link: 'https://crewtracker.app/book/abc123' })
+  const { subject, text } = buildBookingRequestEmail({ ...base, days, to: 'a@b.test', link: 'https://crewtracker.app/book/abc123',
+    confirmUrl: 'https://crewtracker.app/book/abc123?a=confirm',
+    declineUrl: 'https://crewtracker.app/book/abc123?a=decline' })
   const sms = buildBookingRequestText({ ...base, days })
   console.log(`\n${'='.repeat(72)}\n${title}\n${'='.repeat(72)}`)
   console.log(`\n--- EMAIL --- subject: ${subject}\n`)

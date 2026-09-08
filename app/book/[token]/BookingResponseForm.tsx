@@ -55,11 +55,14 @@ export default function BookingResponseForm({
             : 'Thanks for letting them know.'}
           {respondedAt && !busy ? '' : ''}
         </p>
+        {/* The reversal. A decline that arrived from the email was one tap, so
+            the way back has to be one too, and it says what it does rather
+            than making somebody work out that "change my answer" is it. */}
         <button
           onClick={() => setChanging(true)}
           className="mt-4 text-xs text-muted underline hover:text-ink"
         >
-          Change my answer
+          {answer === 'declined' ? 'Actually, I can make it' : 'Change my answer'}
         </button>
       </div>
     )

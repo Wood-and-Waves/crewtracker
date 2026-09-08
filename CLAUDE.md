@@ -50,6 +50,23 @@ Dan (the developer) has no professional dev background — so explain the *why* 
   - **Revoked privileges.** `pg_dump` emits GRANTs computed against Postgres's built-in default, so a REVOKE is an *absence* — and on Supabase an absence is inherited from `ALTER DEFAULT PRIVILEGES` rather than removed. The `day_rate` lockdown is written as an absence, so without `grants.sql` it silently doesn't exist in the rebuilt database. `npm run db:grants` regenerates it from production; re-run after changing any privilege.
 
   Verified 2026-07-26 to reproduce production exactly: 15 tables, 43 policies, 17 functions, 12 public + 6 non-public triggers, 2 views, 23 indexes, 47 constraints, 7 event triggers, 208 table grants, 1390 column privileges.
+- **Dev logins that exist** (dev database only, password `crewtracker-dev` on the three
+  fixtures). One per ROLE in the show flow, because every one of them sees a different app:
+  - `dan@theaudiosmith.com` — admin: builds shows, writes positions, names the PM, sends to scheduling.
+  - `scheduler@example.test` — "Sasha Vine", scheduler ONLY (`can_manage_scheduling` +
+    `can_edit_timecards`, no `can_edit_all_shows`, no admin). Added 2026-09-08 because the
+    Scheduling screen is built for exactly this person and nobody had ever opened it as one.
+    Verified: sees a SENT show's grid in full, gets a 404 on a show that was never sent, and sees
+    only entitled shows in the Needs-scheduling queue.
+  - `pm@example.test` — "Jordan Vega", a PM with no admin rights, so the PM INVITATION can be
+    tested properly. Naming yourself as PM proves nothing: accepting is what grants access, and
+    you already have it.
+  - `crewtest@example.test` — the crew-side login, linked by email to the directory entry for
+    **Alex Reyes** (migration 0028 links `crew_members.profile_id` by email). Until 2026-09-08 no
+    crew row carried that address, so the crew screen had nobody to be and the path was untestable.
+
+  A hand-made member also needs `profiles.active_organization_id` set — the invite flow does it
+  (`lib/invite.ts`), so a fixture must too, or every page renders the "Almost there" card.
 - **Dev browser sign-in**: `app/api/dev/login/route.ts` mints a session so a browser can be signed in for UI verification. Three independent gates — `NODE_ENV` must be development (Vercel builds everything, preview included, as production), the Supabase project must not be production, and `DEV_LOGIN_SECRET` from `.env.local` must match. Every rejection is a bare 404.
 - **Vercel CLI**: installed globally (2026-08-03) and signed in as `dan-2811`; the repo is linked to `crew-tracker/crewtracker`. `vercel inspect crewtracker-lime.vercel.app` / `vercel ls crewtracker` check deployment status after a push instead of guessing whether a deploy succeeded. `vercel link` appends a managed `VERCEL_OIDC_TOKEN` to `.env.local` — that is normal, and it leaves the existing keys alone.
   - **`vercel env pull` cannot read the values back.** Every variable on this project is flagged sensitive, so the pulled file contains the literal string `[SENSITIVE]` in place of all five. Don't diff those placeholders against real keys and conclude anything — that produces a confident, wrong answer. Read values from the dashboard, or test behaviour directly.
@@ -228,7 +245,8 @@ app/
     clock/identify/route.ts      — trades a venue QR for one person's personal link (POST only)
     clock/punch/route.ts         — the public punch write; owns every rule the DB doesn't (POST only)
     pm/invite/route.ts           — name / clear / re-invite the PM, and record that they accepted (session; the shows UPDATE policy is the authorization)
-    pm/accept/route.ts           — the PM accepting from their email link (public, POST only, rate-limited)
+    pm/accept/route.ts           — the PM accepting from the page's button (public, POST only, rate-limited); the emailed LINK accepts through the page itself
+    pm/decline/route.ts          — the PM saying no, with an optional note to whoever named them (public, POST only, rate-limited)
     shows/send-to-scheduling/route.ts — sends a show to every member with can_manage_scheduling, or takes it back (replaced approve-call)
     crew/days-changed/route.ts   — emails the crew change notice; session, scheduling-gated, caller's RLS decides who's readable
     bookings/remove/route.ts     — takes somebody off a show from the status chip: show-wide, refuses on punches, offers to tell them
@@ -281,6 +299,7 @@ lib/
   crewCall.ts   — position counting (summarizeCall/describeCallSize) + day scopes
   crewCallGrid.ts — the rooms×days call model, pure and unit-tested
   bookingEmail.ts / callHandoffEmail.ts / bookingInvite.ts — crew requests and the handoff
+  bookingResponse.ts — recording a crew answer; the page's buttons and the email's Confirm button both go through it
   supabase/client.ts / server.ts / admin.ts
   payroll.ts    — TypeScript port of iOS PayrollCalculator
   punches.ts    — punch ordering/labels + chronology validation; formatPunchTime takes a use24Hour flag
@@ -299,11 +318,12 @@ lib/
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
   trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
   rateLimit.ts  — the throttle for the three public write routes; counters live in the database (0025)
+  sendEmail.ts  — the one door every email leaves through; redirects to DEV_EMAIL_TO off production
   siteOrigin.ts — the origin for every link the app EMAILS; fixed per environment, never the Host header
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
   dayActivities.ts — what the show does each day: five activities, any set; label and tint DERIVED; the legacy day_type mapping (fromLegacy/toLegacy). lib/dayTypes.ts is a shim over it.
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
-  pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
+  pmInviteEmail.ts / pmInvite.ts — the PM invitation and "they declined" emails, and the service-role loader plus acceptPmInvite/declinePmInvite behind the public page; explicit columns, never select('*')
   schedulingQueue.ts — the Needs-scheduling list: summarizeQueue (pure) + fetchSchedulingQueue, scoped by the caller's RLS
   useDropDirection.ts — open a menu upward when the scroll box below it has no room
   useDismiss.ts — close on an outside click or Escape; the shared version of a pattern Select and AccountMenu each wrote by hand
@@ -388,12 +408,26 @@ scripts/
                        · 0036 staffing_events INSERT requires can_edit_timecards (0035 let any
                        viewer of a show — crew-side logins included — write digest lines);
                        extend_all_day_positions() keeps the person's booking_status. No rows.
+                       · 0039 pm_invites.declined_at / declined_note: a PM's
+                       decline is RECORDED rather than deleting the invitation,
+                       so the email's Decline button can be definitive and still
+                       reversible, and a note can follow it. No rows.
+                       · 0038 colleagues can see each other's NAMES:
+                       shares_my_organization() (SECURITY DEFINER) replaces the
+                       memberships subquery inside the profiles SELECT policy,
+                       which under the caller's own RLS matched only their own
+                       row — so a non-admin could read exactly one profile,
+                       their own. Permissions stay admin-only. No rows.
                        · 0037 sync_position_slots() makes a slot's role follow its definition;
                        deleting a definition drops its UNFILLED slots first (BEFORE DELETE
                        trigger — the FK's set-null used to orphan them as "legacy" slots the
                        sync then ignored, so a removed position kept counting). No rows.
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0037 2026-09-07). Nothing is dev-only.
+                       0018–0037 applied to BOTH databases (0018–0020 shipped
+                       2026-09-05, 0021–0027 2026-09-06, 0028–0037 2026-09-07).
+                       **0038 and 0039 are DEV ONLY** — they ship with the next
+                       production cutover. Until then a non-admin on
+                       crewtracker.app cannot see a colleague's name, and a PM
+                       decline there still deletes the invitation.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -436,6 +470,14 @@ Triggers: `on_auth_user_created → handle_new_user()` (had a `search_path` bug 
 ## Permissions system
 
 Two-layer model on `profiles`: `base_role` (admin/staff/pm/crew preset) + individual boolean toggles, customizable per user by an admin. **No cross-organization visibility, ever — including scheduling.** One login can hold memberships in several companies, but nothing about company A's work may surface in company B. Specifically: if a person is booked on a show at A, a scheduler at B must **not** see them flagged as unavailable, busy, or double-booked. Dan stated this as a hard rule (2026-07-28), and it holds today by construction rather than by intent — `crew_members` rows are per-organization with no shared identity between them, and every schedule query is scoped by the caller's RLS, so another org's bookings are never in the result set to begin with. Two things would break it, so don't do either: matching people across organizations by email/phone/name to build a "same person" link, or reading bookings with the service role in any scheduling path. This gets more dangerous, not less, when crew logins arrive — one human with one login across two companies is exactly where the leak would appear.
+
+**A ROLE IS NOT MONEY.** `rate_cards` carries both, and `day_rate` is the part behind
+`can_view_pay_rates` (through the `crew_rate_cards_visible` view). `role` and `crew_member_id`
+are not: they hold an ordinary org-scoped policy and a plain SELECT grant. `FillPositionPicker`
+read roles through the pay-gated view until 2026-09-08, so every candidate showed as "No roles
+listed" and the role filter matched nobody — for the schedulers the screen exists for, who have
+no business holding a pay-rate permission. Read `rate_cards(crew_member_id, role)` directly for
+roles; keep the view for rates. Pinned by `rls.mts`.
 
 Financial visibility in reports/exports requires **both** `show.show_financials` (does this show track $ at all) **and** `profile.can_view_pay_rates` (is this user allowed to see pay rates).
 
@@ -581,6 +623,29 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   automatically, registration is optional. Build side: an `accepted_terms_at` on profiles and a
   click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
   consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
+- **"Pencilled" is on the wording list too** (Dan, 2026-09-08, screenshotting the group-ask
+  confirm: "Email a booking request to the 4 people still pencilled on this show?"). It is the
+  app's word for a booking nobody has been asked about yet, and it is on screen in six places
+  that must all change together: the chip's own label and the status word behind it
+  (`components/BookingStatusChip.tsx`), the button "Ask everyone pencilled" plus its confirm
+  sentence and its "Nobody is pencilled — everyone has been asked or has answered" note
+  (`components/AskPencilledButton.tsx`), and the explainer under it on Edit Show, "One booking
+  request email per person still pencilled…" (`components/EditShowClient.tsx`). The database
+  value `booking_status = 'pencilled'` can stay as it is — renaming a column value is a
+  migration for no visible gain, the same call the `crew_call_positions` table already got.
+- **"Named you" has to go** (Dan, 2026-09-08: "I don't like the verbiage 'named you'"). It is
+  the app's own word for assigning a production manager and it has spread through every
+  PM-facing string. The replacement is Dan's to choose — "assigned", "put you on", "asked you to
+  PM", something else — and once he does it is a find-and-replace across seven user-facing
+  places, all of which should end up saying the same thing:
+  `lib/pmInviteEmail.ts` (the subject "you're named PM on X" and the body "you've been named
+  production manager by Y", in both the text and HTML versions), `app/pm/[token]/page.tsx`
+  (the invitation line "X named you production manager on", the confirmation "It's in your
+  CrewTracker now. X named you.", and the dead-link line "Check with whoever named you"),
+  `app/pm/[token]/AcceptPmForm.tsx` ("Whoever named you has been told"), `lib/pmInvite.ts` (the
+  replaced-invitation error), and `components/NewShowClient.tsx` (the couldn't-be-named-PM
+  error). Do the whole set in one go, with [[the email copy review]] if that happens first —
+  the invitation is on that list anyway.
 - **Review every email's wording with Dan** (Dan, 2026-09-07: "I'll want to change them").
   All of it was written by Claude and none of it has been read by the person whose name goes on
   it. One sitting, one file at a time: `lib/inviteEmail.ts` (team invite), `lib/pmInviteEmail.ts`
@@ -589,7 +654,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   `lib/digestEmail.ts` (evening digest), `lib/daysChangedEmail.ts` (crew change notice), plus
   the Final Report email in `app/api/reports/final/route.ts` and the four Supabase Auth
   templates in `docs/email-templates/`. `npm run preview:emails`, `preview:pm` and
-  `preview:booking` print most of them without sending. Change subject lines, greetings and
+  `preview:booking` print most of them without sending — and since 2026-09-08 you can also send
+  them to yourself from the dev site, because every dev email lands in `DEV_EMAIL_TO`. Change subject lines, greetings and
   sign-offs freely; the facts each email carries (no money, no other crew, the accept/confirm
   link) are rules, not copy.
 - **Scheduler digest for accepts** (Dan, 2026-09-07: "declines are instant, accepts are a
@@ -614,6 +680,19 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   scheduling happens at a desk). It scrolls sideways below 1024px rather than restructuring.
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
   time, not a grid.
+- **A crew member's own week: one screen with their hours** (Dan, 2026-09-08: "For the crew
+  links. Would it be possible to have an overview type screen they can click on and see the
+  week's hours?"). Both crew-facing screens — the no-login clock link (`/clock/[token]`) and the
+  crew-side login (`CrewShowScreen`) — show ONE day at a time behind arrows, so the question crew
+  actually ask ("did all my punches land, and what am I owed hours-wise?") cannot be answered
+  without walking the whole show a day at a time. Build: a summary under the punch grid, or a
+  tab beside it — every day of theirs on this show, each with its in/out times, the day's net
+  hours, and a total at the bottom; tapping a day opens that day, which is the screen that
+  already exists. Rules it must keep: **hours only, never money** (the crew-facing rule the
+  timesheet and the booking email already follow); the org's rounding, threaded through like
+  every other total; travel and absent days carry their label instead of times; and it must never
+  read `punches.source` — a crew-entered hour is worth what a PM-entered one is. Read-only. Half
+  a day, most of it presentation, since `lib/payroll.ts` already computes every number.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
@@ -744,6 +823,16 @@ ignores that control's `step` and offers every minute, which defeats the grid �
 control's intrinsic min-width overran its own dialog on a real phone. Offering only grid minutes
 makes the rule structural instead of a correction applied afterwards.
 
+**A crew screen opens on a day of the SHOW, not on a dead date** (`pickShowDay` / `stepDays` in
+`lib/clockLinks.ts`, fixed 2026-09-08). Today wins while the show is running — that is the point
+of the screen — but a link opened before the run started landed on today, which is not a work
+day, and the arrows were computed from `days.indexOf(selectedDate)`: −1, so BOTH went dead on the
+very screen that says "use the arrows to find your day" (Dan, opening a crew link two days
+before the show). Outside the run it now lands on the nearest day of the show, the first if it
+has not started and the last if it is over, and the arrows step by DATE so they work from a date
+that is not in the list at all. Both crew paths share it — the no-login clock link and the
+crew-side login.
+
 **Crew can walk the show's days** (arrows in a light strip under the masthead, `?d=YYYY-MM-DD`).
 A requested day is honoured only if it is genuinely a work day OF THAT SHOW, else it falls back
 to today. The punch route takes the date from the TIMECARD's own work day and never from the
@@ -859,6 +948,11 @@ one show and an A1 on another, so what a login may do is decided PER SHOW, not p
   punches rule re-derived every visible timecard). Measured after 0030: app punch read 1.9 ms.
 - **`is_own_timecard()` is real** — the placeholder 0019 left is now the crew-side write door.
   Timecard writes stay `can_edit_timecards`: a crew-side person cannot change their own flags.
+- **A crew-only login is not offered Shoulder Surfer Mode** (2026-09-08). The switch hides dollar
+  amounts, and a crew-only person is never shown one anywhere in the app, so offering it reads as
+  a feature they are missing rather than one they do not need (Dan: "That would be confusing").
+  `PersonalSettingsClient` takes `canSeeMoney`, which the Settings page sets from `isCrewOnly`.
+  They keep 24-hour time, which is about their own punch times, and the theme.
 - **The crew screen from a login** is the crew clock (`components/CrewShowScreen.tsx` →
   `ClockPunch` with `endpoint="/api/clock/punch-me"`). `lib/clockPunch.ts` is the ONE place the
   crew-punch rules live; both routes call `applyCrewPunch()`. `loadClockViewForProfile()`
@@ -917,10 +1011,35 @@ of the definition's other open days the person is doing (all ticked; one slot pe
 the clicked slot's own room) and books them in ONE multi-row insert; a 23505 names the clashing
 day. A slot without a definition fills one day, exactly as before.
 
+**THE EMAIL CARRIES BOTH ANSWERS: an Accept button and a Decline button** (2026-09-08). Dan: *"I would like the accept from the email to be an
+actual accept."* The link carries `?accept=1`, the page accepts before it renders, and what opens
+is a confirmation — you have the show, here is the run day by day, here is how to hand it back.
+One tap, the way Planning Center does it. **Decline** is the second button: it opens the same
+page on its note step, because a decline carries a message back and the reason is the useful
+part — one tap in the email, then send. I argued for the button first, on the grounds that
+Microsoft Defender Safe Links and gateways like Proofpoint fetch URLs before a person reads them
+and would accept on their behalf; Dan's answer is the right one and is now the design: **the page
+carries DECLINE**, so an accidental acceptance is undone in a tap, and whoever named them is told.
+Accepting is idempotent, so a scanner's fetch and a refresh both change nothing the second time.
+This is the ONLY GET in the app that writes anything.
+
+**BOTH BUTTONS ANSWER ON THE CLICK, and the page carries the reversal** (Dan, 2026-09-08: "A
+click from the email is definitive. There can be a reversal, but a decline click in the email
+should not bring up another decline button"). Declining removes the pointer, both stamps and any
+access the acceptance granted, so the show honestly has no PM again, and emails whoever named
+them at once. **The invitation itself SURVIVES** (0039: `pm_invites.declined_at` /
+`declined_note`) — deleting it, as the first cut did, left the token dead, so there was no way
+back and no way to add a note. The declined page offers "Actually, I can do this show", which
+re-points the show at them, and a note box: the reason is worth having but must never stand
+between somebody and saying no, so it is sent afterwards, on its own. `replaced` now means
+"somebody ELSE holds this show", because a declined invitation points at nobody and must still
+open. The crew booking request works the same way, through `booking_invites`, which has recorded
+answers since 0014.
+
 **The PM is INVITED, and accepting is the only thing that grants access** (Dan: a silent accept
 is dangerous). Naming somebody — `PmField` on New Show or Edit Show, confirmed in words —
 writes `shows.pm_profile_id` through the caller's session (the shows UPDATE policy is the
-authorization) and mints a `pm_invites` token, then emails `/pm/<token>`. Naming grants NOTHING;
+authorization) and mints a `pm_invites` token, then emails `/pm/<token>?accept=1`. Naming grants NOTHING;
 the `show_assignments` row with `source='pm'` is what opens the show, and exactly two things
 write it: `/api/pm/accept` (public, POST only, rate-limited per token and per IP) when the PM
 presses Accept, and — since 2026-09-08 — `/api/pm/invite` with `{ markAccepted: true }` when
@@ -1191,7 +1310,7 @@ tint, which is what explains which cells exist; changing them stays on Edit Show
   - `/dashboard/schedule` — company-wide calendar, rooms×days grid on desktop, agenda on mobile. `lib/schedule.ts` holds the cross-show query.
   - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
   - **The scheduling queue** — `shows.sent_to_scheduling_at`, sent from the show page to EVERY member holding `can_manage_scheduling` (nobody owns a sent show; see piece C below). Requires at least one position. `shows.scheduler_id` / `call_approved_at` are history, superseded 2026-09-07.
-  - **Booking requests** — `booking_invites`, emailed confirm/decline link at `/book/[token]` with no login, plus an SMS-ready text with deliberately no link. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
+  - **Booking requests** — `booking_invites`, with **Confirm and Decline as two BUTTONS in the email** (2026-09-08, Dan: "This should have a Accept or Decline button. Not a link to accept or decline"). Confirm answers on arrival — `?a=confirm`, handled by the page through `lib/bookingResponse.ts`, the same function the page's own buttons post to. Decline does NOT answer on the link: `?a=decline` opens `/book/[token]` with the note box ready, because a decline carries a message to whoever is staffing the show and the reason is the useful part. No login either way. The SMS version still carries **no link at all**, deliberately. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
   - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reached by tapping **Open** in a cell of the Scheduling screen (the tracker's open rows and Positions panel are gone since 2026-09-08). Since piece B it books a definition's other open days too (a checklist, one insert), and since 2026-09-08 booking somebody who DECLINED revives their own row instead of inserting a second one.
 
 This list drifted badly once and sent a session off to re-implement finished work. If something here looks missing, search the repo before believing it.
@@ -1325,7 +1444,35 @@ act that ships to customers, and any pending migrations go through the steps abo
 
 ## Environment variables
 
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings. `RESEND_API_KEY` (beta-signup email). `CRON_SECRET` (Vercel-only, not in `.env.local` — locks down the keepalive cron endpoint; see Notes).
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings. `RESEND_API_KEY` (every email). `CRON_SECRET` (Vercel-only, not in `.env.local` — locks down the keepalive cron endpoint; see Notes). **`DEV_EMAIL_TO`** — the one inbox every email goes to while the app is pointed at a NON-production database (see "One door for email" below). Set in `.env.local` and in Vercel's **Preview** scope; production neither has it nor needs it.
+
+## One door for email (2026-09-08)
+
+**Every message this app sends goes through `lib/sendEmail.ts`, and when the app is not pointed
+at the PRODUCTION database it is redirected to a single inbox** (`DEV_EMAIL_TO`), with the
+intended recipient written into the subject: `[dev → alex@example.test] You are booked`. Dan:
+*"I have real people on the production site. I cannot test there. Emails would go out."* So
+testing lives on dev — and dev was sending real mail to whatever address was on the row, which
+for the seeded crew is `@example.test`: it bounces, and the bounce rate is charged against
+`contact.crewtracker.app`, the same domain the real invitations leave from.
+
+Three things about it that are deliberate:
+
+- **The test is the DATABASE, not `NODE_ENV`.** Vercel builds every deployment as production,
+  preview included, and the preview is exactly where the guard has to work because it carries the
+  dev database. `NEXT_PUBLIC_SUPABASE_URL` names the project, so that is what decides.
+- **It fails CLOSED.** On a non-production database with no `DEV_EMAIL_TO`, nothing is sent and
+  the caller is told who it would have gone to. The senders surface that as their usual warning
+  ("they are named, but the email did not send: …"), so it is visible rather than silent.
+- **Supabase Auth's own emails do not come through here** — magic link, password reset and
+  recovery are sent by Supabase over its own SMTP, so those still reach whatever address is typed
+  into the login page. That is the one hole, and it only opens for an address somebody types.
+
+All nine senders were converted (`inviteEmail`, `pmInviteEmail`, `callHandoffEmail`,
+`bookingEmail`, `readyEmail`, `digestEmail`, `daysChangedEmail`, the Final Report route and the
+beta-signup route) and none constructs Resend for itself any more. `routeEmail()` is pure and
+unit-tested in `schedule.mts`; a tenth sender that skips the door would be a real bug, so grep
+for `new Resend(` before adding one.
 
 ## Notes
 

@@ -95,6 +95,10 @@ const [showA] = await q(`insert into shows (organization_id, name, start_date, e
 const [showB] = await q(`insert into shows (organization_id, name, start_date, end_date, show_financials)
                          values ($1,'B Show','2026-09-01','2026-09-02',true) returning id`, [orgB])
 await q(`insert into crew_members (organization_id, full_name) values ($1,'A Crew'),($2,'B Crew')`, [orgA, orgB])
+// A rate card in EACH company: the role on it is what the Fill picker reads,
+// and the rate on it is what stays behind can_view_pay_rates.
+await q(`insert into rate_cards (crew_member_id, role, day_rate)
+         select id, 'A1', 500 from crew_members where full_name in ('A Crew','B Crew')`)
 const [wdA] = await q(`insert into work_days (show_id, date, day_number) values ($1,'2026-09-01',1) returning id`, [showA.id])
 const [roomA] = await q(`insert into rooms (work_day_id, name) values ($1,'Main') returning id`, [wdA.id])
 const [tcA] = await q(`insert into timecards (room_id, crew_member_name, role, day_rate)
@@ -159,6 +163,34 @@ try {
   await asUser(bob, async () => {
     const shows = await q(`select name from shows where name in ('A Show','B Show')`)
     check('B sees only its own show', shows.length === 1 && shows[0].name === 'B Show', JSON.stringify(shows))
+  })
+
+  console.log('\n=== colleagues can see each other by NAME, and nothing else (0038) ===')
+  await asUser(dave, async () => {
+    // Dave is a PM at A with no admin rights. Before 0038 the profiles rule
+    // asked `memberships` who his colleagues were, under his own RLS — and he
+    // can see exactly one membership row, his own. So he could read exactly one
+    // profile, his own, and every colleague's name came back empty.
+    const names = await q(`select full_name from profiles where id = $1`, [alice])
+    check('a non-admin can read a colleague\'s name', names.length === 1, JSON.stringify(names))
+    const mine = await q(`select full_name from profiles where id = $1`, [dave])
+    check('and still their own', mine.length === 1, JSON.stringify(mine))
+    const perms = await q(`select can_manage_users from memberships where profile_id = $1`, [alice])
+    check('but NOT that colleague\'s permissions — memberships stays admin-only', perms.length === 0, JSON.stringify(perms))
+    const other = await q(`select full_name from profiles where id = $1`, [bob])
+    check('and nobody from another company', other.length === 0, JSON.stringify(other))
+  })
+
+  console.log('\n=== a role is not money: roles read without can_view_pay_rates ===')
+  await asUser(bob, async () => {
+    // Bob has no rate access. The Fill picker reads rate_cards for ROLES, which
+    // has an ordinary org-scoped policy; only day_rate is revoked. Reading them
+    // through crew_rate_cards_visible instead — as the picker did until
+    // 2026-09-08 — showed every candidate as "No roles listed" to exactly the
+    // people who do the scheduling.
+    const roles = await q(`select role from rate_cards`)
+    check('roles come back for somebody who cannot see rates', roles.length > 0, JSON.stringify(roles))
+    check('and the rate itself is still refused', (await probe(`select day_rate from rate_cards limit 1`)).code === '42501')
   })
 
   console.log('\n=== pay rates are not readable, even by an admin who may see them ===')

@@ -1,5 +1,7 @@
 'use client'
 
+import { stepDays } from '@/lib/clockLinks'
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -71,9 +73,12 @@ export default function ClockPunch({
         ?.punches.find(p => p.punch_type === editing.type)
     : undefined
 
+  // By DATE, not by index: on a day the show does not run — which is any day
+  // before it starts — indexOf returns -1 and both arrows went dead on the very
+  // screen that says "use the arrows to find your day" (Dan, 2026-09-08).
+  const { prev: prevDay, next: nextDay } = stepDays(days, selectedDate)
+  // -1 when the show does not run today; the label falls back to the date.
   const dayIndex = days.indexOf(selectedDate)
-  const prevDay = dayIndex > 0 ? days[dayIndex - 1] : null
-  const nextDay = dayIndex >= 0 && dayIndex < days.length - 1 ? days[dayIndex + 1] : null
 
   // Parsed as a plain date, then formatted in the SHOW's zone via a UTC noon
   // anchor — a bare `new Date('2026-09-05')` is midnight UTC, which is the
@@ -207,7 +212,9 @@ export default function ClockPunch({
           <span className="text-[11px] uppercase tracking-wide text-muted">
             {selectedDate === today
               ? 'Today'
-              : `Day ${dayIndex + 1} of ${days.length}`}
+              : dayIndex >= 0
+                ? `Day ${dayIndex + 1} of ${days.length}`
+                : 'Not a show day'}
           </span>
         </div>
         <button

@@ -21,7 +21,7 @@ import { byShowAndDate, coverageFor, crewKey, resolveWindow,
          type ScheduleBooking, type ScheduleShow } from '../../lib/schedule.ts'
 import { todayInZone, showStatus } from '../../lib/showStatus.ts'
 import {
-  describeDates, buildBookingRequestText, describeDayLines, hasAnyDayActivity,
+  describeDates, buildBookingRequestText, describeDayLines, hasAnyDayActivity, buildBookingRequestEmail,
 } from '../../lib/bookingEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import {
@@ -34,6 +34,8 @@ import { buildBoard, describeBoard } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
+import { buildPmDeclinedEmail, buildPmInviteEmail } from '../../lib/pmInviteEmail.ts'
+import { routeEmail, isProductionData } from '../../lib/sendEmail.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -819,6 +821,88 @@ console.log('\n--- evening digest ---')
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
   check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
+}
+
+console.log('\n--- the crew booking request email ---')
+{
+  const { text, html } = buildBookingRequestEmail({
+    to: 'alex@x.test', crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West',
+    cityState: null, organizationName: 'Wood & Waves', role: 'A1',
+    days: [{ date: '2026-09-10', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }],
+    link: 'https://crewtracker.app/book/abc',
+    confirmUrl: 'https://crewtracker.app/book/abc?a=confirm',
+    declineUrl: 'https://crewtracker.app/book/abc?a=decline',
+  })
+  check('both answers are in the email', 
+    [text.includes('https://crewtracker.app/book/abc?a=confirm'), text.includes('https://crewtracker.app/book/abc?a=decline')], [true, true])
+  check('and both are buttons in the HTML',
+    [html.includes('>\n      Confirm\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
+  check('the old single "confirm or decline" link is gone', text.includes('Confirm or decline'), false)
+  check('the SMS still carries no link at all',
+    buildBookingRequestText({ crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West', cityState: null,
+      organizationName: 'Wood & Waves', role: 'A1',
+      days: [{ date: '2026-09-10', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }] }).includes('http'), false)
+}
+
+console.log('\n--- the PM invitation email ---')
+{
+  const { subject, text, html } = buildPmInviteEmail({
+    to: 'jordan@x.test', pmName: 'Jordan Vega', showName: 'Northwind', dates: 'Sep 21–29',
+    venue: 'Moscone West', orgName: 'Wood & Waves', inviterName: 'Dan Smith',
+    acceptUrl: 'https://crewtracker.app/pm/abc?accept=1',
+    declineUrl: 'https://crewtracker.app/pm/abc?decline=1',
+  })
+  check('subject', subject, "Wood & Waves: you're named PM on Northwind")
+  check('BOTH answers are in the email, as links', 
+    [text.includes('https://crewtracker.app/pm/abc?accept=1'), text.includes('https://crewtracker.app/pm/abc?decline=1')], [true, true])
+  check('and both are buttons in the HTML', [html.includes('>\n      Accept\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
+  check('the accept link is the one that accepts', text.includes('Accept and it lands in your CrewTracker straight away:'), true)
+  check('the decline link says a note can come with it', text.includes('Or decline, and tell them why if you like:'), true)
+}
+
+console.log('\n--- a PM saying no ---')
+{
+  const withNote = buildPmDeclinedEmail({ to: 'dan@x.test', inviterName: 'Dan Smith', pmName: 'Jordan Vega',
+    showName: 'Northwind', orgName: 'Wood & Waves', note: "I'm on the Kestrel load-out that week." })
+  check('subject names who and which show', withNote.subject, 'Jordan Vega declined PM on Northwind')
+  check('body says what happened', withNote.text.includes('Jordan Vega declined the production manager role on Northwind.'), true)
+  check('their note is carried through unedited', withNote.text.includes('They said: "I\'m on the Kestrel load-out that week."'), true)
+  check('and it says where that leaves the show', withNote.text.includes('has no production manager now'), true)
+
+  const bare = buildPmDeclinedEmail({ to: 'dan@x.test', inviterName: null, pmName: 'Jordan Vega',
+    showName: 'Northwind', orgName: 'Wood & Waves', note: null })
+  check('no note, no empty quote', bare.text.includes('They said'), false)
+  check('no inviter name still greets somebody', bare.text.startsWith('Hi,'), true)
+}
+
+console.log('\n--- the email guard ---')
+{
+  // Production: untouched, whoever it is addressed to.
+  check('production sends to the real recipient',
+    routeEmail({ to: 'alex@example.com', subject: 'Northwind needs scheduling', productionData: true }),
+    { to: 'alex@example.com', subject: 'Northwind needs scheduling' })
+
+  // Anywhere else: one inbox, and the subject says who it was for.
+  const dev = routeEmail({ to: 'alex@example.test', subject: 'You are booked', productionData: false, devInbox: 'me@mine.test' })
+  check('dev redirects to the one inbox', (dev as any).to, 'me@mine.test')
+  check('and names the intended recipient in the subject', (dev as any).subject, '[dev \u2192 alex@example.test] You are booked')
+
+  const many = routeEmail({ to: ['a@x.test', 'b@x.test'], subject: 'Final Payroll Report', productionData: false, devInbox: 'me@mine.test' })
+  check('several recipients collapse to the one inbox', (many as any).to, 'me@mine.test')
+  check('and all of them are named', (many as any).subject, '[dev \u2192 a@x.test, b@x.test] Final Payroll Report')
+
+  // Fails CLOSED: nothing is sent rather than reaching a stranger.
+  const blocked = routeEmail({ to: 'someone@real.test', subject: 'You are booked', productionData: false })
+  check('no dev inbox means nothing is sent', 'blocked' in blocked, true)
+  check('and the caller is told who it would have reached', (blocked as any).blocked.includes('someone@real.test'), true)
+  check('an empty dev inbox counts as unset',
+    'blocked' in routeEmail({ to: 'a@x.test', subject: 's', productionData: false, devInbox: '   ' }), true)
+
+  // The test is the DATABASE, not NODE_ENV — a preview build runs as
+  // production and must still be guarded.
+  check('the production project ref is production', isProductionData('https://nfrvxkwemtittrqboebl.supabase.co'), true)
+  check('the dev project ref is not', isProductionData('https://oeflzwgtrkgjuvjdcwnv.supabase.co'), false)
+  check('no url at all is not production', isProductionData(undefined), false)
 }
 
 console.log('\n--- days changed email ---')

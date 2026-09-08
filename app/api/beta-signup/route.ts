@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
+import { sendEmail } from "@/lib/sendEmail";
 
 // Constructed inside the handler, NOT at module scope.
 //
@@ -11,10 +11,10 @@ import { Resend } from "resend";
 //
 // A missing key should break the one request that needs to send an email, not
 // the build. app/api/reports/final/route.ts already does it this way.
-function mailer() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return null;
-  return new Resend(key);
+// Every message in this app leaves through lib/sendEmail, which redirects to a
+// single inbox whenever the app is not pointed at the production database.
+function mailerConfigured() {
+  return !!process.env.RESEND_API_KEY;
 }
 
 export async function POST(request: Request) {
@@ -50,8 +50,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const resend = mailer();
-  if (!resend) {
+  if (!mailerConfigured()) {
     // Only reachable in an environment with no RESEND_API_KEY — a Preview
     // deployment, say. Log it and tell the truth rather than reporting success
     // for a form submission that went nowhere.
@@ -63,7 +62,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: "CrewTracker <hello@contact.crewtracker.app>",
       to: "dan@theaudiosmith.com",
       subject: `New Beta Interest: ${company || name}`,

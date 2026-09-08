@@ -1,6 +1,7 @@
 import { loadBookingInvite } from '@/lib/bookingInvite'
 import { describeDayLines } from '@/lib/bookingEmail'
 import BookingResponseForm from './BookingResponseForm'
+import { respondToBooking } from '@/lib/bookingResponse'
 import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
 
@@ -33,11 +34,24 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export default async function BookingPage({
-  params,
+  params, searchParams,
 }: {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ a?: string }>
 }) {
   const { token } = await params
+  const { a } = await searchParams
+
+  // The email carries two BUTTONS, and EITHER ONE IS THE ANSWER (Dan,
+  // 2026-09-08: "A click from the email is definitive. There can be a reversal,
+  // but a decline click in the email should not bring up another decline
+  // button"). So both answer here, as the page loads, and what opens says what
+  // was recorded. Changing your mind is a button on that page — people
+  // genuinely confirm and then have something come up, and the alternative is a
+  // phone call to the scheduler.
+  if (a === 'confirm') await respondToBooking(token, 'confirmed')
+  if (a === 'decline') await respondToBooking(token, 'declined')
+
   const invite = await loadBookingInvite(token)
 
   if (!invite) {

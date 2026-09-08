@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict AUE8PR4f3nzshNb08bdTdNhKeZuZNlHJ6z2Zce6RFoejNa2s5h97nbMKgm7afjz
+\restrict ywxvPyzh6tZRrjeBuEcRP4BkBDYj4nj2WMzl4jyTDt8MtgJ863aCXt8Q4hAxKR9
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -1004,6 +1004,24 @@ end; $$;
 
 
 --
+-- Name: shares_my_organization("uuid"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."shares_my_organization"("p_profile" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select exists (
+    select 1
+    from memberships m
+    where m.profile_id = p_profile
+      and m.organization_id = (select public.my_organization_id())
+      and m.deactivated_at is null
+  );
+$$;
+
+
+--
 -- Name: show_id_for_room("uuid"); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1407,10 +1425,26 @@ CREATE TABLE "public"."pm_invites" (
     "organization_id" "uuid" NOT NULL,
     "sent_by" "uuid",
     "sent_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "accepted_at" timestamp with time zone
+    "accepted_at" timestamp with time zone,
+    "declined_at" timestamp with time zone,
+    "declined_note" "text"
 );
 
 ALTER TABLE ONLY "public"."pm_invites" FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN "pm_invites"."declined_at"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."pm_invites"."declined_at" IS 'They said no. The row stays so the decline can be reversed and a note added.';
+
+
+--
+-- Name: COLUMN "pm_invites"."declined_note"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."pm_invites"."declined_note" IS 'What they wanted whoever named them to know. Sent on, verbatim.';
 
 
 --
@@ -3276,9 +3310,7 @@ CREATE POLICY "Users see position defs for their shows" ON "public"."position_de
 -- Name: profiles Users see profiles in their org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELECT USING ((("id" = ( SELECT "auth"."uid"() AS "uid")) OR (EXISTS ( SELECT 1
-   FROM "public"."memberships" "m"
-  WHERE (("m"."profile_id" = "profiles"."id") AND ("m"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")))))));
+CREATE POLICY "Users see profiles in their org" ON "public"."profiles" FOR SELECT USING ((("id" = ( SELECT "auth"."uid"() AS "uid")) OR "public"."shares_my_organization"("id")));
 
 
 --
@@ -3966,6 +3998,16 @@ GRANT ALL ON FUNCTION "public"."set_timecard_show_id"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "shares_my_organization"("p_profile" "uuid"); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION "public"."shares_my_organization"("p_profile" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."shares_my_organization"("p_profile" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."shares_my_organization"("p_profile" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."shares_my_organization"("p_profile" "uuid") TO "service_role";
+
+
+--
 -- Name: FUNCTION "show_id_for_room"("p_room_id" "uuid"); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4485,5 +4527,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict AUE8PR4f3nzshNb08bdTdNhKeZuZNlHJ6z2Zce6RFoejNa2s5h97nbMKgm7afjz
+\unrestrict ywxvPyzh6tZRrjeBuEcRP4BkBDYj4nj2WMzl4jyTDt8MtgJ863aCXt8Q4hAxKR9
 

@@ -89,6 +89,37 @@ export function isClockLinkExpired(
  * heading rather than silently dropped, so a PM copying this can see who is
  * missing instead of discovering it when somebody cannot clock in.
  */
+/**
+ * Which day a crew screen opens on, and the two days its arrows can reach.
+ *
+ * `days` is the show's work days, ascending; `today` is today IN THE SHOW'S
+ * ZONE. Two things this has to get right, and the second was wrong until
+ * 2026-09-08 (Dan, opening a crew link a fortnight before the show: "it brings
+ * me to today, with no way to advance to the actual show"):
+ *
+ *   * TODAY WINS while the show is running — that is the whole point of the
+ *     screen, and a requested day only overrides it when it is genuinely a day
+ *     of this show.
+ *   * OUTSIDE the run, land on the nearest day of the show — the first one if
+ *     it has not started, the last if it is over. Landing on a date the show
+ *     does not run gave a dead screen that said "use the arrows to find your
+ *     day" beside two arrows that could not move, because they were computed
+ *     from the index of a date that was not in the list.
+ */
+export function pickShowDay(days: string[], today: string, requested?: string | null): string {
+  if (requested && days.includes(requested)) return requested
+  if (days.includes(today)) return today
+  return days.find(d => d > today) ?? days[days.length - 1] ?? today
+}
+
+/** The days either side of `date`, by DATE — never by index, so this still
+ *  works when `date` is not one of the show's days at all. */
+export function stepDays(days: string[], date: string): { prev: string | null; next: string | null } {
+  const prev = [...days].reverse().find(d => d < date) ?? null
+  const next = days.find(d => d > date) ?? null
+  return { prev, next }
+}
+
 export function buildSlackList(showName: string, rows: ClockLinkRow[], origin: string): string {
   const live = rows.filter(r => r.token && !r.revokedAt)
   const missing = rows.filter(r => !r.token || r.revokedAt)

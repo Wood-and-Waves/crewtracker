@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendDeclineNoticeEmail } from '@/lib/bookingEmail'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
-import { siteOrigin } from '@/lib/siteOrigin'
-import { maybeSendReadyEmail, isExpectedReadyReason } from '@/lib/showReadiness'
-import { logStaffingEvent } from '@/lib/staffingEvents'
+import { respondToBooking } from '@/lib/bookingResponse'
 
 // A crew member's answer to a booking request. No login: the token is the
 // authorization, so this runs with the service role.
@@ -44,130 +41,7 @@ export async function POST(request: Request) {
   ])
   if (stop) return stop
 
-  const { data: invite } = await admin
-    .from('booking_invites')
-    .select('id, show_id, crew_member_id, organization_id, expires_at')
-    .eq('token', token)
-    .maybeSingle()
-
-  if (!invite) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
-
-  if (new Date(invite.expires_at) < new Date()) {
-    return NextResponse.json(
-      { error: 'This request has expired. Please contact whoever booked you.' },
-      { status: 400 },
-    )
-  }
-
-  // Checked BEFORE writing. block_writes_when_finalized is a trigger, and the
-  // service role does not bypass triggers — so a response to a closed-out show
-  // would otherwise surface to a crew member as a raw 500.
-  const { data: show } = await admin
-    .from('shows')
-    .select('id, name, finalized_at, sent_to_scheduling_at, organization_id, created_by')
-    .eq('id', invite.show_id)
-    .maybeSingle()
-
-  if (!show) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
-  if (show.finalized_at) {
-    return NextResponse.json(
-      { error: 'This show has been closed out, so it can no longer be changed. Please contact whoever booked you.' },
-      { status: 400 },
-    )
-  }
-
-  const now = new Date().toISOString()
-
-  const { error: inviteError } = await admin
-    .from('booking_invites')
-    .update({ responded_at: now, response, note: note?.slice(0, 500) || null })
-    .eq('id', invite.id)
-
-  if (inviteError) {
-    return NextResponse.json({ error: inviteError.message }, { status: 500 })
-  }
-
-  // Their timecards on this show. Fetched then updated by id: a nested filter
-  // cannot be used as the target of an update.
-  const { data: theirs } = await admin
-    .from('timecards')
-    .select('id, role, rooms!inner ( work_days!inner ( show_id ) )')
-    .eq('crew_member_id', invite.crew_member_id)
-    .eq('rooms.work_days.show_id', invite.show_id)
-
-  // Hoisted above the confirm/decline split — both branches log a staffing
-  // event with this person's name, and the decline notice email below needs
-  // it too.
-  const { data: crew } = await admin.from('crew_members').select('full_name').eq('id', invite.crew_member_id).maybeSingle()
-
-  const ids = (theirs ?? []).map((t: any) => t.id)
-  if (ids.length > 0) {
-    const { error: tcError } = await admin
-      .from('timecards')
-      .update({ booking_status: response, booking_responded_at: now })
-      .in('id', ids)
-
-    if (tcError) {
-      return NextResponse.json({ error: tcError.message }, { status: 500 })
-    }
-  }
-
-  await logStaffingEvent(admin, {
-    showId: invite.show_id,
-    kind: response === 'confirmed' ? 'accepted' : 'declined',
-    crewMemberId: invite.crew_member_id,
-    crewMemberName: crew?.full_name ?? 'A crew member',
-    role: (theirs?.[0] as any)?.role ?? null,
-  })
-
-  // A confirm can be the LAST position on the show — check whether it just
-  // went fully staffed. Never fails the response either way: the answer is
-  // recorded regardless of whether the ready email could be sent.
-  if (response === 'confirmed') {
-    const { sent, reason } = await maybeSendReadyEmail(admin, invite.show_id)
-    if (!sent && !isExpectedReadyReason(reason)) {
-      console.error('maybeSendReadyEmail failed after a confirm:', reason)
-    }
-  }
-
-  // A confirm needs no announcement — the schedule shows it. A DECLINE is
-  // actionable: somebody has to find a replacement, and the sooner they know
-  // the better. Failure to notify never fails the response; the answer is
-  // recorded either way and telling the crew member otherwise would be a lie.
-  //
-  // Who "somebody" is depends on whether the show has been sent to scheduling
-  // (piece C, 2026-09-07): sent, nobody owns it, so every scheduler in the
-  // company hears about it; not sent, it's still the creator's to staff.
-  if (response === 'declined') {
-    let people: { email: string | null; name: string | null }[]
-    if (show.sent_to_scheduling_at) {
-      const { data: schedulers } = await admin.from('memberships')
-        .select('profiles(email, full_name)')
-        .eq('organization_id', show.organization_id).eq('can_manage_scheduling', true).is('deactivated_at', null)
-      people = ((schedulers ?? []) as any[]).map(m => {
-        const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
-        return { email: (p?.email ?? null) as string | null, name: (p?.full_name ?? null) as string | null }
-      })
-    } else if (show.created_by) {
-      const { data: creator } = await admin.from('profiles').select('email, full_name').eq('id', show.created_by).maybeSingle()
-      people = creator ? [{ email: creator.email ?? null, name: creator.full_name ?? null }] : []
-    } else {
-      people = []
-    }
-    people = people.filter(p => p.email)
-
-    if (people.length) {
-      const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
-      await Promise.all(people.map(p => sendDeclineNoticeEmail({
-        to: p.email!,
-        recipientName: p.name,
-        crewName: crew?.full_name ?? 'A crew member',
-        showName: show.name,
-        note: note?.slice(0, 500) || null,
-        link: `${origin}/dashboard/shows/${show.id}`,
-      })))
-    }
-  }
-
-  return NextResponse.json({ ok: true, response })
+  const result = await respondToBooking(token, response, note)
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+  return NextResponse.json({ ok: true, response: result.response })
 }

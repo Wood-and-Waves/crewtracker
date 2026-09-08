@@ -13,7 +13,7 @@
 //
 // NO MONEY, same rule as every crew-facing email in this app.
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 import { describeDayLines, type EngagementDay } from '@/lib/bookingEmail'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
@@ -115,8 +115,8 @@ export async function sendDaysChangedEmail(input: DaysChangedInput): Promise<{ e
   if (!key) return { error: 'Email is not configured.' }
   const { subject, text, html } = buildDaysChangedEmail(input)
   try {
-    const { error } = await new Resend(key).emails.send({ from: FROM, to: input.to, subject, text, html })
-    if (error) return { error: error.message }
+    const { error } = await sendEmail({ from: FROM, to: input.to, subject, text, html })
+    if (error) return { error }
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not send the email.' }

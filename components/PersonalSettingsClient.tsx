@@ -10,10 +10,16 @@ import Button from '@/components/ui/Button'
 export default function PersonalSettingsClient({
   use24HourTime,
   shoulderSurferMode,
+  canSeeMoney = true,
   fullName = '',
 }: {
   use24HourTime: boolean
   shoulderSurferMode: boolean
+  /** Does this person ever see a dollar amount? A crew-only login never does,
+   *  so offering to hide money reads as a feature they are missing rather than
+   *  one they do not need (Dan, 2026-09-08: "Crew settings do not need
+   *  shoulder surfer mode. That would be confusing"). */
+  canSeeMoney?: boolean
   /** profiles.full_name. Empty for anyone who signed up with email and password:
    *  the invite flow never captured a name, and only Google SSO supplied one, so
    *  those members showed as "—" everywhere. */
@@ -101,18 +107,20 @@ export default function PersonalSettingsClient({
         />
       </div>
 
-      <div className="flex items-center justify-between py-3">
-        <div>
-          <p className="text-sm text-ink">Shoulder Surfer Mode</p>
-          <p className="text-xs text-muted">Hide dollar amounts on screen behind ••• — useful on a shared device.</p>
+      {canSeeMoney && (
+        <div className="flex items-center justify-between py-3">
+          <div>
+            <p className="text-sm text-ink">Shoulder Surfer Mode</p>
+            <p className="text-xs text-muted">Hide dollar amounts on screen behind ••• — useful on a shared device.</p>
+          </div>
+          <Toggle
+            checked={shoulderSurferMode}
+            onChange={v => toggle('shoulder_surfer_mode', v)}
+            disabled={saving === 'shoulder_surfer_mode'}
+            label="Shoulder Surfer Mode"
+          />
         </div>
-        <Toggle
-          checked={shoulderSurferMode}
-          onChange={v => toggle('shoulder_surfer_mode', v)}
-          disabled={saving === 'shoulder_surfer_mode'}
-          label="Shoulder Surfer Mode"
-        />
-      </div>
+      )}
 
       <div className="flex items-center justify-between pt-4 mt-3 border-t border-line">
         <div>

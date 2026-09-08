@@ -15,7 +15,8 @@ const { subject, text } = buildPmInviteEmail({
   venue: 'Moscone West',
   orgName: 'Wood & Waves Productions',
   inviterName: 'Dan Smith',
-  acceptUrl: 'https://crewtracker.app/pm/abc123',
+  acceptUrl: 'https://crewtracker.app/pm/abc123?accept=1',
+  declineUrl: 'https://crewtracker.app/pm/abc123?decline=1',
 })
 
 console.log(`Subject: ${subject}\n`)

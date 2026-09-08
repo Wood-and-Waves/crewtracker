@@ -13,7 +13,7 @@
 // No money anywhere in it. Every user-facing string says "positions", never
 // "call".
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
 
@@ -134,8 +134,8 @@ export async function sendDigestEmail(input: DigestEmailInput): Promise<{ error?
   if (!key) return { error: 'Email is not configured.' }
   const { subject, text, html } = buildDigestEmail(input)
   try {
-    const { error } = await new Resend(key).emails.send({ from: FROM, to: input.to, subject, text, html })
-    if (error) return { error: error.message }
+    const { error } = await sendEmail({ from: FROM, to: input.to, subject, text, html })
+    if (error) return { error }
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not send the email.' }

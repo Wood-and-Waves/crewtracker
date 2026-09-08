@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser, getMyOrganizations } from '@/lib/session'
+import { getCurrentUser, getMyOrganizations, isCrewOnly } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import OrgSwitcherCard from '@/components/OrgSwitcherCard'
 import SettingsLayout, { type SettingsSection } from '@/components/SettingsLayout'
@@ -41,6 +41,10 @@ export default async function SettingsPage() {
           use24HourTime={user.use24Hour}
           shoulderSurferMode={user.shoulderSurfer}
           fullName={user.fullName || ''}
+          // A crew-only login is never shown a dollar amount anywhere, so a
+          // switch for hiding them is a question about a feature they do not
+          // have.
+          canSeeMoney={!isCrewOnly(user)}
         />
       ),
     },
