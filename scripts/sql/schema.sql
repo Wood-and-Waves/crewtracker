@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict b8aILizdIsrPou2wytWtUlceD6FttS0ceQE68RTDicx30Wcvj2LjfElW2FLHPiK
+\restrict AUE8PR4f3nzshNb08bdTdNhKeZuZNlHJ6z2Zce6RFoejNa2s5h97nbMKgm7afjz
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -357,6 +357,51 @@ $$;
 
 
 --
+-- Name: extend_all_day_positions("uuid", "uuid"); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."extend_all_day_positions"("p_show_id" "uuid", "p_work_day_id" "uuid") RETURNS TABLE("crew_member_id" "uuid", "crew_member_name" "text", "role" "text")
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_new  public.work_days%rowtype;
+  v_prev public.work_days%rowtype;
+  r record;
+  v_slot uuid;
+  v_room uuid;
+begin
+  select * into v_new from work_days where id = p_work_day_id and show_id = p_show_id;
+  if v_new.id is null then raise exception 'That day is not on this show.'; end if;
+  select * into v_prev from work_days where show_id = p_show_id and date < v_new.date order by date desc limit 1;
+  if v_prev.id is null then return; end if;
+
+  for r in
+    select d.id as def_id, t.crew_member_id, t.crew_member_name, t.role, t.booking_status
+    from position_defs d
+    join rooms rp on rp.work_day_id = v_prev.id and rp.name = d.room_name
+    join crew_call_positions pp on pp.room_id = rp.id and pp.position_def_id = d.id
+    join timecards t on t.call_position_id = pp.id and t.booking_status is distinct from 'declined'
+    where d.show_id = p_show_id and d.day_kind = 'all'
+    order by d.sort_order, t.crew_member_name
+  loop
+    select p.id, p.room_id into v_slot, v_room
+    from crew_call_positions p join rooms rn on rn.id = p.room_id
+    where rn.work_day_id = v_new.id and p.position_def_id = r.def_id
+      and not exists (select 1 from timecards x where x.call_position_id = p.id and x.booking_status is distinct from 'declined')
+      and (r.crew_member_id is null or not exists (select 1 from timecards y where y.room_id = p.room_id and y.crew_member_id = r.crew_member_id))
+    order by p.created_at limit 1;
+    if v_slot is null then continue; end if;
+    insert into timecards (room_id, crew_member_id, crew_member_name, role, call_position_id, booking_status)
+    values (v_room, r.crew_member_id, r.crew_member_name, r.role, v_slot, r.booking_status);
+    crew_member_id := r.crew_member_id; crew_member_name := r.crew_member_name; role := r.role;
+    return next;
+  end loop;
+  return;
+end; $$;
+
+
+--
 -- Name: guard_organization_disabled_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -628,7 +673,7 @@ CREATE FUNCTION "public"."my_pm_show_ids"() RETURNS SETOF "uuid"
   where s.organization_id = my_organization_id()
     and ( can_see_all_shows()
        or s.created_by = auth.uid()
-       or s.scheduler_id = auth.uid()
+       or (my_perm('can_manage_scheduling') and s.sent_to_scheduling_at is not null)
        or s.id in (select show_id from show_assignments where profile_id = auth.uid()) );
 $$;
 
@@ -647,6 +692,22 @@ CREATE FUNCTION "public"."position_def_wants"("p_kind" "text", "p_custom" "date"
     when 'custom' then p_date = any(coalesce(p_custom, '{}'))
     else false end;
 $$;
+
+
+--
+-- Name: position_defs_drop_unfilled_slots(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."position_defs_drop_unfilled_slots"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  delete from crew_call_positions p
+  where p.position_def_id = old.id
+    and not exists (select 1 from timecards t where t.call_position_id = p.id and t.booking_status is distinct from 'declined');
+  return old;
+end; $$;
 
 
 --
@@ -918,6 +979,17 @@ $$;
 
 
 --
+-- Name: set_staffing_event_organization_id(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."set_staffing_event_organization_id"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin select s.organization_id into new.organization_id from shows s where s.id = new.show_id; return new; end; $$;
+
+
+--
 -- Name: set_timecard_show_id(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -952,6 +1024,7 @@ $$;
 
 CREATE FUNCTION "public"."sync_position_slots"("p_show_id" "uuid") RETURNS "void"
     LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
     AS $$
 declare
   d public.position_defs%rowtype;
@@ -959,6 +1032,9 @@ declare
   have integer;
 begin
   for d in select * from position_defs where show_id = p_show_id loop
+    -- The role follows the definition.
+    update crew_call_positions set role = d.role
+      where position_def_id = d.id and role is distinct from d.role;
     -- Wanted room-days: top up to count.
     for r in
       select rm.id as room_id
@@ -1429,7 +1505,8 @@ CREATE VIEW "public"."position_slot_flags" WITH ("security_invoker"='true') AS
     "wd"."date",
     "p"."role",
     "t"."id" AS "timecard_id",
-    "t"."crew_member_name"
+    "t"."crew_member_name",
+    "t"."crew_member_id"
    FROM (((("public"."crew_call_positions" "p"
      JOIN "public"."position_defs" "d" ON (("d"."id" = "p"."position_def_id")))
      JOIN "public"."rooms" "rm" ON (("rm"."id" = "p"."room_id")))
@@ -1568,7 +1645,10 @@ CREATE TABLE "public"."shows" (
     "call_approved_by" "uuid",
     "pm_profile_id" "uuid",
     "pm_invited_at" timestamp with time zone,
-    "pm_accepted_at" timestamp with time zone
+    "pm_accepted_at" timestamp with time zone,
+    "sent_to_scheduling_at" timestamp with time zone,
+    "sent_to_scheduling_by" "uuid",
+    "ready_email_sent_at" timestamp with time zone
 );
 
 
@@ -1577,6 +1657,28 @@ CREATE TABLE "public"."shows" (
 --
 
 COMMENT ON COLUMN "public"."shows"."finalized_at" IS 'Set when the Final Report is sent. Non-null means times are locked.';
+
+
+--
+-- Name: staffing_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE "public"."staffing_events" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "show_id" "uuid" NOT NULL,
+    "organization_id" "uuid",
+    "at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "kind" "text" NOT NULL,
+    "crew_member_id" "uuid",
+    "crew_member_name" "text" NOT NULL,
+    "role" "text",
+    "days" "text",
+    "actor" "uuid",
+    "sent_at" timestamp with time zone,
+    CONSTRAINT "staffing_events_kind_check" CHECK (("kind" = ANY (ARRAY['booked'::"text", 'accepted'::"text", 'declined'::"text", 'released'::"text", 'days_changed'::"text", 'moved'::"text", 'extended'::"text"])))
+);
+
+ALTER TABLE ONLY "public"."staffing_events" FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1615,7 +1717,7 @@ CREATE VIEW "public"."timecard_day_rates" WITH ("security_invoker"='false') AS
      JOIN "public"."shows" "s" ON (("s"."id" = "w"."show_id")))
   WHERE (("s"."organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND ( SELECT "public"."my_perm"('can_view_pay_rates'::"text") AS "my_perm") AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR (EXISTS ( SELECT 1
            FROM "public"."show_assignments" "sa"
-          WHERE (("sa"."show_id" = "s"."id") AND ("sa"."profile_id" = ( SELECT "auth"."uid"() AS "uid"))))) OR ("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("s"."scheduler_id" = ( SELECT "auth"."uid"() AS "uid"))));
+          WHERE (("sa"."show_id" = "s"."id") AND ("sa"."profile_id" = ( SELECT "auth"."uid"() AS "uid"))))) OR ("s"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR (( SELECT "public"."my_perm"('can_manage_scheduling'::"text") AS "my_perm") AND ("s"."sent_to_scheduling_at" IS NOT NULL))));
 
 
 --
@@ -1848,6 +1950,14 @@ ALTER TABLE ONLY "public"."show_crew_access"
 
 ALTER TABLE ONLY "public"."shows"
     ADD CONSTRAINT "shows_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: staffing_events staffing_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."staffing_events"
+    ADD CONSTRAINT "staffing_events_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -2122,6 +2232,20 @@ CREATE INDEX "shows_scheduler_id_idx" ON "public"."shows" USING "btree" ("schedu
 
 
 --
+-- Name: shows_sent_to_scheduling_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "shows_sent_to_scheduling_idx" ON "public"."shows" USING "btree" ("sent_to_scheduling_at") WHERE ("sent_to_scheduling_at" IS NOT NULL);
+
+
+--
+-- Name: staffing_events_unsent_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "staffing_events_unsent_idx" ON "public"."staffing_events" USING "btree" ("show_id") WHERE ("sent_at" IS NULL);
+
+
+--
 -- Name: timecards_call_position_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2227,6 +2351,13 @@ CREATE TRIGGER "organizations_guard_disabled_at" BEFORE UPDATE ON "public"."orga
 
 
 --
+-- Name: position_defs position_defs_drop_unfilled_slots; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "position_defs_drop_unfilled_slots" BEFORE DELETE ON "public"."position_defs" FOR EACH ROW EXECUTE FUNCTION "public"."position_defs_drop_unfilled_slots"();
+
+
+--
 -- Name: profiles profiles_guard_super_admin; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2280,6 +2411,13 @@ CREATE TRIGGER "set_room_show_id" BEFORE INSERT OR UPDATE OF "work_day_id", "sho
 --
 
 CREATE TRIGGER "set_show_assignment_organization_id_trigger" BEFORE INSERT ON "public"."show_assignments" FOR EACH ROW EXECUTE FUNCTION "public"."set_show_assignment_organization_id"();
+
+
+--
+-- Name: staffing_events set_staffing_event_organization_id; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "set_staffing_event_organization_id" BEFORE INSERT ON "public"."staffing_events" FOR EACH ROW EXECUTE FUNCTION "public"."set_staffing_event_organization_id"();
 
 
 --
@@ -2708,6 +2846,46 @@ ALTER TABLE ONLY "public"."shows"
 
 
 --
+-- Name: shows shows_sent_to_scheduling_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."shows"
+    ADD CONSTRAINT "shows_sent_to_scheduling_by_fkey" FOREIGN KEY ("sent_to_scheduling_by") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: staffing_events staffing_events_actor_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."staffing_events"
+    ADD CONSTRAINT "staffing_events_actor_fkey" FOREIGN KEY ("actor") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: staffing_events staffing_events_crew_member_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."staffing_events"
+    ADD CONSTRAINT "staffing_events_crew_member_id_fkey" FOREIGN KEY ("crew_member_id") REFERENCES "public"."crew_members"("id") ON DELETE SET NULL;
+
+
+--
+-- Name: staffing_events staffing_events_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."staffing_events"
+    ADD CONSTRAINT "staffing_events_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE CASCADE;
+
+
+--
+-- Name: staffing_events staffing_events_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."staffing_events"
+    ADD CONSTRAINT "staffing_events_show_id_fkey" FOREIGN KEY ("show_id") REFERENCES "public"."shows"("id") ON DELETE CASCADE;
+
+
+--
 -- Name: subscriptions subscriptions_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3031,6 +3209,14 @@ CREATE POLICY "Users delete rate cards for their org crew" ON "public"."rate_car
 
 
 --
+-- Name: staffing_events Users log staffing events for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users log staffing events for their shows" ON "public"."staffing_events" FOR INSERT WITH CHECK ((("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")) AND ( SELECT "public"."my_perm"('can_edit_timecards'::"text") AS "my_perm")));
+
+
+--
 -- Name: position_defs Users manage position defs for their shows; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -3104,7 +3290,7 @@ CREATE POLICY "Users see punches for their timecards" ON "public"."punches" FOR 
    FROM "public"."show_assignments"
   WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("show_id" IN ( SELECT "shows"."id"
    FROM "public"."shows"
-  WHERE (("shows"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("shows"."scheduler_id" = ( SELECT "auth"."uid"() AS "uid"))))) OR ("timecard_id" IN ( SELECT "timecards"."id"
+  WHERE (("shows"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR (( SELECT "public"."my_perm"('can_manage_scheduling'::"text") AS "my_perm") AND ("shows"."sent_to_scheduling_at" IS NOT NULL))))) OR ("timecard_id" IN ( SELECT "timecards"."id"
    FROM "public"."timecards"
   WHERE ("timecards"."crew_member_id" IN ( SELECT "public"."my_crew_member_ids"() AS "my_crew_member_ids")))))));
 
@@ -3141,12 +3327,20 @@ CREATE POLICY "Users see rulesets for their shows" ON "public"."payroll_rulesets
 
 
 --
+-- Name: staffing_events Users see staffing events for their shows; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users see staffing events for their shows" ON "public"."staffing_events" FOR SELECT USING (("show_id" IN ( SELECT "shows"."id"
+   FROM "public"."shows")));
+
+
+--
 -- Name: shows Users see their org shows; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Users see their org shows" ON "public"."shows" FOR SELECT USING ((("organization_id" = ( SELECT "public"."my_organization_id"() AS "my_organization_id")) AND (( SELECT "public"."can_see_all_shows"() AS "can_see_all_shows") OR ("id" IN ( SELECT "show_assignments"."show_id"
    FROM "public"."show_assignments"
-  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("scheduler_id" = ( SELECT "auth"."uid"() AS "uid")) OR ("id" IN ( SELECT "show_crew_access"."show_id"
+  WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("created_by" = ( SELECT "auth"."uid"() AS "uid")) OR (( SELECT "public"."my_perm"('can_manage_scheduling'::"text") AS "my_perm") AND ("sent_to_scheduling_at" IS NOT NULL)) OR ("id" IN ( SELECT "show_crew_access"."show_id"
    FROM "public"."show_crew_access"
   WHERE ("show_crew_access"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))))));
 
@@ -3174,7 +3368,7 @@ CREATE POLICY "Users see timecards for their shows" ON "public"."timecards" FOR 
    FROM "public"."show_assignments"
   WHERE ("show_assignments"."profile_id" = ( SELECT "auth"."uid"() AS "uid")))) OR ("show_id" IN ( SELECT "shows"."id"
    FROM "public"."shows"
-  WHERE (("shows"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR ("shows"."scheduler_id" = ( SELECT "auth"."uid"() AS "uid"))))))));
+  WHERE (("shows"."created_by" = ( SELECT "auth"."uid"() AS "uid")) OR (( SELECT "public"."my_perm"('can_manage_scheduling'::"text") AS "my_perm") AND ("shows"."sent_to_scheduling_at" IS NOT NULL))))))));
 
 
 --
@@ -3397,6 +3591,12 @@ ALTER TABLE "public"."show_crew_access" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."shows" ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: staffing_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE "public"."staffing_events" ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: subscriptions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3512,6 +3712,15 @@ GRANT ALL ON FUNCTION "public"."enforce_membership_rules"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."enforce_pay_rate_write_permission"() TO "anon";
 GRANT ALL ON FUNCTION "public"."enforce_pay_rate_write_permission"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."enforce_pay_rate_write_permission"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "extend_all_day_positions"("p_show_id" "uuid", "p_work_day_id" "uuid"); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION "public"."extend_all_day_positions"("p_show_id" "uuid", "p_work_day_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."extend_all_day_positions"("p_show_id" "uuid", "p_work_day_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."extend_all_day_positions"("p_show_id" "uuid", "p_work_day_id" "uuid") TO "service_role";
 
 
 --
@@ -3632,6 +3841,15 @@ GRANT ALL ON FUNCTION "public"."position_def_wants"("p_kind" "text", "p_custom" 
 
 
 --
+-- Name: FUNCTION "position_defs_drop_unfilled_slots"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."position_defs_drop_unfilled_slots"() TO "anon";
+GRANT ALL ON FUNCTION "public"."position_defs_drop_unfilled_slots"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."position_defs_drop_unfilled_slots"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "propagate_show_day_rate"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -3727,6 +3945,15 @@ GRANT ALL ON FUNCTION "public"."set_room_show_id"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."set_show_assignment_organization_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."set_show_assignment_organization_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."set_show_assignment_organization_id"() TO "service_role";
+
+
+--
+-- Name: FUNCTION "set_staffing_event_organization_id"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."set_staffing_event_organization_id"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_staffing_event_organization_id"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_staffing_event_organization_id"() TO "service_role";
 
 
 --
@@ -4169,6 +4396,15 @@ GRANT ALL ON TABLE "public"."shows" TO "service_role";
 
 
 --
+-- Name: TABLE "staffing_events"; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE "public"."staffing_events" TO "anon";
+GRANT ALL ON TABLE "public"."staffing_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."staffing_events" TO "service_role";
+
+
+--
 -- Name: TABLE "subscriptions"; Type: ACL; Schema: public; Owner: -
 --
 
@@ -4249,5 +4485,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict b8aILizdIsrPou2wytWtUlceD6FttS0ceQE68RTDicx30Wcvj2LjfElW2FLHPiK
+\unrestrict AUE8PR4f3nzshNb08bdTdNhKeZuZNlHJ6z2Zce6RFoejNa2s5h97nbMKgm7afjz
 

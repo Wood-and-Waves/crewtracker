@@ -359,10 +359,8 @@ scripts/
                        deleting a definition drops its UNFILLED slots first (BEFORE DELETE
                        trigger — the FK's set-null used to orphan them as "legacy" slots the
                        sync then ignored, so a removed position kept counting). No rows.
-                       0018–0034 applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0034 2026-09-07). **0035–0037 are on DEV
-                       only** until their cutover (backup → the pre-cutover scheduler check in
-                       the piece-C section → --prod → db:grants → db:schema → merge).
+                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
+                       0021–0027 2026-09-06, 0028–0037 2026-09-07). Nothing is dev-only.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -978,7 +976,8 @@ caller's session, show-wide like a decline). That route logs the `accepted`/`dec
 event and runs `maybeSendReadyEmail`, so a yes written down by phone can be the one that
 completes the show exactly as a clicked Confirm can. Do not make readiness count pencilled crew.
 
-**Cutover of 0035 needs one extra step.** The backfill turns every show handed to ONE named
+**The 0035 cutover (done 2026-09-07 late evening) had one extra step, kept here for the next
+time a visibility rule moves.** The backfill turns every show handed to ONE named
 scheduler into a show visible to everyone with `can_manage_scheduling` — and INVISIBLE to that
 named scheduler if they do not hold the permission (they had access through `scheduler_id`
 alone). Before `--prod`, run read-only:
