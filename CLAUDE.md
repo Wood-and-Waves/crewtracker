@@ -569,7 +569,18 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   only, refused on a finalized show unless unlocked first, and never from the tracker — Edit Show,
   at the bottom, below Archive. Cascades already exist on every child table, so the write is one
   verified delete on `shows`; the work is the dialog and the permission.
-- **Booking status is not shown beside the role on a tracker crew row.** The column is fetched (`booking_status` is in `TIMECARD_SELECT` as of 2026-08-02), so this is pure display work — reuse the chip renderer in `CrewCallModal.tsx` rather than writing a second label/tone mapping.
+- **Booking status on the tracker crew row, and the chip IS the control** (Dan, 2026-09-07:
+  "The 3 dots are not intuitive and that is critical information… Click the pencilled to have
+  a context menu… The less extra buttons on the tracker the better"). Build: a chip beside the
+  role on every crew row — Pencilled / Asked / Confirmed (`booking_status` is already in
+  `TIMECARD_SELECT`; reuse `CrewCallModal`'s label/tone mapping). Pencilled and Asked are
+  TAPPABLE and open a short in-place paper-slip menu under the row: **They confirmed**, **They
+  declined**, and **Ask by email** (pencilled only) — the same `POST /api/bookings/record` /
+  `/api/bookings/send` calls the Positions panel makes, show-wide like today, so a recorded yes
+  still runs the ready-email check. Confirmed is a plain chip with nothing to tap. The room's
+  masthead band says "4 of 6 confirmed". Both tracker trees (desktop `TimecardRow`, mobile
+  `MobileRoomTracker`). Also fix while there: the Positions panel's rows do not show the
+  person's NAME or role beside the chip (seen 2026-09-07 — only chip, Ask/Yes/No, Work, Remove).
 
 - **Declined bookings are filtered on read, in one place.** A declined person keeps their `timecards` row on purpose (migration 0012: it records that we asked and they said no) and does not hold their position. Nothing taught the *read* side that, so until 2026-08-02 a decliner rendered as ordinary staffed crew on the tracker, in reports, and in the emailed Final Report — while the same position also showed as Open. `lib/timecardFields.ts` now owns the rule via `fetchLiveTimecards()` and `liveBookings()`, applied in SQL (`.neq`) so a caller who forgets to select the column can't silently compare `undefined`. **Some queries must still see declined rows** and say so in a comment: `lib/crew.ts` (a write that nulls the FK before delete), the duplicate-staffing guards in `StaffRoomModal`/`CopyCrewButton` (`timecards_room_crew_uniq` has no `booking_status` predicate, so a declined row still occupies the slot), the booking API routes that set the status, and `lib/bookingInvite.ts` (the page a person declines *on*). `lib/payroll.ts` must never read `booking_status` — filter the input set, never the calculator.
 - **Historical shows have no positions**, so the shows list reports them as booked-without-positions. Whether to backfill positions from existing timecards is an open data decision, not a display one.
