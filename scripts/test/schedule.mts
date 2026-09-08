@@ -34,7 +34,7 @@ import { buildBoard, describeBoard } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
-import { buildPmDeclinedEmail } from '../../lib/pmInviteEmail.ts'
+import { buildPmDeclinedEmail, buildPmInviteEmail } from '../../lib/pmInviteEmail.ts'
 import { routeEmail, isProductionData } from '../../lib/sendEmail.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
@@ -821,6 +821,22 @@ console.log('\n--- evening digest ---')
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
   check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
+}
+
+console.log('\n--- the PM invitation email ---')
+{
+  const { subject, text, html } = buildPmInviteEmail({
+    to: 'jordan@x.test', pmName: 'Jordan Vega', showName: 'Northwind', dates: 'Sep 21–29',
+    venue: 'Moscone West', orgName: 'Wood & Waves', inviterName: 'Dan Smith',
+    acceptUrl: 'https://crewtracker.app/pm/abc?accept=1',
+    declineUrl: 'https://crewtracker.app/pm/abc?decline=1',
+  })
+  check('subject', subject, "Wood & Waves: you're named PM on Northwind")
+  check('BOTH answers are in the email, as links', 
+    [text.includes('https://crewtracker.app/pm/abc?accept=1'), text.includes('https://crewtracker.app/pm/abc?decline=1')], [true, true])
+  check('and both are buttons in the HTML', [html.includes('>\n      Accept\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
+  check('the accept link is the one that accepts', text.includes('Accept and it lands in your CrewTracker straight away:'), true)
+  check('the decline link says a note can come with it', text.includes('Or decline, and tell them why if you like:'), true)
 }
 
 console.log('\n--- a PM saying no ---')

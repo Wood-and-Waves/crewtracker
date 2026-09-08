@@ -965,10 +965,12 @@ of the definition's other open days the person is doing (all ticked; one slot pe
 the clicked slot's own room) and books them in ONE multi-row insert; a 23505 names the clashing
 day. A slot without a definition fills one day, exactly as before.
 
-**THE EMAILED LINK ACCEPTS** (2026-09-08). Dan: *"I would like the accept from the email to be an
+**THE EMAIL CARRIES BOTH ANSWERS: an Accept button and a Decline button** (2026-09-08). Dan: *"I would like the accept from the email to be an
 actual accept."* The link carries `?accept=1`, the page accepts before it renders, and what opens
 is a confirmation — you have the show, here is the run day by day, here is how to hand it back.
-One tap, the way Planning Center does it. I argued for the button first, on the grounds that
+One tap, the way Planning Center does it. **Decline** is the second button: it opens the same
+page on its note step, because a decline carries a message back and the reason is the useful
+part — one tap in the email, then send. I argued for the button first, on the grounds that
 Microsoft Defender Safe Links and gateways like Proofpoint fetch URLs before a person reads them
 and would accept on their behalf; Dan's answer is the right one and is now the design: **the page
 carries DECLINE**, so an accidental acceptance is undone in a tap, and whoever named them is told.

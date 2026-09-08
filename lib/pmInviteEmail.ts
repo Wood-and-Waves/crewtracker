@@ -38,7 +38,11 @@ export type PmInviteInput = {
   venue: string | null
   orgName: string
   inviterName: string | null
+  /** Both answers are BUTTONS IN THE EMAIL (Dan, 2026-09-08). Accept is one
+   *  tap and done; Decline opens the page on its note step, because a decline
+   *  carries a message back to whoever named them. */
   acceptUrl: string
+  declineUrl: string
 }
 
 export function buildPmInviteEmail(input: PmInviteInput) {
@@ -51,9 +55,11 @@ export function buildPmInviteEmail(input: PmInviteInput) {
     '',
     `${where} — you've been named production manager by ${by}.`,
     '',
-    'Open the show to accept it — it lands in your CrewTracker straight away, and the page that opens can decline it instead if it is not yours.',
-    '',
+    'Accept and it lands in your CrewTracker straight away:',
     input.acceptUrl,
+    '',
+    'Or decline, and tell them why if you like:',
+    input.declineUrl,
     '',
     '— CrewTracker',
   ].join('\n')
@@ -65,13 +71,17 @@ export function buildPmInviteEmail(input: PmInviteInput) {
     <strong>${escapeHtml(where)}</strong> — you've been named production manager by ${escapeHtml(by)}.
   </p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">
-    Open the show to accept it — it lands in your CrewTracker straight away, and the page that
-    opens can decline it instead if it is not yours.
+    Accepting puts the show in your CrewTracker straight away. Declining tells them, and you can
+    say why.
   </p>
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.acceptUrl)}"
        style="display:inline-block;background:#3366CC;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">
-      Accept the show
+      Accept
+    </a>
+    <a href="${escapeHtml(input.declineUrl)}"
+       style="display:inline-block;margin-left:10px;background:#fff;color:#c63b30;text-decoration:none;padding:10px 19px;border:1px solid #c63b30;border-radius:8px;font-size:15px;font-weight:600">
+      Decline
     </a>
   </p>
   <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>

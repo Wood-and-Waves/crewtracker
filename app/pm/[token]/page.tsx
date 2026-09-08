@@ -50,15 +50,19 @@ export default async function PmInvitePage({
   params, searchParams,
 }: {
   params: Promise<{ token: string }>
-  searchParams: Promise<{ accept?: string }>
+  searchParams: Promise<{ accept?: string; decline?: string }>
 }) {
   const { token } = await params
-  const { accept } = await searchParams
+  const { accept, decline } = await searchParams
 
   // The link's whole job. Idempotent, so a refresh — or a mail scanner that
   // fetched the URL before the person read it — changes nothing the second
   // time, and either way the page below can hand the show straight back.
   if (accept === '1') await acceptPmInvite(token)
+  // ?decline=1 does NOT decline on the link: it opens the page on its note
+  // step, because a decline carries a message back to whoever named them and
+  // the reason is the useful part. One tap in the email, then send.
+  const startDeclining = decline === '1'
 
   const invite = await loadPmInvite(token)
 
@@ -121,7 +125,7 @@ export default async function PmInvitePage({
           </span>
         </Link>
         <div className="mt-4">
-          <AcceptPmForm token={invite.token} accepted />
+          <AcceptPmForm token={invite.token} accepted startDeclining={startDeclining} />
         </div>
       </Shell>
     )
@@ -138,7 +142,7 @@ export default async function PmInvitePage({
       <p className="mb-5 text-center text-sm text-ink">
         Accept to get the show in your CrewTracker. Until you do, nothing changes on your side.
       </p>
-      <AcceptPmForm token={invite.token} />
+      <AcceptPmForm token={invite.token} startDeclining={startDeclining} />
     </Shell>
   )
 }

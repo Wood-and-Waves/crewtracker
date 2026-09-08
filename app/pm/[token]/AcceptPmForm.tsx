@@ -16,15 +16,17 @@ import Button from '@/components/ui/Button'
 // excuse first.
 
 export default function AcceptPmForm({
-  token, accepted = false,
+  token, accepted = false, startDeclining = false,
 }: {
   token: string
   /** They already hold the show — the link accepted it, or they pressed Accept. */
   accepted?: boolean
+  /** They pressed Decline in the email, so open on the note step. */
+  startDeclining?: boolean
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [declining, setDeclining] = useState(false)
+  const [declining, setDeclining] = useState(startDeclining)
   const [note, setNote] = useState('')
   const [declined, setDeclined] = useState(false)
 
