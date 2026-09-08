@@ -9,7 +9,7 @@ import Chip from '@/components/ui/Chip'
 // Dan (2026-09-07): "The 3 dots are not intuitive and that is critical
 // information… Click the pencilled to have a context menu… The less extra
 // buttons on the tracker the better." Then: "Simplicity and less verbiage is
-// key." So ON THE TRACKER the menu is APPROVED and DECLINED, nothing else, and
+// key." So ON THE TRACKER the menu is CONFIRMED and DECLINED, nothing else, and
 // a confirmed person shows no chip at all — removing a booking stays under
 // ⋮ → Edit crew.
 //
@@ -81,7 +81,7 @@ export default function BookingStatusChip({
   // Ask ONE person by email. The group ask covers a whole show, but a scheduler
   // who has just booked somebody wants to ask them now — and the Positions
   // panel that used to own this is gone. Scheduling screen only: the tracker's
-  // menu stays Approved / Declined.
+  // menu stays Confirmed / Declined.
   async function ask() {
     const body = await post('/api/bookings/send', { showId, crewMemberId })
     if (!body) return
@@ -113,7 +113,7 @@ export default function BookingStatusChip({
           {status !== 'confirmed' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
               className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-              Approved
+              Confirmed
             </button>
           )}
           {status !== 'declined' && (

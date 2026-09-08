@@ -597,7 +597,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   verified delete on `shows`; the work is the dialog and the permission.
 - ~~Booking status on the tracker crew row, and the chip IS the control.~~ **DONE 2026-09-07
   (`components/BookingStatusChip.tsx`)**, refined 2026-09-08 — Pencilled / Asked chips on every
-  crew row in both trackers open an in-place menu of **Approved / Declined**; a confirmed row
+  crew row in both trackers open an in-place menu of **Confirmed / Declined**; a confirmed row
   shows no chip at all; the room band reads "2 of 3 confirmed". The Scheduling screen passes
   `context="scheduling"` for the other half of the same control (see that section). Plus the GROUP ask
   (`components/AskPencilledButton.tsx`, on Edit Show's Scheduling section and on each
@@ -1059,7 +1059,8 @@ answer is owed — a confirmed person's row is name and role. The room ⋮ is ba
 Edit crew, Rename room, Delete room.
 
 **`BookingStatusChip` has two contexts.** `tracker` (the default): a confirmed chip renders
-nothing, and the menu is Approved / Declined. `scheduling`: the confirmed chip IS shown and
+nothing, and the menu is Confirmed / Declined (Dan, 2026-09-08: the words on the menu are the
+statuses themselves, not a second vocabulary on top of them). `scheduling`: the confirmed chip IS shown and
 tappable (that is where "they backed out" gets recorded), and a pencilled chip also offers **Ask
 by email** — the single-person ask the Positions panel used to hold. The chip re-seeds its status
 from its prop on every refresh: recording an answer is show-WIDE, so one click changes every day

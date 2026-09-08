@@ -28,18 +28,18 @@ separate from the tracker."* And, repeatedly: *"the tracker should be simple."*
 |---|---|
 | Where | One screen per show: `/dashboard/shows/[id]/schedule`, reached from the show's header beside Edit Show and View Report, and from every Needs-scheduling row (a scheduler never has to open a tracker). Desktop-first; usable on an iPad; not optimised for a phone. |
 | Shape | **A grid, rooms down the side, days across the top** — the same shape as New Show's positions grid — where every cell holds that room-day's SLOTS: a name with its status chip, or Open. |
-| A cell | Tap **Open** → the Fill picker (with its days checklist, its "Already scheduled on / pending on" lines, "Declined this show"). Tap a **chip** → Approved / Declined (the same in-place menu as the tracker's chip). A **flag** (a booked day that no longer fits its definition) shows in place with Move / Keep / Release. |
+| A cell | Tap **Open** → the Fill picker (with its days checklist, its "Already scheduled on / pending on" lines, "Declined this show"). Tap a **chip** → Confirmed / Declined (the same in-place menu as the tracker's chip). A **flag** (a booked day that no longer fits its definition) shows in place with Move / Keep / Release. |
 | Above the grid | The show's state and its actions in one strip: "12 of 20 confirmed · 3 waiting · 2 open"; Send to scheduler / With scheduling since … / Take back; **Ask everyone pencilled**; the PM's name and whether they have accepted; the day-activities row (it explains which cells exist). |
 | Positions themselves | The definitions editor (role × count × kind of day) lives here too, under the grid — Edit Show keeps it as well until nobody misses it there. |
-| What leaves the tracker | The ⋮ → Positions panel, the Fill picker, and the open-position rows. The tracker keeps ONE scheduling thing: the status chip, shown **only while an answer is owed** (pencilled / asked), with Approved / Declined behind it. A confirmed person's row is just name and role. |
+| What leaves the tracker | The ⋮ → Positions panel, the Fill picker, and the open-position rows. The tracker keeps ONE scheduling thing: the status chip, shown **only while an answer is owed** (pencilled / asked), with Confirmed / Declined behind it. A confirmed person's row is just name and role. |
 | Tap-to-decline a confirmed person | Not on the tracker (nothing to tap). On the Scheduling screen, a confirmed chip is tappable → Declined. |
 | Emails | Unchanged: declines instant to every scheduler; the scheduler digest for accepts is a separate backlog item. |
-| Terminology | "positions", never "call". Approved / Declined, not "confirmed by phone" or "backed out": *"Simplicity and less verbiage is key."* |
+| Terminology | "positions", never "call". The menu says **Confirmed / Declined** — the statuses themselves (Dan, 2026-09-08; it read "Approved" until then), never "confirmed by phone" or "backed out": *"Simplicity and less verbiage is key."* |
 
 ## What already exists (do not rebuild)
 
 `FillPositionPicker` (checklist, conflict lines, decline warning), `BookingStatusChip`
-(Approved / Declined menu, `/api/bookings/record`), `PositionDefsEditor` /
+(Confirmed / Declined menu, `/api/bookings/record`), `PositionDefsEditor` /
 `PositionDefsSection` (definitions + flags with Move / Keep / Release), `AskPencilledButton`,
 `SendToSchedulingButton`, `PmField`, `DayActivitiesGrid`, `lib/schedulingQueue.ts`,
 `lib/positionDefs.ts`, `position_slot_flags`, `sync_position_slots`. The screen is composition,
