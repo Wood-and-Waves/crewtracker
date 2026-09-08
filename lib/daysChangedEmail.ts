@@ -29,6 +29,10 @@ export type DaysChangedInput = {
   orgName: string
   venue: string | null
   days: EngagementDay[]
+  /** They are off the show entirely (app/api/bookings/remove). There are no
+   *  days left to list, so the email says what happened rather than printing
+   *  an empty schedule under "here is your current schedule". */
+  removed?: boolean
   /** Never rendered — see the header note above. Kept for shape parity with
    *  the rest of this email family. */
   link?: string
@@ -36,8 +40,9 @@ export type DaysChangedInput = {
 
 export function buildDaysChangedEmail(input: DaysChangedInput) {
   const first = input.crewName.split(' ')[0]
-  const subject = `${input.orgName}: your days on ${input.showName} changed`
   const where = input.venue ? ` (${input.venue})` : ''
+  if (input.removed) return buildRemovedEmail(input, first, where)
+  const subject = `${input.orgName}: your days on ${input.showName} changed`
   const lines = describeDayLines(input.days)
   const scheduleLines = lines.length
     ? lines.map(l => `${l.date}${l.production ? ` · ${l.production}` : ''}${l.you ? ` · ${l.you}` : ''}`)
@@ -73,6 +78,35 @@ export function buildDaysChangedEmail(input: DaysChangedInput) {
   <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
 </div>`.trim()
 
+  return { subject, text, html }
+}
+
+/**
+ * "You are no longer on Northwind." Short on purpose: the fact, who to ask,
+ * nothing else. No apology written on somebody else's behalf, no reason —
+ * whoever booked them can give one, and a guessed reason in an automated email
+ * is worse than none.
+ */
+function buildRemovedEmail(input: DaysChangedInput, first: string, where: string) {
+  const subject = `${input.orgName}: you are no longer on ${input.showName}`
+  const text = [
+    `Hi ${first},`,
+    '',
+    `You have been taken off ${input.showName}${where}. You are not scheduled on it any more.`,
+    '',
+    'Questions? Reply to whoever booked you.',
+    '',
+    '— CrewTracker',
+  ].join('\n')
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
+  <p style="font-size:15px;margin:0 0 16px">Hi ${escapeHtml(first)},</p>
+  <p style="font-size:15px;line-height:1.5;margin:0 0 16px">
+    You have been taken off <strong>${escapeHtml(input.showName)}${escapeHtml(where)}</strong>. You are not scheduled on it any more.
+  </p>
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px">Questions? Reply to whoever booked you.</p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
+</div>`.trim()
   return { subject, text, html }
 }
 

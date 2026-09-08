@@ -169,7 +169,7 @@ export default function ScheduleBoard({
             {picker && picker.roomName === room.name && line.byDate[picker.date]?.kind === 'open'
               && (line.byDate[picker.date] as Extract<BoardEntry, { kind: 'open' }>).slotId === picker.slotId && (
               <div ref={pickerRef} className="border-b border-line bg-surface-2/40 px-3 py-3">
-                <p className="mb-2 text-xs text-muted">{room.name} · {line.role} · {dayHead(picker.date)}</p>
+                <p className="mb-2 max-w-[620px] text-xs text-muted">{room.name} · {line.role} · {dayHead(picker.date)}</p>
                 <FillPositionPicker
                   positionId={picker.slotId}
                   positionRole={picker.role}

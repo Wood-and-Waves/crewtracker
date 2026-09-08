@@ -51,6 +51,10 @@ export default function BookingStatusChip({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  // The menu becomes the removal question rather than opening a second thing
+  // over the top of it. Somebody who was ASKED or said YES is expecting to
+  // work, so that question carries the offer to tell them (Dan, 2026-09-08).
+  const [removing, setRemoving] = useState(false)
 
   if (!crewMemberId) return null
   // On the TRACKER a confirmed person shows NOTHING (Dan, 2026-09-07: "the
@@ -60,6 +64,9 @@ export default function BookingStatusChip({
   if (status === 'confirmed' && context === 'tracker') return null
   const tappable = !locked
   const tone = status === 'declined' ? 'danger' : status === 'confirmed' ? 'good' : 'neutral'
+  // Somebody who was asked or has said yes is expecting to work; a pencilled
+  // person has never been contacted, so there is nobody to tell.
+  const answered = status === 'invited' || status === 'confirmed'
 
   async function post(url: string, body: Record<string, unknown>) {
     setBusy(true); setNote('')
@@ -82,6 +89,17 @@ export default function BookingStatusChip({
   // who has just booked somebody wants to ask them now — and the Positions
   // panel that used to own this is gone. Scheduling screen only: the tracker's
   // menu stays Confirmed / Declined.
+  async function remove(notify: boolean) {
+    const body = await post('/api/bookings/remove', { showId, crewMemberId, notify })
+    if (!body) return
+    setRemoving(false)
+    setOpen(false)
+    // The row goes with the refresh; the note is for the email's fate, which
+    // the row cannot say.
+    if (body.warning) setNote(body.warning)
+    router.refresh()
+  }
+
   async function ask() {
     const body = await post('/api/bookings/send', { showId, crewMemberId })
     if (!body) return
@@ -96,7 +114,7 @@ export default function BookingStatusChip({
       {tappable ? (
         <button
           type="button"
-          onClick={() => { setOpen(v => !v); setNote('') }}
+          onClick={() => { setOpen(v => !v); setRemoving(false); setNote('') }}
           aria-haspopup="menu"
           aria-expanded={open}
           title="Tap to record their answer"
@@ -108,7 +126,43 @@ export default function BookingStatusChip({
         <Chip tone={tone}>{LABEL[status]}</Chip>
       )}
 
-      {open && (
+      {open && removing && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-64 border-2 border-ink bg-surface p-3 shadow-edge">
+          <p className="text-sm text-ink">
+            Remove {crewName.split(' ')[0]} from this show? Every day of theirs goes with it.
+          </p>
+          {answered && (
+            <p className="mt-1 text-xs text-muted">
+              {status === 'confirmed' ? 'They said yes' : 'They were asked'} — do you want them told?
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {answered ? (
+              <>
+                <button type="button" disabled={busy} onClick={() => remove(true)}
+                  className="rounded-field border-2 border-ink px-2.5 py-1 text-xs font-semibold text-ink hover:bg-surface-2 disabled:opacity-40">
+                  Remove and tell them
+                </button>
+                <button type="button" disabled={busy} onClick={() => remove(false)}
+                  className="rounded-field px-2.5 py-1 text-xs font-semibold text-danger hover:bg-surface-2 disabled:opacity-40">
+                  Remove, say nothing
+                </button>
+              </>
+            ) : (
+              <button type="button" disabled={busy} onClick={() => remove(false)}
+                className="rounded-field border-2 border-ink px-2.5 py-1 text-xs font-semibold text-danger hover:bg-surface-2 disabled:opacity-40">
+                Remove
+              </button>
+            )}
+            <button type="button" disabled={busy} onClick={() => { setRemoving(false); setOpen(false) }}
+              className="px-1 text-xs text-muted hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {open && !removing && (
         <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge">
           {status !== 'confirmed' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
@@ -128,6 +182,10 @@ export default function BookingStatusChip({
               Ask by email
             </button>
           )}
+          <button type="button" role="menuitem" disabled={busy} onClick={() => setRemoving(true)}
+            className="block w-full border-t border-line px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
+            Remove
+          </button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}
             className="block w-full px-3 py-1.5 text-left text-xs text-muted hover:text-ink">
             Cancel

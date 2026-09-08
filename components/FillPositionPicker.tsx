@@ -6,8 +6,8 @@ import { liveBookings } from '@/lib/timecardFields'
 import { logStaffingEvent } from '@/lib/staffingEvents'
 import { compressDays } from '@/lib/readyEmail'
 import Button from '@/components/ui/Button'
-import Chip from '@/components/ui/Chip'
 import Toggle from '@/components/ui/Toggle'
+import { cn } from '@/lib/cn'
 
 // Choosing who fills one position on one day.
 //
@@ -335,7 +335,11 @@ export default function FillPositionPicker({
   }
 
   return (
-    <div className="rounded-field border border-line p-3">
+    // Capped, not full width: this opens inside a grid that can be 1200px
+    // across, and a candidate list that wide put the name at one end of the
+    // row and its button at the other (Dan, 2026-09-08: "the name and book are
+    // so far apart").
+    <div className="max-w-[620px] rounded-field border border-line p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">
           Fill · {positionRole}
@@ -406,35 +410,44 @@ export default function FillPositionPicker({
         <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-field border border-line">
           {shown.map(c => {
             const sameRoom = c.conflicts.find(x => x.sameRoom)
+            const warn = c.conflicts.length > 0 || c.declinedThisShow
+            // THE WHOLE ROW IS THE BUTTON. The name is what you are reading, so
+            // it is what you should be able to click; a button parked at the
+            // right-hand end just adds distance to every booking.
+            // Booked elsewhere is a WARNING, never a block: a load-out on one
+            // show and a rehearsal on another in one day is normal.
             return (
-              <li key={c.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm text-ink">{c.name}</div>
-                  {c.conflicts.length > 0 && (
-                    <div className="truncate text-[11px] text-ot">
-                      {sameRoom ? 'Already in this room today' : describeConflicts(c.conflicts)}
-                    </div>
-                  )}
-                  {c.conflicts.length === 0 && c.declinedThisShow && (
-                    <div className="truncate text-[11px] text-danger">Declined this show</div>
-                  )}
-                  {c.conflicts.length === 0 && !c.declinedThisShow && !c.roles.includes(positionRole) && (
-                    <div className="truncate text-[11px] text-muted">
-                      {c.roles.length ? c.roles.join(', ') : 'No roles listed'}
-                    </div>
-                  )}
-                </div>
-                {/* Booked elsewhere is a WARNING, never a block: a load-out on
-                    one show and a rehearsal on another in one day is normal. */}
-                <Button
-                  size="sm"
-                  variant={c.conflicts.length || c.declinedThisShow ? 'ghost' : 'primary'}
+              <li key={c.id}>
+                <button
+                  type="button"
                   disabled={busy || !!sameRoom}
                   title={sameRoom ? 'They are already in this room today.' : undefined}
                   onClick={() => fill(c)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
                 >
-                  {sameRoom ? 'In room' : c.conflicts.length || c.declinedThisShow ? 'Book anyway' : 'Book'}
-                </Button>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm text-ink">{c.name}</span>
+                    {c.conflicts.length > 0 && (
+                      <span className="block truncate text-[11px] text-ot">
+                        {sameRoom ? 'Already in this room today' : describeConflicts(c.conflicts)}
+                      </span>
+                    )}
+                    {c.conflicts.length === 0 && c.declinedThisShow && (
+                      <span className="block truncate text-[11px] text-danger">Declined this show</span>
+                    )}
+                    {c.conflicts.length === 0 && !c.declinedThisShow && !c.roles.includes(positionRole) && (
+                      <span className="block truncate text-[11px] text-muted">
+                        {c.roles.length ? c.roles.join(', ') : 'No roles listed'}
+                      </span>
+                    )}
+                  </span>
+                  <span className={cn(
+                    'shrink-0 text-[11px] font-semibold uppercase tracking-wide',
+                    sameRoom ? 'text-muted' : warn ? 'text-ot' : 'text-accent',
+                  )}>
+                    {sameRoom ? 'In room' : warn ? 'Book anyway' : 'Book'}
+                  </span>
+                </button>
               </li>
             )
           })}

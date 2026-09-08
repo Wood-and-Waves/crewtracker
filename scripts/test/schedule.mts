@@ -819,6 +819,14 @@ console.log('\n--- days changed email ---')
     days: [{ date: '2026-09-08', isTravelDay: false, travelIn: true, travelOut: false, activities: ['load_in'] }, { date: '2026-09-09', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }] })
   check('subject', subject, 'Wood & Waves: your days on Northwind changed')
   check('lists the new days with what each is', text.includes('Tue, Sep 8') && text.includes('Load-in') && text.includes('Wed, Sep 9'), true)
+
+  // Off the show entirely: no schedule to print, so it says what happened.
+  const gone = buildDaysChangedEmail({ to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', orgName: 'Wood & Waves',
+    venue: 'Moscone West', days: [], removed: true })
+  check('removal subject says they are off it', gone.subject, 'Wood & Waves: you are no longer on Northwind')
+  check('removal body says so in words', gone.text.includes('You have been taken off Northwind (Moscone West).'), true)
+  check('removal body never prints an empty schedule', gone.text.includes('No days'), false)
+  check('removal body still points them at a human', gone.text.includes('Reply to whoever booked you.'), true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

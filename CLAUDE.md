@@ -216,6 +216,7 @@ app/
     pm/accept/route.ts           — the PM accepting from their email link (public, POST only, rate-limited)
     shows/send-to-scheduling/route.ts — sends a show to every member with can_manage_scheduling, or takes it back (replaced approve-call)
     crew/days-changed/route.ts   — emails the crew change notice; session, scheduling-gated, caller's RLS decides who's readable
+    bookings/remove/route.ts     — takes somebody off a show from the status chip: show-wide, refuses on punches, offers to tell them
     digest/route.ts              — the evening staffing digest, one email per staffed show (GET, CRON_SECRET bearer, see piece C below)
     beta-signup/route.ts         — Join the Beta form submissions -> Resend
     reports/final/route.ts       — Final Report: renders CSV+PDF server-side, emails admin-designated recipients, locks the show
@@ -606,9 +607,11 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   verified delete on `shows`; the work is the dialog and the permission.
 - ~~Booking status on the tracker crew row, and the chip IS the control.~~ **DONE 2026-09-07
   (`components/BookingStatusChip.tsx`)**, refined 2026-09-08 — Pencilled / Asked chips on every
-  crew row in both trackers open an in-place menu of **Confirmed / Declined**; a confirmed row
-  shows no chip at all; the room band reads "2 of 3 confirmed". The Scheduling screen passes
-  `context="scheduling"` for the other half of the same control (see that section). Plus the GROUP ask
+  crew row in both trackers open an in-place menu of **Confirmed / Declined / Remove**; a
+  confirmed row shows no chip at all; the room band reads "2 of 3 confirmed". The Scheduling
+  screen passes `context="scheduling"` for the other half of the same control (see that section).
+  **Remove** was added 2026-09-08, Dan reversing his earlier call that removal should live under
+  ⋮ → Edit crew: *"I would like add the option to remove in the penciled dropdown."* Plus the GROUP ask
   (`components/AskPencilledButton.tsx`, on Edit Show's Scheduling section and on each
   Needs-scheduling row): one booking-request email per person still pencilled, through the
   same `/api/bookings/send` as the single Ask. The Positions panel's name column got `flex-1`
@@ -1067,6 +1070,13 @@ from Edit Show, and from every Needs-scheduling row, so **a scheduler never has 
 tracker**. Desktop-first, like New Show; it scrolls sideways on an iPad and is not built for a
 phone.
 
+**The fill picker is capped at 620px and its rows ARE the buttons.** It opens inside a grid that
+can be 1200px across, and at full width the name sat at one end of a candidate row with its Book
+button at the other (Dan, 2026-09-08: *"the name and book are so far apart"*). So the panel is a
+slip at the left of the row it belongs to, and clicking anywhere on a candidate books them; the
+right-hand end carries a word rather than a control — **Book**, **Book anyway** for a conflict or
+a decline, **In room** when they are already there and it is refused.
+
 **The fill picker scrolls itself into view.** It opens under the row it belongs to, and the grid
 is its own scroll box, so on a row near the bottom it opened out of sight and the only thing that
 happened on screen was the button reading "Filling…" (Dan, 2026-09-08). The scroll is instant,
@@ -1119,6 +1129,20 @@ by email** — the single-person ask the Positions panel used to hold. The chip 
 from its prop on every refresh: recording an answer is show-WIDE, so one click changes every day
 that person holds, and on this screen those other days are on screen (an effect, not a `key` —
 a key would remount the chip and close an open menu when a sibling's refresh lands).
+
+**Remove takes somebody off the whole show, and refuses on punches**
+(`app/api/bookings/remove`). It is show-wide because everything else that chip does is: a chip
+that answers for the whole run but removes one day is the split that leaves somebody on a Tuesday
+nobody meant to book. It deletes every timecard of theirs on the show, declined rows included, so
+nothing of theirs is left behind — but a timecard carrying PUNCHES is worked time, and the route
+refuses rather than take real hours out of payroll to tidy a schedule ("Clear those on the
+tracker first"; the absence flags are what a day that went wrong is for). Authorization is RLS,
+the delete is verified, and a `released` staffing event is logged. **Telling them is a yes/no in
+the same breath, not a second dialog**: a pencilled person was never contacted, so the slip just
+asks to remove; somebody ASKED or CONFIRMED is expecting to work, so the slip says which and
+offers **Remove and tell them** beside **Remove, say nothing** (Dan, 2026-09-08). The email is the
+crew change notice's removal wording — `buildDaysChangedEmail({ removed: true })`, "you are no
+longer on Northwind" — because a person with no days left must not be sent an empty schedule.
 
 **Booking somebody who DECLINED is an UPDATE, not an insert** (`FillPositionPicker`, fixed
 2026-09-08 while proving this screen). A decline keeps its timecard on purpose (0012) and
