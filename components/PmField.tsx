@@ -105,6 +105,18 @@ export default function PmField({
     router.refresh()
   }
 
+  // They said yes on the phone. The same act as recording a crew member's
+  // answer, and the same wording is used on the Scheduling screen's PM chip:
+  // it grants the show, so it says so.
+  async function recordAccepted() {
+    if (!pm.profileId) return
+    if (!confirm(`Record that ${pm.name ?? 'they'} accepted? This opens the show to them, the same as if they had pressed Accept in their email.`)) return
+    const ok = await post({ profileId: pm.profileId, markAccepted: true })
+    if (!ok) return
+    setNotice(`${pm.name ?? 'They'} now has this show.`)
+    router.refresh()
+  }
+
   const current = pm.profileId ?? ''
   const selected = pending ?? current
 
@@ -129,6 +141,7 @@ export default function PmField({
                 <Chip tone="neutral">Invited</Chip>
                 {pm.invitedAt ? `${fmt(pm.invitedAt)}, waiting` : 'waiting'}
                 <button type="button" className="font-semibold text-accent hover:underline disabled:opacity-40" disabled={busy || disabled} onClick={resend}>Resend</button>
+                <button type="button" className="font-semibold text-accent hover:underline disabled:opacity-40" disabled={busy || disabled} onClick={recordAccepted}>They accepted</button>
               </span>
         )}
       </div>

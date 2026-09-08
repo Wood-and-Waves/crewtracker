@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import OpenPositionRow from '@/components/OpenPositionRow'
 import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
 import CrewShowScreen from '@/components/CrewShowScreen'
 import { redirect, notFound } from 'next/navigation'
@@ -208,27 +207,6 @@ export default async function ShowDetailPage({
     firstName(a.crew_member_name).localeCompare(firstName(b.crew_member_name)) ||
     (a.crew_member_name || '').localeCompare(b.crew_member_name || '') ||
     a.id.localeCompare(b.id)
-
-  // Unfilled positions on this day's rooms. A gap in the crew belongs on the
-  // screen that shows the crew — not behind a menu, which is where filling one
-  // used to live.
-  const dayRoomIds = roomsList.map(r => r.id)
-  const { data: openPositionRows } = schedulingOn && dayRoomIds.length > 0
-    ? await supabase
-        .from('crew_call_positions')
-        .select('id, room_id, role, sort_order, timecards(booking_status)')
-        .in('room_id', dayRoomIds)
-        .order('sort_order')
-    : { data: [] }
-
-  const openByRoom: Record<string, { id: string; role: string }[]> = {}
-  for (const row of (openPositionRows ?? []) as any[]) {
-    // A declined person does not hold their position, so it is open again —
-    // the same rule the database enforces with its partial unique index.
-    const live = (row.timecards ?? []).some((t: any) => t.booking_status !== 'declined')
-    if (live) continue
-    openByRoom[row.room_id] = [...(openByRoom[row.room_id] ?? []), { id: row.id, role: row.role }]
-  }
 
   const roomTimecards: Record<string, any[]> = {}
   for (const room of roomsList) {
@@ -449,6 +427,14 @@ export default async function ShowDetailPage({
               currentWorkDayId={activeDay.id}
               remainingWorkDayIds={remainingWorkDayIds}
             />
+            {/* Scheduling lives on its own screen (2026-09-07): positions,
+                filling and answers are a desk job, weeks earlier, and the
+                tracker is show day. */}
+            {schedulingOn && (
+              <Link href={`/dashboard/shows/${id}/schedule`}>
+                <Button variant="ghost" size="sm">Scheduling</Button>
+              </Link>
+            )}
             <Link href={`/dashboard/shows/${id}/edit`}>
               <Button variant="ghost" size="sm">Edit Show</Button>
             </Link>
@@ -515,7 +501,7 @@ export default async function ShowDetailPage({
                     </span>
                   )}
                 </h2>
-                <RoomActionsMenu onBand schedulingEnabled={schedulingOn} locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={show.id} />
+                <RoomActionsMenu onBand locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={show.id} />
               </div>
 
               {crew.length > 0 && (
@@ -552,21 +538,11 @@ export default async function ShowDetailPage({
               {/* The unit closes with a 3px ink rule — the Open Paper edge that
                   replaced the panel border. */}
               <div className={RULE_MAJOR}>
-                {/* Open positions FIRST (Dan, 2026-09-07): the gap is what a
-                    scheduler opens the room to see, so it sits above the crew
-                    who are already booked, not under them. */}
-                {schedulingOn && (openByRoom[room.id] ?? []).map(pos => (
-                  <OpenPositionRow
-                    key={pos.id}
-                    positionId={pos.id}
-                    role={pos.role}
-                    roomId={room.id}
-                    date={activeDay.date}
-                    gridCols={punchGridCols(dayPunchTypes.length)}
-                    punchCount={dayPunchTypes.length}
-                    locked={locked}
-                  />
-                ))}
+                {/* Open positions used to be listed here. They live on the
+                    Scheduling screen now (2026-09-07): a gap in the crew is a
+                    scheduling job weeks earlier, not something to read past on
+                    show day. The tracker keeps one scheduling thing — the
+                    status chip, while an answer is owed. */}
                 {crew.length === 0 && (
                   <>
                     <p className="text-sm text-muted p-4 pb-2">No crew staffed yet.</p>

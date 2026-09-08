@@ -558,6 +558,12 @@ export default function EditShowClient({
             callSize={scheduling.callSize}
             initialOpen={scheduling.openHandoff}
           />
+          <p className="mt-3 text-xs text-muted">
+            <a className="font-semibold text-accent hover:underline" href={`/dashboard/shows/${show.id}/schedule`}>
+              Open the Scheduling screen
+            </a>{' '}
+            to fill positions and record answers.
+          </p>
           {scheduling.sentAt && (
             <div className="mt-3">
               <AskPencilledButton showId={show.id} />

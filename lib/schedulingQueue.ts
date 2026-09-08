@@ -3,9 +3,9 @@
 
 export type QueueRow = {
   id: string; name: string; venue: string | null; startDate: string; endDate: string; sentAt: string
-  openSlots: number; totalSlots: number; waiting: number; flags: number
+  openSlots: number; totalSlots: number; waiting: number; pencilled: number; flags: number
 }
-export type QueueSummary = { open: number; total: number; waiting: number; flags: number }
+export type QueueSummary = { open: number; total: number; waiting: number; pencilled: number; flags: number }
 
 /**
  * Pure: per show, open slots, slots total, PEOPLE waiting on a reply, flags.
@@ -21,16 +21,25 @@ export function summarizeQueue(
 ): Map<string, QueueSummary> {
   const m = new Map<string, QueueSummary>()
   const waitingPeople = new Map<string, Set<string>>()
-  const at = (id: string) => m.get(id) ?? (m.set(id, { open: 0, total: 0, waiting: 0, flags: 0 }), m.get(id)!)
+  // Per show, per person: is every live booking of theirs still pencilled?
+  // That is who "Ask everyone pencilled" would email, so a row where everyone
+  // has already been asked can drop the button instead of offering nothing.
+  const onlyPencilled = new Map<string, Map<string, boolean>>()
+  const at = (id: string) => m.get(id) ?? (m.set(id, { open: 0, total: 0, waiting: 0, pencilled: 0, flags: 0 }), m.get(id)!)
   slots.forEach((s, i) => {
     const q = at(s.showId); q.total++
-    if (!s.filled) q.open++
-    else if (s.status === 'pencilled' || s.status === 'invited') {
+    if (!s.filled) { q.open++; return }
+    const who = s.person ?? `row-${i}`
+    if (s.status === 'pencilled' || s.status === 'invited') {
       const set = waitingPeople.get(s.showId) ?? new Set<string>()
-      set.add(s.person ?? `row-${i}`)
+      set.add(who)
       waitingPeople.set(s.showId, set)
       q.waiting = set.size
     }
+    const perShow = onlyPencilled.get(s.showId) ?? new Map<string, boolean>()
+    perShow.set(who, (perShow.get(who) ?? true) && s.status === 'pencilled')
+    onlyPencilled.set(s.showId, perShow)
+    q.pencilled = [...perShow.values()].filter(Boolean).length
   })
   for (const f of flags) at(f.showId).flags++
   return m
@@ -62,8 +71,9 @@ export async function fetchSchedulingQueue(supabase: { from: (t: string) => any 
     ((flags ?? []) as any[]).map(f => ({ showId: f.show_id })),
   )
   return (shows ?? []).map((s: any) => {
-    const q = summary.get(s.id) ?? { open: 0, total: 0, waiting: 0, flags: 0 }
+    const q = summary.get(s.id) ?? { open: 0, total: 0, waiting: 0, pencilled: 0, flags: 0 }
     return { id: s.id, name: s.name, venue: s.venue ?? null, startDate: s.start_date, endDate: s.end_date,
-      sentAt: s.sent_to_scheduling_at, openSlots: q.open, totalSlots: q.total, waiting: q.waiting, flags: q.flags }
+      sentAt: s.sent_to_scheduling_at, openSlots: q.open, totalSlots: q.total, waiting: q.waiting,
+      pencilled: q.pencilled, flags: q.flags }
   }).filter((r: QueueRow) => r.openSlots > 0 || r.flags > 0 || r.waiting > 0)
 }

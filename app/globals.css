@@ -25,10 +25,17 @@
      that, and warming the ground takes the edge off the contrast without
      softening the ink. Every light surface moved together — a warm ground under
      cool fields would just relocate the problem. */
+  /* Native chrome follows the theme: the browser paints scrollbars, focus
+     rings and date pickers from this, and without it a dark screen gets a
+     bright grey scrollbar down its side (Dan, 2026-09-08). */
+  color-scheme: light;
   --bg: #f9f4e5;
   --surface: #fffdf4;
   --surface-2: #f2ebd8;
   --surface-3: #e8dfc7;
+  /* The scrollbar as part of the document: ink on paper, light on black. */
+  --scroll-thumb: rgba(34, 30, 22, 0.26);
+  --scroll-thumb-hover: rgba(34, 30, 22, 0.45);
   /* Warm near-black rather than the old blue-black: ink ON this paper. */
   --ink: #221e16;
   --muted: #6f6857;
@@ -77,11 +84,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     /* dark — the same document, printed on black */
     --bg: #121317;
     --surface: #1b1d22;
     --surface-2: #24262c;
     --surface-3: #2e3138;
+    --scroll-thumb: rgba(232, 234, 238, 0.22);
+    --scroll-thumb-hover: rgba(232, 234, 238, 0.42);
     --ink: #e8eaee;
     --muted: #8a939e;
     --line: #2a2d34;
@@ -109,6 +119,9 @@
 :root[data-theme="light"] {
   /* MUST stay identical to the :root defaults above — this block only exists to
      beat the prefers-color-scheme media query when someone picks light by hand. */
+  color-scheme: light;
+  --scroll-thumb: rgba(34, 30, 22, 0.26);
+  --scroll-thumb-hover: rgba(34, 30, 22, 0.45);
   --bg: #f9f4e5;
   --surface: #fffdf4;
   --surface-2: #f2ebd8;
@@ -135,6 +148,9 @@
   --day-show: #1e8f57;
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
+  --scroll-thumb: rgba(232, 234, 238, 0.22);
+  --scroll-thumb-hover: rgba(232, 234, 238, 0.42);
   --bg: #121317;
   --surface: #1b1d22;
   --surface-2: #24262c;
@@ -210,6 +226,36 @@ body {
   color: var(--ink);
   font-family: var(--font-sys);
   -webkit-font-smoothing: antialiased;
+}
+
+/* A scroll area that belongs to the document rather than to the operating
+   system: a thin token-coloured thumb on no track at all, so a data grid does
+   not get a bright slab down its edge in dark mode. Firefox takes the two
+   properties; WebKit and Chromium take the pseudo-elements; anything else
+   falls back to the native bar, which color-scheme above has already darkened. */
+.paper-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+.paper-scroll::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+.paper-scroll::-webkit-scrollbar-track,
+.paper-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.paper-scroll::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+  /* The border is the gap: a transparent inset, clipped to the padding box,
+     keeps the thumb off the content without needing a track. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.paper-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+  background-clip: padding-box;
 }
 
 /* Hide horizontal scrollbars on scrolling strips (still scrollable). */

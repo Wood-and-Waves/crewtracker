@@ -1,14 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { logStaffingEvent } from '@/lib/staffingEvents'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
-import CrewCallModal from '@/components/CrewCallModal'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
 import { cn } from '@/lib/cn'
+import { useDismiss } from '@/lib/useDismiss'
 
 type RoomCrew = { id: string; crewMemberId: string | null; name: string; role: string; dayRate: number }
 
@@ -27,7 +27,6 @@ export default function RoomActionsMenu({
   canEditRates = false,
   locked = false,
   onBand = false,
-  schedulingEnabled = false,
   showId,
 }: {
   roomId: string
@@ -41,9 +40,6 @@ export default function RoomActionsMenu({
   /** Trigger sits on a masthead BAND: swap the muted-on-paper trigger colors
    *  for band-ink so ⋮ stays visible on the ink strip. */
   onBand?: boolean
-  /** Scheduling module available to this caller — gates the Positions panel.
-   *  The other four actions are core tracker and always available. */
-  schedulingEnabled?: boolean
   /** For logging a 'released' staffing event on removeCrew — optional so a
    *  caller that doesn't have it handy doesn't break; without it, no event. */
   showId?: string
@@ -60,7 +56,6 @@ export default function RoomActionsMenu({
   const [roles, setRoles] = useState<string[]>([])
   // Timecard ids currently typing a custom role.
   const [customRole, setCustomRole] = useState<Record<string, boolean>>({})
-  const [callOpen, setCallOpen] = useState(false)
   // Crew change notice: removing someone changes what's left of their show,
   // so offer to tell them — never forced. Only people with a crewMemberId can
   // be told (the route emails by crew_members row).
@@ -75,6 +70,11 @@ export default function RoomActionsMenu({
     })
     return () => { active = false }
   }, [mode])
+
+  // The ⋮ menu shuts on an outside click or Escape, like every other menu in
+  // the app. close() resets the mode too, so it never reopens mid-rename.
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  useDismiss(menuOpen, menuRef, () => close())
 
   function close() {
     setMenuOpen(false)
@@ -166,16 +166,7 @@ export default function RoomActionsMenu({
   }
 
   return (
-    <div className="relative">
-      {schedulingEnabled && (
-        <CrewCallModal
-          roomId={roomId}
-          roomName={roomName}
-          open={callOpen}
-          onClose={() => setCallOpen(false)}
-          locked={locked}
-        />
-      )}
+    <div ref={menuRef} className="relative">
       <button
         onClick={() => setMenuOpen(v => !v)}
         className={cn(
@@ -193,13 +184,6 @@ export default function RoomActionsMenu({
         <div className="absolute right-0 z-20 mt-1 w-64 border-2 border-ink bg-surface p-3 shadow-edge">
           {mode === 'menu' && (
             <div className="flex flex-col gap-1">
-              {schedulingEnabled && (
-                <button
-                  onClick={() => { setMenuOpen(false); setCallOpen(true) }}
-                  className="rounded-field px-3 py-2 text-left text-sm text-ink hover:bg-surface-2">
-                  Positions
-                </button>
-              )}
               <button
                 onClick={startEditCrew}
                 disabled={locked}

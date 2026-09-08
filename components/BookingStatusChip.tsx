@@ -1,20 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
+import { useDismiss } from '@/lib/useDismiss'
+import { useDropDirection } from '@/lib/useDropDirection'
+import { cn } from '@/lib/cn'
 
 // The booking status on a tracker crew row — and the chip IS the control.
 //
 // Dan (2026-09-07): "The 3 dots are not intuitive and that is critical
 // information… Click the pencilled to have a context menu… The less extra
 // buttons on the tracker the better." Then: "Simplicity and less verbiage is
-// key." So the menu is APPROVED and DECLINED, nothing else — asking by email
-// is the group button on Edit Show (or the Positions panel for one person),
-// and removing a booking stays under ⋮ → Edit crew. Every status is tappable
-// while the show is open: a confirmed person can still decline (backed out).
-// Posts to /api/bookings/record (show-wide, like a decline; a recorded yes can
-// complete the show and send the ready email).
+// key." So ON THE TRACKER the menu is CONFIRMED and DECLINED, nothing else, and
+// a confirmed person shows no chip at all — removing a booking stays under
+// ⋮ → Edit crew.
+//
+// The SCHEDULING screen is the other half of the same control: there a
+// confirmed chip is shown and tappable (somebody backs out), and a pencilled
+// one also offers Ask by email, which is the single-person ask the Positions
+// panel used to hold. Posts to /api/bookings/record (show-wide, like a decline;
+// a recorded yes can complete the show and send the ready email) and to
+// /api/bookings/send for the ask.
 //
 // Scheduling-module only: booking status is a scheduling state. Without the
 // module the row shows nothing here, exactly as before.
@@ -24,27 +31,52 @@ type Status = 'pencilled' | 'invited' | 'confirmed' | 'declined'
 const LABEL: Record<Status, string> = { pencilled: 'Pencilled', invited: 'Asked', confirmed: 'Confirmed', declined: 'Declined' }
 
 export default function BookingStatusChip({
-  showId, crewMemberId, crewName, status: initial, locked = false,
+  showId, crewMemberId, crewName, status: initial, locked = false, context = 'tracker',
 }: {
   showId: string
   crewMemberId: string | null
   crewName: string
   status: string | null | undefined
   locked?: boolean
+  /** 'tracker' hides a confirmed chip entirely; 'scheduling' shows it and lets
+   *  it be tapped (somebody backed out) and offers the single Ask by email. */
+  context?: 'tracker' | 'scheduling'
 }) {
   const router = useRouter()
   const [status, setStatus] = useState<Status>((initial as Status) || 'pencilled')
+  // Re-seed from the prop after a refresh. Recording an answer is show-WIDE, so
+  // one click changes every day that person holds — and on the Scheduling
+  // screen those other days are on screen. Without this they kept painting the
+  // old status until a full reload, which reads as the write having failed.
+  // Deliberately an effect, not a `key`: a key would remount the chip and close
+  // an open menu whenever a sibling's refresh landed (the TimecardRow lesson).
+  useEffect(() => { setStatus((initial as Status) || 'pencilled') }, [initial])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  // The menu becomes the removal question rather than opening a second thing
+  // over the top of it. Somebody who was ASKED or said YES is expecting to
+  // work, so that question carries the offer to tell them (Dan, 2026-09-08).
+  const [removing, setRemoving] = useState(false)
+  // Click anywhere else, or press Escape, and it goes away — including the
+  // removal question, which asks something and should not trap anybody.
+  const wrapRef = useRef<HTMLSpanElement | null>(null)
+  useDismiss(open, wrapRef, () => { setOpen(false); setRemoving(false) })
+  // On the last row of the grid there is nothing below to open into.
+  const drop = useDropDirection(open, wrapRef, removing ? 220 : 190)
+  const panelSide = drop === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
 
   if (!crewMemberId) return null
-  // A confirmed person shows NOTHING (Dan, 2026-09-07: "the tracker should be
-  // simple"). The chip exists only while an answer is still owed; a confirmed
-  // person who backs out is recorded from the Positions panel / the scheduling
-  // screen, not from the tracker row.
-  if (status === 'confirmed') return null
+  // On the TRACKER a confirmed person shows NOTHING (Dan, 2026-09-07: "the
+  // tracker should be simple") — the chip exists only while an answer is owed.
+  // On the SCHEDULING screen it stays: recording that somebody backed out is a
+  // scheduling job, and there has to be somewhere to do it.
+  if (status === 'confirmed' && context === 'tracker') return null
   const tappable = !locked
+  const tone = status === 'declined' ? 'danger' : status === 'confirmed' ? 'good' : 'neutral'
+  // Somebody who was asked or has said yes is expecting to work; a pencilled
+  // person has never been contacted, so there is nobody to tell.
+  const answered = status === 'invited' || status === 'confirmed'
 
   async function post(url: string, body: Record<string, unknown>) {
     setBusy(true); setNote('')
@@ -63,35 +95,111 @@ export default function BookingStatusChip({
     router.refresh()
   }
 
+  // Ask ONE person by email. The group ask covers a whole show, but a scheduler
+  // who has just booked somebody wants to ask them now — and the Positions
+  // panel that used to own this is gone. Scheduling screen only: the tracker's
+  // menu stays Confirmed / Declined.
+  async function remove(notify: boolean) {
+    const body = await post('/api/bookings/remove', { showId, crewMemberId, notify })
+    if (!body) return
+    setRemoving(false)
+    setOpen(false)
+    // The row goes with the refresh; the note is for the email's fate, which
+    // the row cannot say.
+    if (body.warning) setNote(body.warning)
+    router.refresh()
+  }
+
+  async function ask() {
+    const body = await post('/api/bookings/send', { showId, crewMemberId })
+    if (!body) return
+    setStatus('invited')
+    setOpen(false)
+    setNote(body.emailed ? `Asked ${crewName.split(' ')[0]} by email.` : (body.warning || 'No email on file for them.'))
+    router.refresh()
+  }
+
   return (
-    <span className="relative inline-flex items-center">
+    <span ref={wrapRef} className="relative inline-flex items-center">
       {tappable ? (
         <button
           type="button"
-          onClick={() => { setOpen(v => !v); setNote('') }}
+          onClick={() => { setOpen(v => !v); setRemoving(false); setNote('') }}
           aria-haspopup="menu"
           aria-expanded={open}
           title="Tap to record their answer"
           className="rounded-pill focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent"
         >
-          <Chip tone={status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]} ▾</Chip>
+          <Chip tone={tone}>{LABEL[status]} ▾</Chip>
         </button>
       ) : (
-        <Chip tone={status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]}</Chip>
+        <Chip tone={tone}>{LABEL[status]}</Chip>
       )}
 
-      {open && (
-        <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge">
-          <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
-            className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-            Approved
-          </button>
+      {open && removing && (
+        <div className={cn('absolute left-0 z-50 w-64 border-2 border-ink bg-surface p-3 shadow-edge', panelSide)}>
+          <p className="text-sm text-ink">
+            Remove {crewName.split(' ')[0]} from this show? Every day of theirs goes with it.
+          </p>
+          {answered && (
+            <p className="mt-1 text-xs text-muted">
+              {status === 'confirmed' ? 'They said yes' : 'They were asked'} — do you want them told?
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {answered ? (
+              <>
+                <button type="button" disabled={busy} onClick={() => remove(true)}
+                  className="rounded-field border-2 border-ink px-2.5 py-1 text-xs font-semibold text-ink hover:bg-surface-2 disabled:opacity-40">
+                  Remove and tell them
+                </button>
+                <button type="button" disabled={busy} onClick={() => remove(false)}
+                  className="rounded-field px-2.5 py-1 text-xs font-semibold text-danger hover:bg-surface-2 disabled:opacity-40">
+                  Remove, say nothing
+                </button>
+              </>
+            ) : (
+              <button type="button" disabled={busy} onClick={() => remove(false)}
+                className="rounded-field border-2 border-ink px-2.5 py-1 text-xs font-semibold text-danger hover:bg-surface-2 disabled:opacity-40">
+                Remove
+              </button>
+            )}
+            <button type="button" disabled={busy} onClick={() => { setRemoving(false); setOpen(false) }}
+              className="px-1 text-xs text-muted hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {open && !removing && (
+        <div role="menu" className={cn('absolute left-0 z-50 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge', panelSide)}>
+          {status !== 'confirmed' && (
+            <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+              Confirmed
+            </button>
+          )}
+          {/* Confirmed and Declined are both just ANSWERS being written down, so
+              they read alike; the red belongs to the one act that destroys
+              something. Declined was danger-coloured until 2026-09-08 and Dan
+              could not tell it from Remove at a glance. */}
           {status !== 'declined' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
-              className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
               Declined
             </button>
           )}
+          {context === 'scheduling' && status === 'pencilled' && (
+            <button type="button" role="menuitem" disabled={busy} onClick={ask}
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+              Ask by email
+            </button>
+          )}
+          <button type="button" role="menuitem" disabled={busy} onClick={() => setRemoving(true)}
+            className="mt-1 block w-full border-t-2 border-line px-3 py-2 text-left text-sm font-semibold text-danger hover:bg-danger/10 disabled:opacity-40">
+            Remove
+          </button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}
             className="block w-full px-3 py-1.5 text-left text-xs text-muted hover:text-ink">
             Cancel
