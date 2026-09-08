@@ -776,6 +776,16 @@ ignores that control's `step` and offers every minute, which defeats the grid �
 control's intrinsic min-width overran its own dialog on a real phone. Offering only grid minutes
 makes the rule structural instead of a correction applied afterwards.
 
+**A crew screen opens on a day of the SHOW, not on a dead date** (`pickShowDay` / `stepDays` in
+`lib/clockLinks.ts`, fixed 2026-09-08). Today wins while the show is running — that is the point
+of the screen — but a link opened before the run started landed on today, which is not a work
+day, and the arrows were computed from `days.indexOf(selectedDate)`: −1, so BOTH went dead on the
+very screen that says "use the arrows to find your day" (Dan, opening a crew link two days
+before the show). Outside the run it now lands on the nearest day of the show, the first if it
+has not started and the last if it is over, and the arrows step by DATE so they work from a date
+that is not in the list at all. Both crew paths share it — the no-login clock link and the
+crew-side login.
+
 **Crew can walk the show's days** (arrows in a light strip under the masthead, `?d=YYYY-MM-DD`).
 A requested day is honoured only if it is genuinely a work day OF THAT SHOW, else it falls back
 to today. The punch route takes the date from the TIMECARD's own work day and never from the
@@ -891,6 +901,11 @@ one show and an A1 on another, so what a login may do is decided PER SHOW, not p
   punches rule re-derived every visible timecard). Measured after 0030: app punch read 1.9 ms.
 - **`is_own_timecard()` is real** — the placeholder 0019 left is now the crew-side write door.
   Timecard writes stay `can_edit_timecards`: a crew-side person cannot change their own flags.
+- **A crew-only login is not offered Shoulder Surfer Mode** (2026-09-08). The switch hides dollar
+  amounts, and a crew-only person is never shown one anywhere in the app, so offering it reads as
+  a feature they are missing rather than one they do not need (Dan: "That would be confusing").
+  `PersonalSettingsClient` takes `canSeeMoney`, which the Settings page sets from `isCrewOnly`.
+  They keep 24-hour time, which is about their own punch times, and the theme.
 - **The crew screen from a login** is the crew clock (`components/CrewShowScreen.tsx` →
   `ClockPunch` with `endpoint="/api/clock/punch-me"`). `lib/clockPunch.ts` is the ONE place the
   crew-punch rules live; both routes call `applyCrewPunch()`. `loadClockViewForProfile()`

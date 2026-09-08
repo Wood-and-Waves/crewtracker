@@ -25,7 +25,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInZone } from '@/lib/showStatus'
-import { isClockLinkExpired } from '@/lib/clockLinks'
+import { isClockLinkExpired, pickShowDay } from '@/lib/clockLinks'
 import type { Punch } from '@/lib/punches'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -124,7 +124,7 @@ export async function loadClockView(
   // Anything else — a malformed string, a date the show does not run, another
   // show's date — silently falls back to today rather than erroring, because
   // the only way to send one is to edit the URL by hand.
-  const selectedDate = requestedDate && days.includes(requestedDate) ? requestedDate : today
+  const selectedDate = pickShowDay(days, today, requestedDate)
 
   const base = {
     token: link.token,
@@ -290,7 +290,7 @@ export async function loadClockViewForProfile(
   const today = todayInZone(timeZone)
   const { data: allDays } = await admin.from('work_days').select('date').eq('show_id', show.id).order('date')
   const days = (allDays ?? []).map(d => d.date as string)
-  const selectedDate = requestedDate && days.includes(requestedDate) ? requestedDate : today
+  const selectedDate = pickShowDay(days, today, requestedDate)
 
   const base = {
     token: '',

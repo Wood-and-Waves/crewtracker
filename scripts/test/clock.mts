@@ -15,7 +15,7 @@
 // must: Slack does not render markdown links, so a bare URL is the only format
 // that survives the paste.
 
-import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow } from '../../lib/clockLinks.ts'
+import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow, pickShowDay, stepDays } from '../../lib/clockLinks.ts'
 import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, type Punch } from '../../lib/punches.ts'
 import { punchRefusal } from '../../lib/clockPunch.ts'
 
@@ -253,6 +253,30 @@ console.log('\n=== punchRefusal: the one crew-punch decision both routes share =
   check('a PM-entered punch cannot be changed',
     typeof punchRefusal(pmStart, false, null, 'start', pmStart[0]), 'string')
   check('wrap after start is allowed', punchRefusal(started, false, null, 'end', undefined), null)
+}
+
+console.log('\n--- which day a crew screen opens on ---')
+{
+  const run = ['2026-09-10', '2026-09-11', '2026-09-12']
+
+  // During the show, today wins.
+  check('today, when the show runs today', pickShowDay(run, '2026-09-11'), '2026-09-11')
+  check('a requested day of this show is honoured', pickShowDay(run, '2026-09-11', '2026-09-12'), '2026-09-12')
+  check('a day the show does not run is ignored', pickShowDay(run, '2026-09-11', '2026-09-20'), '2026-09-11')
+
+  // Outside the run — the case that gave a dead screen before 2026-09-08.
+  check('before it starts, the first day', pickShowDay(run, '2026-09-08'), '2026-09-10')
+  check('after it ends, the last day', pickShowDay(run, '2026-09-30'), '2026-09-12')
+  check('a show with no days at all falls back to today', pickShowDay([], '2026-09-08'), '2026-09-08')
+
+  // The arrows walk by DATE, so they work from a date that is not in the list.
+  check('from before the show, forward reaches the first day',
+    stepDays(run, '2026-09-08'), { prev: null, next: '2026-09-10' })
+  check('from after the show, back reaches the last day',
+    stepDays(run, '2026-09-30'), { prev: '2026-09-12', next: null })
+  check('inside the run, both sides', stepDays(run, '2026-09-11'), { prev: '2026-09-10', next: '2026-09-12' })
+  check('the first day has nothing before it', stepDays(run, '2026-09-10'), { prev: null, next: '2026-09-11' })
+  check('the last day has nothing after it', stepDays(run, '2026-09-12'), { prev: '2026-09-11', next: null })
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
