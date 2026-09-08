@@ -39,8 +39,11 @@ export default function BookingStatusChip({
   const [note, setNote] = useState('')
 
   if (!crewMemberId) return null
-  // Every status is tappable while the show is open: a confirmed person can
-  // back out ("Declined"), and anyone can be removed from the room.
+  // A confirmed person shows NOTHING (Dan, 2026-09-07: "the tracker should be
+  // simple"). The chip exists only while an answer is still owed; a confirmed
+  // person who backs out is recorded from the Positions panel / the scheduling
+  // screen, not from the tracker row.
+  if (status === 'confirmed') return null
   const tappable = !locked
 
   async function post(url: string, body: Record<string, unknown>) {
@@ -71,20 +74,18 @@ export default function BookingStatusChip({
           title="Tap to record their answer"
           className="rounded-pill focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent"
         >
-          <Chip tone={status === 'confirmed' ? 'good' : status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]} ▾</Chip>
+          <Chip tone={status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]} ▾</Chip>
         </button>
       ) : (
-        <Chip tone={status === 'confirmed' ? 'good' : status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]}</Chip>
+        <Chip tone={status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]}</Chip>
       )}
 
       {open && (
         <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge">
-          {status !== 'confirmed' && (
-            <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
-              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-              Approved
-            </button>
-          )}
+          <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
+            className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+            Approved
+          </button>
           {status !== 'declined' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
               className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
