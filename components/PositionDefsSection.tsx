@@ -3,12 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { logStaffingEvent } from '@/lib/staffingEvents'
-import { compressDays } from '@/lib/readyEmail'
-import Button from '@/components/ui/Button'
-import Select from '@/components/ui/Select'
 import PositionDefsEditor from '@/components/PositionDefsEditor'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
+import SlotFlagActions from '@/components/SlotFlagActions'
+import type { SlotFlag } from '@/lib/scheduleBoard'
 import type { DayKind, GridDay, PositionDef } from '@/lib/positionDefs'
 
 // Edit Show → Positions (piece B of the 2026-09-07 show-flow spec).
@@ -25,11 +23,9 @@ export type DefRow = {
   id: string; room_name: string; role: string; count: number; day_kind: DayKind
   custom_dates: string[] | null; sort_order: number
 }
-export type SlotFlag = {
-  slot_id: string; position_def_id: string | null; room_name: string; date: string; role: string
-  timecard_id: string; crew_member_name: string; crew_member_id: string | null
-}
-type OpenSlot = { id: string; room_id: string; date: string; room_name: string }
+// The flag row's shape lives with the board model now, so the grid and this
+// list cannot drift apart. Re-exported: EditShowClient imports it from here.
+export type { SlotFlag }
 
 const toDef = (r: DefRow, roomKey: string): PositionDef => ({
   key: r.id, roomKey, role: r.role, count: r.count, dayKind: r.day_kind, customDates: r.custom_dates ?? [],
@@ -111,90 +107,11 @@ export default function PositionDefsSection({
   }
 
   // ---- Flags: a booked person on a day that no longer fits -----------------
-  const [moving, setMoving] = useState<SlotFlag | null>(null)
-  const [openSlots, setOpenSlots] = useState<OpenSlot[]>([])
-  const [target, setTarget] = useState('')
-
-  // Crew change notice: a move or a release changes what a person's days
-  // look like, so both offer to tell them — never forced. Only people with a
-  // crewMemberId can be told (the route emails by crew_members row).
+  // The three answers live in SlotFlagActions, shared with the Scheduling
+  // screen's cells. Crew change notice: a move or a release changes what a
+  // person's days look like, so both offer to tell them — never forced. Only
+  // people with a crewMemberId can be told (the route emails by crew_members).
   const [changed, setChanged] = useState<{ id: string; name: string }[]>([])
-
-  async function startMove(f: SlotFlag) {
-    setError('')
-    setMoving(f); setOpenSlots([]); setTarget('')
-    if (!f.position_def_id) return
-    // The definition's slots on other days, minus the ones somebody holds.
-    const [{ data: slots }, { data: held }] = await Promise.all([
-      supabase.from('crew_call_positions')
-        .select('id, room_id, rooms!inner ( name, work_days!inner ( date ) )')
-        .eq('position_def_id', f.position_def_id),
-      supabase.from('timecards').select('call_position_id')
-        .not('call_position_id', 'is', null).neq('booking_status', 'declined'),
-    ])
-    const taken = new Set((held ?? []).map((t: any) => t.call_position_id))
-    const open = (slots ?? []).filter((s: any) => !taken.has(s.id)).map((s: any) => {
-      const room = Array.isArray(s.rooms) ? s.rooms[0] : s.rooms
-      const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-      return { id: s.id, room_id: s.room_id, date: wd?.date ?? '', room_name: room?.name ?? '' }
-    }).sort((a: OpenSlot, b: OpenSlot) => a.date.localeCompare(b.date))
-    setOpenSlots(open)
-    setTarget(open[0]?.id ?? '')
-  }
-
-  async function confirmMove() {
-    if (!moving || !target) return
-    const slot = openSlots.find(s => s.id === target); if (!slot) return
-    setBusy(true); setError('')
-    const { data, error } = await supabase.from('timecards')
-      .update({ room_id: slot.room_id, call_position_id: slot.id }).eq('id', moving.timecard_id).select('id')
-    setBusy(false)
-    if (error || !data?.length) { setError(error?.message ?? 'That did not move.'); return }
-    await logStaffingEvent(supabase, {
-      showId,
-      kind: 'moved',
-      crewMemberId: moving.crew_member_id,
-      crewMemberName: moving.crew_member_name,
-      role: moving.role,
-      days: compressDays([slot.date]),
-    })
-    if (moving.crew_member_id) {
-      setChanged(prev => prev.some(p => p.id === moving.crew_member_id) ? prev : [...prev, { id: moving.crew_member_id!, name: moving.crew_member_name }])
-    }
-    setMoving(null)
-    await supabase.rpc('sync_position_slots', { p_show_id: showId })
-    router.refresh()
-  }
-
-  async function keep(f: SlotFlag) {
-    setBusy(true); setError('')
-    const { data, error } = await supabase.from('crew_call_positions')
-      .update({ position_def_id: null }).eq('id', f.slot_id).select('id')
-    setBusy(false)
-    if (error || !data?.length) { setError(error?.message ?? 'That did not save.'); return }
-    router.refresh()
-  }
-
-  async function release(f: SlotFlag) {
-    if (!confirm(`Release ${f.crew_member_name} from ${f.role} on ${fmt(f.date)}? Their booking that day is removed.`)) return
-    setBusy(true); setError('')
-    const { data, error } = await supabase.from('timecards').delete().eq('id', f.timecard_id).select('id')
-    if (error || !data?.length) { setBusy(false); setError(error?.message ?? 'That did not release.'); return }
-    await logStaffingEvent(supabase, {
-      showId,
-      kind: 'released',
-      crewMemberId: f.crew_member_id,
-      crewMemberName: f.crew_member_name,
-      role: f.role,
-      days: compressDays([f.date]),
-    })
-    if (f.crew_member_id) {
-      setChanged(prev => prev.some(p => p.id === f.crew_member_id) ? prev : [...prev, { id: f.crew_member_id!, name: f.crew_member_name }])
-    }
-    await supabase.rpc('sync_position_slots', { p_show_id: showId })
-    setBusy(false)
-    router.refresh()
-  }
 
   return (
     <section className="mb-6">
@@ -218,25 +135,14 @@ export default function PositionDefsSection({
             {flags.map(f => (
               <li key={f.slot_id} className="flex flex-wrap items-center gap-2 text-sm text-ink">
                 <span>{f.crew_member_name} · {f.role} · {fmt(f.date)} · {f.room_name}</span>
-                <span className="ml-auto flex gap-1.5">
-                  <Button size="sm" variant="ghost" disabled={busy || locked || !f.position_def_id} onClick={() => startMove(f)}>Move</Button>
-                  <Button size="sm" variant="ghost" disabled={busy || locked} onClick={() => keep(f)}>Keep</Button>
-                  <Button size="sm" variant="danger" disabled={busy || locked} onClick={() => release(f)}>Release</Button>
+                <span className="ml-auto">
+                  <SlotFlagActions
+                    showId={showId}
+                    flag={f}
+                    locked={locked || busy}
+                    onChanged={p => setChanged(prev => prev.some(x => x.id === p.id) ? prev : [...prev, p])}
+                  />
                 </span>
-                {moving?.slot_id === f.slot_id && (
-                  <span className="flex w-full items-center gap-2 pl-4">
-                    {openSlots.length === 0 ? (
-                      <span className="text-xs text-muted">No open day for this position right now.</span>
-                    ) : (
-                      <>
-                        <Select ariaLabel="Move to" size="sm" value={target} onChange={setTarget}
-                          options={openSlots.map(s => ({ value: s.id, label: `${fmt(s.date)} · ${s.room_name}` }))} />
-                        <Button size="sm" disabled={busy} onClick={confirmMove}>Move here</Button>
-                      </>
-                    )}
-                    <button type="button" className="text-xs text-muted hover:text-ink" onClick={() => setMoving(null)}>Cancel</button>
-                  </span>
-                )}
               </li>
             ))}
           </ul>
