@@ -561,6 +561,18 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   `preview:booking` print most of them without sending. Change subject lines, greetings and
   sign-offs freely; the facts each email carries (no money, no other crew, the accept/confirm
   link) are rules, not copy.
+- **Scheduler digest for accepts** (Dan, 2026-09-07: "declines are instant, accepts are a
+  digest"). Declines already email every scheduler the moment they land
+  (`/api/bookings/respond`). Accepts tell nobody but the PM's nightly digest. Build: in the
+  existing `/api/digest` cron run, one email per SCHEDULER per evening covering every sent
+  show they can see — "Northwind: 3 accepted, 1 declined, 2 still waiting · Kestrel: 1
+  accepted" — nothing on a quiet day. Needs a second stamp on `staffing_events`
+  (`scheduler_sent_at`, one migration) so the PM digest and the scheduler digest each mark
+  their own sends; recipients = live `memberships` with `can_manage_scheduling`, shows = the
+  org's sent, unfinalized, unarchived shows; group by show; reuse `lib/digestEmail.ts`'s
+  shape. Never per-accept emails (three schedulers × thirty crew = ninety emails per show)
+  and not browser push (a service worker + permission prompts + a key: a project, not an
+  evening). Roughly one evening, inline.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
