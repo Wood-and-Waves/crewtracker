@@ -117,7 +117,7 @@ export default function BookingStatusChip({
           {status !== 'declined' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
               className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
-              {status === 'confirmed' ? 'Declined (backed out)' : 'Declined'}
+              Declined
             </button>
           )}
           {status === 'pencilled' && (
