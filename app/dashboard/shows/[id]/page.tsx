@@ -552,6 +552,21 @@ export default async function ShowDetailPage({
               {/* The unit closes with a 3px ink rule — the Open Paper edge that
                   replaced the panel border. */}
               <div className={RULE_MAJOR}>
+                {/* Open positions FIRST (Dan, 2026-09-07): the gap is what a
+                    scheduler opens the room to see, so it sits above the crew
+                    who are already booked, not under them. */}
+                {schedulingOn && (openByRoom[room.id] ?? []).map(pos => (
+                  <OpenPositionRow
+                    key={pos.id}
+                    positionId={pos.id}
+                    role={pos.role}
+                    roomId={room.id}
+                    date={activeDay.date}
+                    gridCols={punchGridCols(dayPunchTypes.length)}
+                    punchCount={dayPunchTypes.length}
+                    locked={locked}
+                  />
+                ))}
                 {crew.length === 0 && (
                   <>
                     <p className="text-sm text-muted p-4 pb-2">No crew staffed yet.</p>
@@ -585,18 +600,6 @@ export default async function ShowDetailPage({
                   />
                 ))}
 
-                {schedulingOn && (openByRoom[room.id] ?? []).map(pos => (
-                  <OpenPositionRow
-                    key={pos.id}
-                    positionId={pos.id}
-                    role={pos.role}
-                    roomId={room.id}
-                    date={activeDay.date}
-                    gridCols={punchGridCols(dayPunchTypes.length)}
-                    punchCount={dayPunchTypes.length}
-                    locked={locked}
-                  />
-                ))}
               </div>
 
               <div className="pt-3">
