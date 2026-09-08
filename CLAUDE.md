@@ -50,6 +50,15 @@ Dan (the developer) has no professional dev background — so explain the *why* 
   - **Revoked privileges.** `pg_dump` emits GRANTs computed against Postgres's built-in default, so a REVOKE is an *absence* — and on Supabase an absence is inherited from `ALTER DEFAULT PRIVILEGES` rather than removed. The `day_rate` lockdown is written as an absence, so without `grants.sql` it silently doesn't exist in the rebuilt database. `npm run db:grants` regenerates it from production; re-run after changing any privilege.
 
   Verified 2026-07-26 to reproduce production exactly: 15 tables, 43 policies, 17 functions, 12 public + 6 non-public triggers, 2 views, 23 indexes, 47 constraints, 7 event triggers, 208 table grants, 1390 column privileges.
+- **Dev logins that exist** (dev database only): `dan@theaudiosmith.com` is the admin;
+  `crewtest@example.test` is the crew-side fixture (no company permissions at all); and
+  **`scheduler@example.test`** ("Sasha Vine", added 2026-09-08) is a scheduler-ONLY member —
+  `can_manage_scheduling` and `can_edit_timecards`, no `can_edit_all_shows`, no admin. That last
+  one exists because the Scheduling screen is built for exactly that person and nobody had ever
+  opened it as one: verified 2026-09-08 that they see a SENT show's grid in full, get a 404 on an
+  unsent show, and see only their entitled shows in the Needs-scheduling queue. A new dev member
+  also needs `profiles.active_organization_id` set — the invite flow does it (`lib/invite.ts`),
+  so a hand-made fixture must too, or every page renders the "Almost there" no-organization card.
 - **Dev browser sign-in**: `app/api/dev/login/route.ts` mints a session so a browser can be signed in for UI verification. Three independent gates — `NODE_ENV` must be development (Vercel builds everything, preview included, as production), the Supabase project must not be production, and `DEV_LOGIN_SECRET` from `.env.local` must match. Every rejection is a bare 404.
 - **Vercel CLI**: installed globally (2026-08-03) and signed in as `dan-2811`; the repo is linked to `crew-tracker/crewtracker`. `vercel inspect crewtracker-lime.vercel.app` / `vercel ls crewtracker` check deployment status after a push instead of guessing whether a deploy succeeded. `vercel link` appends a managed `VERCEL_OIDC_TOKEN` to `.env.local` — that is normal, and it leaves the existing keys alone.
   - **`vercel env pull` cannot read the values back.** Every variable on this project is flagged sensitive, so the pulled file contains the literal string `[SENSITIVE]` in place of all five. Don't diff those placeholders against real keys and conclude anything — that produces a confident, wrong answer. Read values from the dashboard, or test behaviour directly.
