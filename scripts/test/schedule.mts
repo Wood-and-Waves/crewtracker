@@ -30,6 +30,7 @@ import {
 import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDay } from '../../lib/positionDefs.ts'
 import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
+import { buildBoard, describeBoard, cellKey } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
@@ -626,6 +627,76 @@ console.log('\n--- scheduling queue summary ---')
   check('show a: 1 open of 3, 1 waiting, 2 flags', m.get('a'), { open: 1, total: 3, waiting: 1, flags: 2 })
   check('show b: full but 1 waiting (pencilled counts)', m.get('b'), { open: 0, total: 1, waiting: 1, flags: 0 })
   check('show c: waiting counts PEOPLE, not person-days', m.get('c'), { open: 0, total: 5, waiting: 2, flags: 0 })
+}
+
+console.log('\n--- scheduling board ---')
+{
+  const days = [
+    { workDayId: 'w1', date: '2026-09-08', activities: ['load_in'] },
+    { workDayId: 'w2', date: '2026-09-09', activities: ['show'] },
+  ]
+  const rooms = [
+    { id: 'r1', name: 'Ballroom', workDayId: 'w1' },
+    { id: 'r2', name: 'Ballroom', workDayId: 'w2' },
+    // Breakout exists on the show day only.
+    { id: 'r3', name: 'Breakout', workDayId: 'w2' },
+  ]
+  const slots = [
+    { id: 's1', roomId: 'r1', role: 'A1', sortOrder: 0 },
+    { id: 's2', roomId: 'r1', role: 'Stagehand', sortOrder: 1 },
+    { id: 's3', roomId: 'r2', role: 'A1', sortOrder: 0 },
+    { id: 's4', roomId: 'r3', role: 'V1', sortOrder: 0 },
+  ]
+  const booking = (over: Record<string, unknown>) => ({
+    timecardId: 't', crewMemberId: 'c1', crewMemberName: 'Alex Reyes', role: 'A1',
+    status: 'pencilled' as const, roomId: 'r1', slotId: 's1' as string | null, ...over,
+  })
+  const bookings = [
+    booking({ timecardId: 't1' }),
+    booking({ timecardId: 't2', roomId: 'r2', slotId: 's3', status: 'confirmed' }),
+    // Hand-staffed: a live booking holding no slot at all.
+    booking({ timecardId: 't3', roomId: 'r2', slotId: null, crewMemberId: 'c2', crewMemberName: 'Bo Ellery', role: 'Stagehand' }),
+  ]
+  const flag = {
+    slot_id: 's3', position_def_id: 'd1', room_name: 'Ballroom', date: '2026-09-09',
+    role: 'A1', timecard_id: 't2', crew_member_name: 'Alex Reyes', crew_member_id: 'c1',
+  }
+  const board = buildBoard({ days, rooms, slots, bookings, flags: [flag] })
+
+  check('rooms are the room NAMES, sorted', board.roomNames, ['Ballroom', 'Breakout'])
+  check('a room that does not run that day has no cell room', board.cells[cellKey('Breakout', '2026-09-08')].roomId, null)
+  check('and therefore no entries', board.cells[cellKey('Breakout', '2026-09-08')].entries.length, 0)
+  check('a cell lists its slots in sort order',
+    board.cells[cellKey('Ballroom', '2026-09-08')].entries.map(e => e.kind), ['booked', 'open'])
+  check('an unfilled slot carries its role',
+    (board.cells[cellKey('Ballroom', '2026-09-08')].entries[1] as any).role, 'Stagehand')
+  check('a hand-staffed person with no slot still appears',
+    board.cells[cellKey('Ballroom', '2026-09-09')].entries.map(e => (e as any).booking?.crewMemberName),
+    ['Alex Reyes', 'Bo Ellery'])
+  check('a flagged booking carries its flag',
+    (board.cells[cellKey('Ballroom', '2026-09-09')].entries[0] as any).flag.slot_id, 's3')
+  check('an unflagged booking carries null',
+    (board.cells[cellKey('Ballroom', '2026-09-08')].entries[0] as any).flag, null)
+  check('summary counts positions, not people',
+    board.summary, { total: 5, confirmed: 1, open: 2, waitingPeople: 2, flags: 1 })
+  check('the strip reads in one line',
+    describeBoard(board.summary), '1 of 5 positions confirmed · 2 people waiting · 2 open · 1 to sort out')
+  check('nothing to schedule says so',
+    describeBoard({ total: 0, confirmed: 0, open: 0, waitingPeople: 0, flags: 0 }), 'Nothing to schedule yet')
+  check('a full show reads clean',
+    describeBoard({ total: 4, confirmed: 4, open: 0, waitingPeople: 0, flags: 0 }), '4 of 4 positions confirmed')
+
+  // One person over two days is ONE person waiting, two positions.
+  const wide = buildBoard({
+    days, rooms, slots: [],
+    bookings: [
+      booking({ timecardId: 'x1', slotId: null, roomId: 'r1' }),
+      booking({ timecardId: 'x2', slotId: null, roomId: 'r2' }),
+    ],
+    flags: [],
+  })
+  check('the same person on two days is 2 positions, 1 person waiting',
+    [wide.summary.total, wide.summary.waitingPeople], [2, 1])
 }
 
 console.log('\n--- ready email: day compression ---')
