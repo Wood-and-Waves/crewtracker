@@ -278,8 +278,10 @@ export default function CrewCallModal({
   const filled = positions.filter(p => p.filledBy).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-card border border-line bg-surface p-5 sm:rounded-card">
+    {/* z-[60] and pb-24: the phone tab bar is fixed at z-50 and painted the
+        sheet's Done button over — Dan got stuck in this panel (2026-09-07). */}
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-card border border-line bg-surface p-5 pb-24 sm:rounded-card sm:pb-5">
         <div className="mb-1 flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-bold text-ink">Positions</h2>
           <span className="text-sm text-muted">{roomName}</span>
