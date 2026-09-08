@@ -606,6 +606,23 @@ try {
       const r = await probe(`select sync_position_slots($1)`, [sh.id])
       check('a signed-in member can run the sync on a show they see', r.ok, r.ok ? '' : r.code)
     })
+
+    // 0037: the role follows the definition, and removing a definition takes
+    // its EMPTY slots with it (a filled one keeps its person as a one-off).
+    await q(`update position_defs set role='L1' where id=$1`, [dCus.id])
+    await q(`select sync_position_slots($1)`, [sh.id])
+    const roles = await q(`select distinct role from crew_call_positions where position_def_id=$1`, [dCus.id])
+    check('renaming a definition renames its slots', roles.length === 1 && roles[0].role === 'L1', JSON.stringify(roles))
+    const [cusSlot] = await q(`select id, room_id from crew_call_positions where position_def_id=$1 order by created_at limit 1`, [dCus.id])
+    await q(`insert into timecards (room_id, crew_member_name, role, call_position_id, booking_status) values ($1,'Kept Person','L1',$2,'confirmed')`, [cusSlot.room_id, cusSlot.id])
+    const [beforeDel] = await q(`select count(*)::int n from crew_call_positions p join rooms r on r.id=p.room_id where r.show_id=$1`, [sh.id])
+    await asUser(alice, async () => {
+      const r = await probe(`delete from position_defs where id=$1`, [dCus.id])
+      check('an editor can remove a definition', r.ok && r.n === 1, r.ok ? `${r.n}` : r.code)
+      const [after] = await q(`select count(*)::int n from crew_call_positions p join rooms r on r.id=p.room_id where r.show_id=$1`, [sh.id])
+      const [kept] = await q(`select position_def_id from crew_call_positions where id=$1`, [cusSlot.id])
+      check('removing it drops only its empty slot; the filled one stays as a one-off', after.n === beforeDel.n - 1 && kept.position_def_id === null, `${beforeDel.n} → ${after.n}, def=${kept.position_def_id}`)
+    })
     await q(`delete from shows where id=$1`, [sh.id])
   }
 

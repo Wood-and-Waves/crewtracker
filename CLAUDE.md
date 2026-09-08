@@ -355,8 +355,12 @@ scripts/
                        · 0036 staffing_events INSERT requires can_edit_timecards (0035 let any
                        viewer of a show — crew-side logins included — write digest lines);
                        extend_all_day_positions() keeps the person's booking_status. No rows.
+                       · 0037 sync_position_slots() makes a slot's role follow its definition;
+                       deleting a definition drops its UNFILLED slots first (BEFORE DELETE
+                       trigger — the FK's set-null used to orphan them as "legacy" slots the
+                       sync then ignored, so a removed position kept counting). No rows.
                        0018–0034 applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0034 2026-09-07). **0035 and 0036 are on DEV
+                       0021–0027 2026-09-06, 0028–0034 2026-09-07). **0035–0037 are on DEV
                        only** until their cutover (backup → the pre-cutover scheduler check in
                        the piece-C section → --prod → db:grants → db:schema → merge).
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
@@ -820,7 +824,9 @@ choices — Move (to one of the definition's open days), Keep (the slot detaches
 definition and becomes a one-off), Release (the booking is removed). The sync runs after every
 definition change, every day-activity toggle on Edit Show, and Add Day. Legacy slots
 (`position_def_id` null — everything that existed before 0034 and anything the room's ⋮ →
-Positions panel creates) are untouched by it. **Fill position** on a definition slot asks which
+Positions panel creates) are untouched by it. Since 0037 a definition's role change renames
+its slots, and deleting a definition removes its unfilled slots BEFORE the FK can orphan them
+(Dan hit both on the preview: an added-then-removed position kept counting). **Fill position** on a definition slot asks which
 of the definition's other open days the person is doing (all ticked; one slot per room-day, never
 the clicked slot's own room) and books them in ONE multi-row insert; a 23505 names the clashing
 day. A slot without a definition fills one day, exactly as before.
