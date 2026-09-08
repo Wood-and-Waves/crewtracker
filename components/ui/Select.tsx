@@ -48,6 +48,10 @@ export default function Select({
   className?: string
 }) {
   const [open, setOpen] = useState(false)
+  // Open UPWARD when the panel would fall off the bottom of the window (a
+  // picker low on a long form — New Show's positions list, 2026-09-07 — lost
+  // its options below the fold). Decided at open time from the real geometry.
+  const [flip, setFlip] = useState(false)
   const [active, setActive] = useState(0)
   const wrapRef = useRef<HTMLDivElement>(null)
   const seekRef = useRef({ text: '', at: 0 })
@@ -57,6 +61,12 @@ export default function Select({
 
   function openMenu() {
     setActive(selectedIndex >= 0 ? selectedIndex : 0)
+    const r = wrapRef.current?.getBoundingClientRect()
+    if (r) {
+      const below = window.innerHeight - r.bottom
+      // max-h-72 = 288px; flip only when there is more room above than below.
+      setFlip(below < 300 && r.top > below)
+    }
     setOpen(true)
   }
 
@@ -179,7 +189,10 @@ export default function Select({
           aria-label={ariaLabel}
           // Keep focus (and onBlur) on the trigger while clicking options.
           onMouseDown={e => e.preventDefault()}
-          className="absolute left-0 z-30 mt-1 max-h-72 min-w-full overflow-y-auto border-2 border-ink bg-surface shadow-edge"
+          className={cn(
+            'absolute left-0 z-30 max-h-72 min-w-full overflow-y-auto border-2 border-ink bg-surface shadow-edge',
+            flip ? 'bottom-full mb-1' : 'top-full mt-1',
+          )}
         >
           {options.map((opt, i) => (
             <div

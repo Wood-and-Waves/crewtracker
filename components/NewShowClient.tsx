@@ -509,7 +509,7 @@ export default function NewShowClient({
           height — it was sitting on top of the crew call grid. A full-width bar
           with its own background reads as chrome instead of debris, and it sits
           above the tab-bar, since two fixed-bottom elements otherwise collide. */}
-      <div className="fixed inset-x-0 bottom-20 z-40 flex flex-col gap-2 border-t border-line bg-bg px-4 py-3 sm:flex-row lg:inset-x-auto lg:bottom-6 lg:left-1/2 lg:w-auto lg:-translate-x-1/2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+      <div className="fixed inset-x-0 bottom-20 z-40 flex flex-col gap-2 border-t border-line bg-bg px-4 py-3 sm:flex-row sm:flex-wrap sm:justify-center lg:inset-x-auto lg:bottom-6 lg:left-1/2 lg:w-auto lg:max-w-[calc(100vw-3rem)] lg:-translate-x-1/2 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
         <Button onClick={() => createShow(false)} disabled={!canCreate} className="w-full lg:w-auto">
           {/* "Try saving again" once the show exists: pressing this no longer
               creates a second one, and saying "Create show" would imply it did. */}
