@@ -1,5 +1,13 @@
 # The Scheduling screen — implementation plan
 
+> **DONE and SHIPPED 2026-09-08.** All six tasks executed inline, no subagents. On
+> crewtracker.app since the 16fe900 merge. The suite finished at 533 assertions, not the 475
+> this plan predicted, because the day's work went well past it: the grid was rebuilt as position
+> ROWS after Dan saw names shuffling between columns, the day header and position column were
+> pinned, Remove joined the status chip, the PM's answer became a chip of its own, and both
+> emails gained real Accept and Decline buttons. Everything below is the plan as written; the
+> record of what the screen actually became is in CLAUDE.md.
+
 > **For agentic workers:** Execute this plan INLINE in the session (superpowers:executing-plans).
 > **Do NOT use subagent-driven-development, do not dispatch subagents, and do not use any model
 > other than the session's** — Dan's standing rule (memory `no-subagents-without-approval`).
@@ -1223,7 +1231,7 @@ npm run build; echo "build exit: $?"
 npm test
 ```
 Expected: `build exit: 0`, and the suite green with the 13 new board assertions
-(payroll 42 + schedule 247 + clock 61 + rls 125 = 475).
+(the suite finished the day at payroll 42 + schedule 288 + clock 72 + rls 131 = 533).
 
 - [ ] **Step 5: Prove the tracker on dev**
 
@@ -1261,7 +1269,8 @@ crewtracker.app untouched, no database change anywhere.**
 
 ## Verification (end to end)
 
-- `npm test` green: payroll 42 + schedule 247 + clock 61 + rls 125 = 475. No migration, so
+- `npm test` green: 533 at the end of the day. The plan expected no migration, and the screen
+  itself needed none — 0038 and 0039 came out of what Dan found while testing it. So
   `rls.mts` is unchanged — the screen reads through the same policies the queue already proved.
 - `npm run build` exit code 0, checked with `set -o pipefail` and `echo $?`, never a piped grep.
 - On the preview (`https://crewtracker-git-scheduling-crew-tracker.vercel.app`, dev database),

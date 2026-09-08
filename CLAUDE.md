@@ -343,7 +343,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 475 assertions as of 2026-09-08.
+                  helper, no framework. 533 assertions as of 2026-09-08.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -422,12 +422,9 @@ scripts/
                        deleting a definition drops its UNFILLED slots first (BEFORE DELETE
                        trigger — the FK's set-null used to orphan them as "legacy" slots the
                        sync then ignored, so a removed position kept counting). No rows.
-                       0018–0037 applied to BOTH databases (0018–0020 shipped
-                       2026-09-05, 0021–0027 2026-09-06, 0028–0037 2026-09-07).
-                       **0038 and 0039 are DEV ONLY** — they ship with the next
-                       production cutover. Until then a non-admin on
-                       crewtracker.app cannot see a colleague's name, and a PM
-                       decline there still deletes the invitation.
+                       ALL applied to BOTH databases (0018–0020 shipped
+                       2026-09-05, 0021–0027 2026-09-06, 0028–0037 2026-09-07,
+                       0038–0039 2026-09-08). Nothing is dev-only.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -1192,8 +1189,8 @@ named, twice.
 
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
-existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 247 +
-clock 61 + rls 125 = 475 assertions.
+existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 288 +
+clock 72 + rls 131 = 533 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
@@ -1346,6 +1343,18 @@ This list drifted badly once and sent a session off to re-implement finished wor
 - The whole Settings page: 24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, AV Roles editor, payroll presets, Final Report recipients.
 
 ## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
+
+**Latest run: 2026-09-08, 0038 + 0039.** Backup (`backups/crewtracker-2026-09-08T17-18-02.sql`)
+→ `db:migrate --prod` → `db:grants` → `db:schema` → commit both generated files → merge
+`scheduling` → `main` @ 16fe900 → live check. Verified read-only either side: 6 shows, 261
+timecards, 475 punches, 4 profiles, 2 assignments, unchanged; `shares_my_organization` present
+and SECURITY DEFINER; the profiles policy carrying it; both `pm_invites` columns there; the
+schema diff nothing but those two changes. Live routes 200 / 200 / 307 / 401. **Dan could not
+smoke-test the app itself — crewtracker.app has real crew on it, and every scheduling button
+sends real email — so the verification was reads only.** That is now the normal constraint: a
+production check means HTTP status codes, read-only SQL, and looking at screens, never pressing
+anything that reaches a person. It is also why the demo-company backlog item exists.
+
 
 **The 2026-08-06 cutover shipped everything**: migrations 0011–0016 applied to production
 (verified: all 161 existing timecards backfilled to `booking_status='confirmed'`, zero nulls;

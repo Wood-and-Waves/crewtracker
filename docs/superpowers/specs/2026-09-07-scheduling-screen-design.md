@@ -1,10 +1,14 @@
 # The Scheduling screen — design
 
-> **BUILT 2026-09-08**, inline, no subagents. Plan:
-> `docs/superpowers/plans/2026-09-07-scheduling-screen.md`. On the `scheduling` branch (preview
-> only until merged). What shipped matches this spec, with three decisions recorded in CLAUDE.md:
-> the strip's counting rules, day activities stay read-only here, and travel-at-booking did not
-> move across.
+> **BUILT and SHIPPED 2026-09-08**, inline, no subagents. On crewtracker.app since the
+> 16fe900 merge, together with the day's other work: the PM invitation's two buttons, the crew
+> request's two buttons, one-tap answers with a reversal, the dev email guard, colleague names
+> (0038) and the recorded PM decline (0039). Plan:
+> `docs/superpowers/plans/2026-09-07-scheduling-screen.md`. What shipped matches this spec, with
+> three decisions recorded in CLAUDE.md: the strip's counting rules, day activities stay
+> read-only here, and travel-at-booking did not move across. Everything Dan changed afterwards —
+> the grid's position rows, the sticky header, Remove on the chip, the PM chip — is in CLAUDE.md
+> under "The Scheduling screen".
 
 Agreed with Dan in conversation on 2026-09-07 (late evening), after piece C shipped to
 production. Not yet planned; the plan comes next (`writing-plans`), then an inline build —
