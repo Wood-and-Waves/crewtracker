@@ -86,11 +86,11 @@ export default function BookingStatusChip({
         <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge">
           <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
             className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-            They confirmed
+            Approved
           </button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
             className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
-            They declined
+            Declined
           </button>
           {status === 'pencilled' && (
             <button type="button" role="menuitem" disabled={busy} onClick={ask}
