@@ -1,15 +1,22 @@
-// The Scheduling screen's model: a show as rooms × days, each cell holding that
-// room-day's positions and who is on them.
+// The Scheduling screen's model: a show as ROOMS × POSITION LINES × DAYS.
 //
-// Pure — no database, no React — so the COUNTING RULES are pinned by tests
-// rather than read off the screen. They matter: a person on four days is four
-// positions but one person waiting, and getting that backwards is exactly the
-// misreading Dan caught on the Needs-scheduling row ("There are not 12 people
-// on the Test Show 3").
+// Pure — no database, no React — so the rules below are pinned by tests rather
+// than read off the screen.
 //
-// Rooms are per-DAY rows in the database, so a room on this grid is a room
-// NAME — the same key position_defs uses. A name that does not run on a day has
-// no cell to fill, which is why a cell's roomId can be null.
+// THE SHAPE IS A GRID, AND A GRID KEEPS ITS ROWS (Dan, 2026-09-08: "Shifting
+// things down when a stagehand joins and not having them line up doesn't make
+// sense"). A cell used to be a stack of whatever that room-day held, so a role
+// that ran on two days pushed every name below it down in those columns, and a
+// person could sit on a different line each day. Now a room is a set of LINES —
+// one per position — and a line runs the width of the show: the same person, or
+// the open slot, or nothing at all on a day they are not on. You read across.
+//
+// A person keeps ONE line all week. Lines are packed, so two people who never
+// work the same day share a line rather than each holding a mostly empty row.
+//
+// Rooms are per-DAY rows in the database, so a room here is a room NAME — the
+// same key position_defs uses. A name that does not run on a day has no cell to
+// fill, which is why roomIdByDate can be null.
 //
 // Plain module, no 'use client'.
 
@@ -40,16 +47,25 @@ export type BoardEntry =
   | { kind: 'open'; slotId: string; roomId: string; role: string }
   | { kind: 'booked'; slotId: string | null; roomId: string; booking: BoardBooking; flag: SlotFlag | null }
 
-export type BoardCell = {
-  /** The room's row on this day, or null when the room does not run that day. */
-  roomId: string | null
-  entries: BoardEntry[]
+/** One position, running the width of the show. */
+export type BoardLine = {
+  key: string
+  role: string
+  /** date → what is on this line that day; null on a day it is not needed. */
+  byDate: Record<string, BoardEntry | null>
+}
+
+export type BoardRoom = {
+  name: string
+  /** date → the room's row that day, null when the room does not run. */
+  roomIdByDate: Record<string, string | null>
+  lines: BoardLine[]
 }
 
 export type BoardDay = { workDayId: string; date: string; activities: string[] }
 
 export type BoardSummary = {
-  /** Every entry on the grid: open slots plus booked person-days. */
+  /** Every position on the grid: open slots plus booked person-days. */
   total: number
   confirmed: number
   open: number
@@ -58,13 +74,7 @@ export type BoardSummary = {
   flags: number
 }
 
-export type Board = {
-  roomNames: string[]
-  days: BoardDay[]
-  /** Keyed by cellKey(roomName, date). Every room × day has an entry. */
-  cells: Record<string, BoardCell>
-  summary: BoardSummary
-}
+export type Board = { days: BoardDay[]; rooms: BoardRoom[]; summary: BoardSummary }
 
 export type BoardInput = {
   days: BoardDay[]
@@ -75,7 +85,14 @@ export type BoardInput = {
   flags: SlotFlag[]
 }
 
-export const cellKey = (roomName: string, date: string) => `${roomName}|${date}`
+/** First name, then full name — the tracker's own convention (byFirstName). */
+function nameKey(n: string): [string, string] {
+  const full = (n || '').trim()
+  return [full.split(/\s+/)[0].toLowerCase(), full.toLowerCase()]
+}
+
+const roleOf = (e: BoardEntry) => (e.kind === 'open' ? e.role : e.booking.role) || ''
+const personKey = (b: BoardBooking) => b.crewMemberId ?? `name:${b.crewMemberName}`
 
 export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput): Board {
   const roomNames = [...new Set(rooms.map(r => r.name))].sort((a, b) => a.localeCompare(b))
@@ -92,45 +109,120 @@ export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput):
   const slotsByRoom = new Map<string, BoardInput['slots']>()
   for (const s of slots) slotsByRoom.set(s.roomId, [...(slotsByRoom.get(s.roomId) ?? []), s])
 
-  const cells: Record<string, BoardCell> = {}
-  for (const name of roomNames) {
+  const boardRooms: BoardRoom[] = roomNames.map(name => {
+    const roomIdByDate: Record<string, string | null> = {}
+    const entriesByDate: Record<string, BoardEntry[]> = {}
+    // Role order is the ROOM's own: where each role first appears in its slot
+    // list, read day by day. A role only ever hand-staffed has no slot and
+    // sorts after the ones the show asked for.
+    const roleRank = new Map<string, number>()
+    let rank = 0
+
     for (const day of days) {
       const roomId = roomIdFor.get(`${name}|${day.workDayId}`) ?? null
-      const entries: BoardEntry[] = []
+      roomIdByDate[day.date] = roomId
+      const list: BoardEntry[] = []
       if (roomId) {
         const mine = [...(slotsByRoom.get(roomId) ?? [])]
           .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
         for (const s of mine) {
+          if (!roleRank.has(s.role)) roleRank.set(s.role, rank++)
           const b = bySlot.get(s.id)
-          entries.push(b
+          list.push(b
             ? { kind: 'booked', slotId: s.id, roomId, booking: b, flag: flagBySlot.get(s.id) ?? null }
             : { kind: 'open', slotId: s.id, roomId, role: s.role })
         }
-        for (const b of extras
-          .filter(x => x.roomId === roomId)
-          .sort((a, b2) => a.crewMemberName.localeCompare(b2.crewMemberName))) {
-          entries.push({ kind: 'booked', slotId: null, roomId, booking: b, flag: null })
+        for (const b of extras.filter(x => x.roomId === roomId)) {
+          list.push({ kind: 'booked', slotId: null, roomId, booking: b, flag: null })
         }
       }
-      cells[cellKey(name, day.date)] = { roomId, entries }
+      entriesByDate[day.date] = list
     }
-  }
 
-  // Counted FROM THE CELLS, so the strip can never disagree with the grid.
+    const roles = [...new Set(days.flatMap(d => entriesByDate[d.date].map(roleOf)))]
+      .sort((a, b) =>
+        (roleRank.get(a) ?? Number.MAX_SAFE_INTEGER) - (roleRank.get(b) ?? Number.MAX_SAFE_INTEGER) ||
+        a.localeCompare(b))
+
+    const lines: BoardLine[] = []
+    for (const role of roles) {
+      const perDate: Record<string, BoardEntry[]> = {}
+      for (const d of days) perDate[d.date] = entriesByDate[d.date].filter(e => roleOf(e) === role)
+
+      // Who does this role in this room, and on which days.
+      const byPerson = new Map<string, { name: string; dates: Map<string, BoardEntry> }>()
+      for (const d of days) {
+        for (const e of perDate[d.date]) {
+          if (e.kind !== 'booked') continue
+          const k = personKey(e.booking)
+          const rec = byPerson.get(k) ?? { name: e.booking.crewMemberName, dates: new Map<string, BoardEntry>() }
+          // One line per person per day; a second booking the same day (two
+          // rooms of the same name cannot happen, so this is rare) falls
+          // through to the pass below and takes another line.
+          if (!rec.dates.has(d.date)) rec.dates.set(d.date, e)
+          byPerson.set(k, rec)
+        }
+      }
+
+      // The busiest people take their line first, so the top rows are the ones
+      // that run all week and the sparse ones settle underneath.
+      const people = [...byPerson.entries()].sort((a, b) =>
+        b[1].dates.size - a[1].dates.size ||
+        nameKey(a[1].name)[0].localeCompare(nameKey(b[1].name)[0]) ||
+        nameKey(a[1].name)[1].localeCompare(nameKey(b[1].name)[1]) ||
+        a[0].localeCompare(b[0]))
+
+      const roleLines: BoardLine[] = []
+      const placed = new Set<BoardEntry>()
+      const newLine = () => {
+        const line: BoardLine = {
+          key: `${name}|${role}|${roleLines.length}`,
+          role,
+          byDate: Object.fromEntries(days.map(d => [d.date, null])) as Record<string, BoardEntry | null>,
+        }
+        roleLines.push(line)
+        return line
+      }
+
+      for (const [, rec] of people) {
+        const dates = [...rec.dates.keys()]
+        const line = roleLines.find(l => dates.every(d => !l.byDate[d])) ?? newLine()
+        for (const [d, e] of rec.dates) { line.byDate[d] = e; placed.add(e) }
+      }
+      // Then the open slots, into whatever line is free that day: a gap on a
+      // line reads as "this position is open on Saturday", which is what it is.
+      for (const d of days) {
+        for (const e of perDate[d.date]) {
+          if (placed.has(e)) continue
+          const line = roleLines.find(l => !l.byDate[d.date]) ?? newLine()
+          line.byDate[d.date] = e
+          placed.add(e)
+        }
+      }
+      lines.push(...roleLines)
+    }
+
+    return { name, roomIdByDate, lines }
+  })
+
+  // Counted FROM THE GRID, so the strip can never disagree with what is on it.
   let total = 0, confirmed = 0, open = 0, flagCount = 0
   const waiting = new Set<string>()
-  for (const cell of Object.values(cells)) {
-    for (const e of cell.entries) {
-      total++
-      if (e.kind === 'open') { open++; continue }
-      if (e.flag) flagCount++
-      if (e.booking.status === 'confirmed') confirmed++
-      else waiting.add(e.booking.crewMemberId ?? `name:${e.booking.crewMemberName}`)
+  for (const room of boardRooms) {
+    for (const line of room.lines) {
+      for (const e of Object.values(line.byDate)) {
+        if (!e) continue
+        total++
+        if (e.kind === 'open') { open++; continue }
+        if (e.flag) flagCount++
+        if (e.booking.status === 'confirmed') confirmed++
+        else waiting.add(personKey(e.booking))
+      }
     }
   }
 
   return {
-    roomNames, days, cells,
+    days, rooms: boardRooms,
     summary: { total, confirmed, open, waitingPeople: waiting.size, flags: flagCount },
   }
 }

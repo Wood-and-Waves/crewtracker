@@ -3,13 +3,13 @@ import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Button from '@/components/ui/Button'
-import Chip from '@/components/ui/Chip'
 import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import ScheduleBoard from '@/components/ScheduleBoard'
 import PositionDefsSection from '@/components/PositionDefsSection'
 import SendToSchedulingButton from '@/components/SendToSchedulingButton'
 import AskPencilledButton from '@/components/AskPencilledButton'
+import PmStatusChip from '@/components/PmStatusChip'
 import { buildBoard, describeBoard, type BoardBooking, type SlotFlag } from '@/lib/scheduleBoard'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
@@ -124,16 +124,18 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
           line of counts, then the actions on the same rule. */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-line py-3">
         <p className="text-sm font-semibold text-ink">{describeBoard(board.summary)}</p>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          {pmName ? (
-            <>
-              <span>PM: <span className="text-ink">{pmName}</span></span>
-              {show.pm_accepted_at ? <Chip tone="good">Accepted</Chip> : <Chip tone="ot">Not accepted yet</Chip>}
-            </>
-          ) : (
-            <span>No PM yet</span>
-          )}
-        </div>
+        {/* The PM's answer is a chip that IS the control, like a crew row's:
+            a PM says yes on the phone too. */}
+        <PmStatusChip
+          showId={id}
+          pm={{
+            profileId: (show.pm_profile_id as string | null) ?? null,
+            name: pmName,
+            invitedAt: (show.pm_invited_at as string | null) ?? null,
+            acceptedAt: (show.pm_accepted_at as string | null) ?? null,
+          }}
+          editHref={`/dashboard/shows/${id}/edit`}
+        />
         <div className="ml-auto flex flex-wrap items-center gap-3">
           {show.sent_to_scheduling_at && <AskPencilledButton showId={id} />}
           <SendToSchedulingButton
@@ -171,7 +173,7 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
       <div className="mt-8">
         <PositionDefsSection
           showId={id}
-          roomNames={board.roomNames}
+          roomNames={board.rooms.map(r => r.name)}
           roles={(roleRows ?? []).map((r: any) => r.name as string)}
           days={days.map(d => ({ date: d.date, activities: d.activities }))}
           defs={(defRows ?? []) as any[]}

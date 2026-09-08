@@ -204,8 +204,8 @@ app/
     invite/accept/route.ts       — finalizes invite acceptance for password sign-in path
     clock/identify/route.ts      — trades a venue QR for one person's personal link (POST only)
     clock/punch/route.ts         — the public punch write; owns every rule the DB doesn't (POST only)
-    pm/invite/route.ts           — name / clear / re-invite the PM (session; the shows UPDATE policy is the authorization)
-    pm/accept/route.ts           — the PM accepting: the ONLY writer of show_assignments(source='pm') (public, POST only, rate-limited)
+    pm/invite/route.ts           — name / clear / re-invite the PM, and record that they accepted (session; the shows UPDATE policy is the authorization)
+    pm/accept/route.ts           — the PM accepting from their email link (public, POST only, rate-limited)
     shows/send-to-scheduling/route.ts — sends a show to every member with can_manage_scheduling, or takes it back (replaced approve-call)
     crew/days-changed/route.ts   — emails the crew change notice; session, scheduling-gated, caller's RLS decides who's readable
     digest/route.ts              — the evening staffing digest, one email per staffed show (GET, CRON_SECRET bearer, see piece C below)
@@ -242,10 +242,11 @@ components/
   SendHoursButton.tsx            — per-crew timesheet via Text / Share / Copy, hours only, never dollars
   CrewClockPanel.tsx / CrewClockSign.tsx — mint/copy/revoke crew clock links on Edit Show, and the printable venue QR
   PositionDefsEditor.tsx / PositionDefsSection.tsx — positions by kind of day: the controlled editor (New Show) and the self-saving Edit Show section with the Move / Keep / Release flags
-  PmField.tsx                    — the production manager picker: an INVITATION on both New Show and Edit Show, with Invited/Accepted/Resend
+  PmField.tsx                    — the production manager picker: an INVITATION on both New Show and Edit Show, with Invited/Accepted/Resend/"They accepted"
+  PmStatusChip.tsx               — the PM's answer on the Scheduling screen, as a chip that IS the control (record it, resend, change the PM)
   SendToSchedulingButton.tsx     — sends a show to the scheduling queue or takes it back, in-place confirm (replaced HandoffToSchedulerButton)
   NeedsSchedulingList.tsx        — the schedule screen's queue: sent shows with open slots, replies waiting, or flags, oldest first; rows open the Scheduling screen
-  ScheduleBoard.tsx              — the Scheduling screen's grid: cells hold chips and Open buttons; the Fill picker opens under a room's row
+  ScheduleBoard.tsx              — the Scheduling screen's grid: a ruled row per position across the week; the Fill picker opens under the row it belongs to
   SlotFlagActions.tsx            — Move / Keep / Release for one flagged booking, shared by the grid's cells and Edit Show's list
   BookingStatusChip.tsx          — the answer chip: hidden once confirmed on the tracker, always shown and tappable on the Scheduling screen
   CrewChangeNotice.tsx           — the offered-never-forced "tell the crew whose days changed" bar, posted from PositionDefsSection, RoomActionsMenu and AddDayButton
@@ -280,7 +281,7 @@ lib/
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
   pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
   schedulingQueue.ts — the Needs-scheduling list: summarizeQueue (pure) + fetchSchedulingQueue, scoped by the caller's RLS
-  scheduleBoard.ts — the Scheduling screen's model: buildBoard (rooms x days x slots x bookings x flags) and describeBoard's counting rules. Pure, unit-tested.
+  scheduleBoard.ts — the Scheduling screen's model: buildBoard turns rooms x days x slots x bookings x flags into POSITION LINES (a row per position, running the width of the show), plus describeBoard's counting rules. Pure, unit-tested.
   readyEmail.ts / showReadiness.ts — the "fully staffed" email to the PM (compressDays/buildReadyEmail/sendReadyEmail) and the ONE gate that decides whether to send it (maybeSendReadyEmail)
   staffingEvents.ts — logStaffingEvent(): best-effort, never throws, the digest's diary
   digestEmail.ts  — the evening digest's copy (describeEvent, sendDigestEmail)
@@ -891,10 +892,19 @@ day. A slot without a definition fills one day, exactly as before.
 **The PM is INVITED, and accepting is the only thing that grants access** (Dan: a silent accept
 is dangerous). Naming somebody — `PmField` on New Show or Edit Show, confirmed in words —
 writes `shows.pm_profile_id` through the caller's session (the shows UPDATE policy is the
-authorization) and mints a `pm_invites` token, then emails `/pm/<token>`. Nothing opens until
-`/api/pm/accept` (public, POST only, rate-limited per token and per IP) writes the
-`show_assignments` row with `source='pm'`. Replacing or clearing the PM deletes only `source='pm'`
-rows, so an admin's hand-granted access is never touched. `rls.mts` pins all of that: named-but-
+authorization) and mints a `pm_invites` token, then emails `/pm/<token>`. Naming grants NOTHING;
+the `show_assignments` row with `source='pm'` is what opens the show, and exactly two things
+write it: `/api/pm/accept` (public, POST only, rate-limited per token and per IP) when the PM
+presses Accept, and — since 2026-09-08 — `/api/pm/invite` with `{ markAccepted: true }` when
+somebody who can edit the show RECORDS that they said yes (Dan: *"I should also be able to accept
+for them as well"*). The second path is not a loosening: whoever can edit a show can already
+grant the same access by hand on Edit Show → Show Access, so this is the same power where the
+answer arrives, and it is deliberate rather than silent — a confirm that says it opens the show
+to them, offered from the Scheduling screen's PM chip and from `PmField`'s "They accepted". It
+takes the same authorization as naming (a verified update through the caller's session), checks
+the membership BEFORE stamping, releases the stamp if the grant insert fails, and marks the
+`pm_invites` row accepted so their emailed link cannot grant a second time. Replacing or clearing
+the PM deletes only `source='pm'` rows, so an admin's hand-granted access is never touched. `rls.mts` pins all of that: named-but-
 not-accepted sees nothing and cannot read the token; accepted sees the show; replacing keeps a
 manual assignment. **Two finish buttons on New Show**: "Create show" lands on the tracker;
 "Create show and send to scheduler" (disabled until the definitions produce at least one slot,
@@ -1030,17 +1040,34 @@ should be simple."* Spec: `docs/superpowers/specs/2026-09-07-scheduling-screen-d
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-screen.md`. No migration — composition of
 what piece B and piece C already built.
 
-`/dashboard/shows/[id]/schedule` is **a grid: rooms down the side, days across the top**, the
-same shape as New Show's positions grid, and every cell holds that room-day's positions. Tap
+`/dashboard/shows/[id]/schedule` is **a grid: rooms down the side, days across the top**, ruled
+like a table — a room is a strip, and under it one ROW per position, read across the week. Tap
 **Open** and `FillPositionPicker` opens in a full-width row under that room (never a dialog over
 the cell). Tap a **chip** and the answer menu opens in place. A booking whose day no longer fits
 its definition says **Day no longer fits** and opens Move / Keep / Release right there. Above the
-grid, one strip: the counts, the PM and whether they accepted, **Ask everyone pencilled**, and
-Send to scheduler / With scheduling since … / Take back. Below it, the definitions editor
+grid, one strip: the counts, the PM chip, **Ask everyone pencilled**, and Send to scheduler /
+With scheduling since … / Take back. **The PM's chip is a control too**, for the same reason a
+crew member's is (Dan, 2026-09-08: *"Why would the PM say not accepted yet? Instead of the same
+pill actions as the crew?"*): a PM says yes on the phone as often as crew do. Tapping it records
+the acceptance — which grants the show, so the confirm says exactly that — resends the
+invitation, or goes to Edit Show to change who it is. Below it, the definitions editor
 (`PositionDefsSection`, unchanged — Edit Show keeps its copy). Reached from the tracker header,
 from Edit Show, and from every Needs-scheduling row, so **a scheduler never has to open a
 tracker**. Desktop-first, like New Show; it scrolls sideways on an iPad and is not built for a
 phone.
+
+**IT IS A GRID, AND A GRID KEEPS ITS ROWS.** The first cut stacked whatever a room-day held into
+its cell, and Dan took it apart in two messages (2026-09-08): *"Why are the names in different
+orders?"* — slots are per room-day rows and filling one takes whichever is open, so the same four
+BO Techs came out in a different order in every column — and then *"Shifting things down when a
+stagehand joins and not having them line up doesn't make sense. Make this more gridline with
+lines and line everything up down the row."* So `buildBoard` builds a room as LINES, one per
+position, each running the width of the show: a person holds ONE line all week, an unfilled slot
+shows Open on the line's day, and a day the position is not needed is simply blank — nothing ever
+shifts because a stagehand joins on Tuesday. Lines are packed, so two people who never work the
+same day share a line rather than each holding a mostly empty row; the busiest person takes the
+top line. Roles keep the room's own order (where each first appears in its slot list); a role
+that only exists because somebody was hand-staffed sorts last.
 
 **The counting rules are in `lib/scheduleBoard.ts` and are unit-tested, because the units are
 what got misread before** (Dan on a "12 waiting" that was person-days: *"There are not 12 people

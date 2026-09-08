@@ -30,7 +30,7 @@ import {
 import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDay } from '../../lib/positionDefs.ts'
 import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
-import { buildBoard, describeBoard, cellKey } from '../../lib/scheduleBoard.ts'
+import { buildBoard, describeBoard } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
@@ -662,21 +662,25 @@ console.log('\n--- scheduling board ---')
     role: 'A1', timecard_id: 't2', crew_member_name: 'Alex Reyes', crew_member_id: 'c1',
   }
   const board = buildBoard({ days, rooms, slots, bookings, flags: [flag] })
+  const room = (n: string) => board.rooms.find(r => r.name === n)!
+  const at = (n: string, roleIdx: number, date: string) => room(n).lines[roleIdx].byDate[date]
 
-  check('rooms are the room NAMES, sorted', board.roomNames, ['Ballroom', 'Breakout'])
-  check('a room that does not run that day has no cell room', board.cells[cellKey('Breakout', '2026-09-08')].roomId, null)
-  check('and therefore no entries', board.cells[cellKey('Breakout', '2026-09-08')].entries.length, 0)
-  check('a cell lists its slots in sort order',
-    board.cells[cellKey('Ballroom', '2026-09-08')].entries.map(e => e.kind), ['booked', 'open'])
-  check('an unfilled slot carries its role',
-    (board.cells[cellKey('Ballroom', '2026-09-08')].entries[1] as any).role, 'Stagehand')
-  check('a hand-staffed person with no slot still appears',
-    board.cells[cellKey('Ballroom', '2026-09-09')].entries.map(e => (e as any).booking?.crewMemberName),
-    ['Alex Reyes', 'Bo Ellery'])
-  check('a flagged booking carries its flag',
-    (board.cells[cellKey('Ballroom', '2026-09-09')].entries[0] as any).flag.slot_id, 's3')
-  check('an unflagged booking carries null',
-    (board.cells[cellKey('Ballroom', '2026-09-08')].entries[0] as any).flag, null)
+  check('rooms are the room NAMES, sorted', board.rooms.map(r => r.name), ['Ballroom', 'Breakout'])
+  check('a room that does not run that day has no room row', room('Breakout').roomIdByDate['2026-09-08'], null)
+  check('and nothing on its lines that day', room('Breakout').lines[0].byDate['2026-09-08'], null)
+  check('lines are one per position, in the room\'s role order',
+    room('Ballroom').lines.map(l => l.role), ['A1', 'Stagehand'])
+  check('the A1 line carries the same person both days',
+    [(at('Ballroom', 0, '2026-09-08') as any).booking.crewMemberName,
+     (at('Ballroom', 0, '2026-09-09') as any).booking.crewMemberName],
+    ['Alex Reyes', 'Alex Reyes'])
+  check('an unfilled slot sits on its own line, on the day it exists',
+    [(at('Ballroom', 1, '2026-09-08') as any).kind, at('Ballroom', 1, '2026-09-08') && (at('Ballroom', 1, '2026-09-08') as any).role],
+    ['open', 'Stagehand'])
+  check('a hand-staffed person with no slot still gets a line',
+    (at('Ballroom', 1, '2026-09-09') as any).booking.crewMemberName, 'Bo Ellery')
+  check('a flagged booking carries its flag', (at('Ballroom', 0, '2026-09-09') as any).flag.slot_id, 's3')
+  check('an unflagged booking carries null', (at('Ballroom', 0, '2026-09-08') as any).flag, null)
   check('summary counts positions, not people',
     board.summary, { total: 5, confirmed: 1, open: 2, waitingPeople: 2, flags: 1 })
   check('the strip reads in one line',
@@ -685,6 +689,74 @@ console.log('\n--- scheduling board ---')
     describeBoard({ total: 0, confirmed: 0, open: 0, waitingPeople: 0, flags: 0 }), 'Nothing to schedule yet')
   check('a full show reads clean',
     describeBoard({ total: 4, confirmed: 4, open: 0, waitingPeople: 0, flags: 0 }), '4 of 4 positions confirmed')
+
+  // THE GRID RULE: a person keeps one line all week, whoever holds which slot.
+  const steady = buildBoard({
+    days,
+    rooms: [{ id: 'q1', name: 'Hall', workDayId: 'w1' }, { id: 'q2', name: 'Hall', workDayId: 'w2' }],
+    slots: [
+      { id: 'k1', roomId: 'q1', role: 'BO Tech', sortOrder: 0 },
+      { id: 'k2', roomId: 'q1', role: 'BO Tech', sortOrder: 1 },
+      { id: 'k3', roomId: 'q2', role: 'BO Tech', sortOrder: 0 },
+      { id: 'k4', roomId: 'q2', role: 'BO Tech', sortOrder: 1 },
+    ],
+    bookings: [
+      booking({ timecardId: 'n1', roomId: 'q1', slotId: 'k1', crewMemberId: 'z', crewMemberName: 'Skyler Bergström', role: 'BO Tech' }),
+      booking({ timecardId: 'n2', roomId: 'q1', slotId: 'k2', crewMemberId: 'y', crewMemberName: 'Ines Dubois', role: 'BO Tech' }),
+      // The other way round on day two — the slots decided, not the people.
+      booking({ timecardId: 'n3', roomId: 'q2', slotId: 'k3', crewMemberId: 'y', crewMemberName: 'Ines Dubois', role: 'BO Tech' }),
+      booking({ timecardId: 'n4', roomId: 'q2', slotId: 'k4', crewMemberId: 'z', crewMemberName: 'Skyler Bergström', role: 'BO Tech' }),
+    ],
+    flags: [],
+  })
+  const hall = steady.rooms[0]
+  const nameOn = (i: number, d: string) => (hall.lines[i].byDate[d] as any)?.booking.crewMemberName ?? null
+  check('a person holds one line across the show',
+    [nameOn(0, '2026-09-08'), nameOn(0, '2026-09-09')], ['Ines Dubois', 'Ines Dubois'])
+  check('and the line below is the other person, both days',
+    [nameOn(1, '2026-09-08'), nameOn(1, '2026-09-09')], ['Skyler Bergström', 'Skyler Bergström'])
+  check('two people in one role make two lines, not four', hall.lines.length, 2)
+
+  // A role that runs on ONE day does not push the rows below it down: it is a
+  // line of its own with a hole in it.
+  const partial = buildBoard({
+    days,
+    rooms: [{ id: 'q1', name: 'Hall', workDayId: 'w1' }, { id: 'q2', name: 'Hall', workDayId: 'w2' }],
+    slots: [
+      { id: 'p1', roomId: 'q1', role: 'A1', sortOrder: 0 },
+      { id: 'p2', roomId: 'q1', role: 'Stagehand', sortOrder: 1 },
+      { id: 'p3', roomId: 'q2', role: 'A1', sortOrder: 0 },
+    ],
+    bookings: [
+      booking({ timecardId: 'a1', roomId: 'q1', slotId: 'p1', crewMemberName: 'Rowan Aoki', role: 'A1' }),
+      booking({ timecardId: 'a2', roomId: 'q2', slotId: 'p3', crewMemberName: 'Rowan Aoki', role: 'A1' }),
+      booking({ timecardId: 'a3', roomId: 'q1', slotId: 'p2', crewMemberId: 'sh', crewMemberName: 'Marlowe Oyelaran', role: 'Stagehand' }),
+    ],
+    flags: [],
+  })
+  const pl = partial.rooms[0].lines
+  check('the A1 stays on the top line both days',
+    [(pl[0].byDate['2026-09-08'] as any).booking.crewMemberName, (pl[0].byDate['2026-09-09'] as any).booking.crewMemberName],
+    ['Rowan Aoki', 'Rowan Aoki'])
+  check('the one-day stagehand is a line with a hole, not a shove',
+    [(pl[1].byDate['2026-09-08'] as any).booking.crewMemberName, pl[1].byDate['2026-09-09']],
+    ['Marlowe Oyelaran', null])
+
+  // Two people who never share a day share a line: the grid stays compact.
+  const shared = buildBoard({
+    days,
+    rooms: [{ id: 'q1', name: 'Hall', workDayId: 'w1' }, { id: 'q2', name: 'Hall', workDayId: 'w2' }],
+    slots: [
+      { id: 'x1', roomId: 'q1', role: 'A2', sortOrder: 0 },
+      { id: 'x2', roomId: 'q2', role: 'A2', sortOrder: 0 },
+    ],
+    bookings: [
+      booking({ timecardId: 'b1', roomId: 'q1', slotId: 'x1', crewMemberId: 'p1', crewMemberName: 'Casey Delgado', role: 'A2' }),
+      booking({ timecardId: 'b2', roomId: 'q2', slotId: 'x2', crewMemberId: 'p2', crewMemberName: 'Devon Nakamura', role: 'A2' }),
+    ],
+    flags: [],
+  })
+  check('one line, two people, no overlap', shared.rooms[0].lines.length, 1)
 
   // One person over two days is ONE person waiting, two positions.
   const wide = buildBoard({

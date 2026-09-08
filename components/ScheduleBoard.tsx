@@ -8,16 +8,18 @@ import FillPositionPicker from '@/components/FillPositionPicker'
 import SlotFlagActions from '@/components/SlotFlagActions'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
 import { dayLabel, dayActivitiesBgClass } from '@/lib/dayActivities'
-import { cellKey, type Board, type BoardEntry } from '@/lib/scheduleBoard'
+import type { Board, BoardEntry, BoardRoom } from '@/lib/scheduleBoard'
 
-// Rooms down the side, days across the top, every cell that room-day's
-// positions — the same shape as New Show's grid, which is how the show was
-// built in the first place.
+// Rooms down the side, days across the top — and it reads like a grid, because
+// it is one (Dan, 2026-09-08: "Make this more gridline with lines and line
+// everything up down the row"). Every ROW is one position and runs the width of
+// the show: the same person all week, or the open slot, or nothing on a day
+// they are not on. Nothing shifts because a stagehand joins on Tuesday.
 //
-// Tap OPEN and the Fill picker opens in a full-width row under that room,
-// never in a dialog over the cell: an editor that covers what you are editing
-// is the pattern this redesign removed. Tap a CHIP and the answer menu opens in
-// place. A flagged booking says so and opens Move / Keep / Release in the cell.
+// Tap OPEN and the Fill picker opens in a full-width row under that room, never
+// in a dialog over the cell: an editor that covers what you are editing is the
+// pattern this redesign removed. Tap a CHIP and the answer menu opens in place.
+// A flagged booking says so and opens Move / Keep / Release right there.
 //
 // The column template is an inline style on purpose: the day count varies at
 // runtime and Tailwind only generates classes it can SEE in the source (the
@@ -39,13 +41,17 @@ export default function ScheduleBoard({
   const [openFlag, setOpenFlag] = useState<string | null>(null)
   const [changed, setChanged] = useState<{ id: string; name: string }[]>([])
 
-  const cols = { gridTemplateColumns: `minmax(132px, 170px) repeat(${board.days.length}, minmax(148px, 1fr))` }
+  const cols = { gridTemplateColumns: `minmax(140px, 190px) repeat(${board.days.length}, minmax(150px, 1fr))` }
 
-  function entryNode(e: BoardEntry, roomName: string, date: string) {
+  function cellNode(e: BoardEntry | null, roomName: string, date: string, runs: boolean) {
+    // A day this room does not run at all reads as nothing, not as a gap to
+    // fill: the room is not there to staff.
+    if (!e) return <span className="text-xs text-muted">{runs ? '·' : ''}</span>
+
     if (e.kind === 'open') {
+      const active = picker?.slotId === e.slotId
       return (
         <button
-          key={e.slotId}
           type="button"
           disabled={locked}
           onClick={() => setPicker(p => p?.slotId === e.slotId
@@ -53,21 +59,21 @@ export default function ScheduleBoard({
             : { slotId: e.slotId, roomId: e.roomId, role: e.role, date, roomName })}
           title={locked ? 'Times are locked — the final report has been sent.' : `Fill ${e.role}`}
           className={cn(
-            'block w-full truncate rounded-field border border-dashed border-accent px-2 py-1 text-left text-xs font-semibold text-accent hover:bg-accent-wash disabled:opacity-40',
-            picker?.slotId === e.slotId && 'bg-accent-wash',
+            'w-full truncate rounded-field border border-dashed border-accent px-2 py-1 text-left text-xs font-semibold text-accent hover:bg-accent-wash disabled:opacity-40',
+            active && 'bg-accent-wash',
           )}
         >
-          Open · {e.role}
+          {active ? 'Filling…' : 'Open'}
         </button>
       )
     }
+
     const b = e.booking
     const flag = e.flag
     return (
-      <div key={b.timecardId} className="min-w-0">
-        <div className="truncate text-sm text-ink">{b.crewMemberName}</div>
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="truncate text-[11px] text-muted">{b.role || 'Crew'}</span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <span className="truncate text-sm text-ink">{b.crewMemberName}</span>
           <BookingStatusChip
             context="scheduling"
             showId={showId}
@@ -78,7 +84,7 @@ export default function ScheduleBoard({
           />
         </div>
         {flag && (
-          <div className="mt-1">
+          <div className="mt-0.5">
             <button
               type="button"
               onClick={() => setOpenFlag(f => f === flag.slot_id ? null : flag.slot_id)}
@@ -103,17 +109,62 @@ export default function ScheduleBoard({
     )
   }
 
+  function roomBlock(room: BoardRoom) {
+    return (
+      <div key={room.name}>
+        {/* The room's own strip, spanning the grid: a light rule-closed band,
+            never a second solid slab (the masthead above is the one band). */}
+        <div className="border-y border-ink/20 bg-surface-2 px-3 py-1.5">
+          <span className="font-display text-[12px] font-semibold uppercase tracking-[0.1em] text-ink">{room.name}</span>
+        </div>
+
+        {room.lines.length === 0 ? (
+          <div className="border-b border-line px-3 py-3 text-xs text-muted">No positions in this room yet.</div>
+        ) : room.lines.map(line => (
+          <div key={line.key}>
+            <div style={cols} className="grid border-b border-line">
+              <div className="flex items-center px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <span className="truncate">{line.role || 'Crew'}</span>
+              </div>
+              {board.days.map(d => (
+                <div key={d.date} className="flex min-w-0 items-center border-l border-line px-3 py-2">
+                  {cellNode(line.byDate[d.date], room.name, d.date, !!room.roomIdByDate[d.date])}
+                </div>
+              ))}
+            </div>
+
+            {/* The picker, full width under the line it belongs to. */}
+            {picker && picker.roomName === room.name && line.byDate[picker.date]?.kind === 'open'
+              && (line.byDate[picker.date] as Extract<BoardEntry, { kind: 'open' }>).slotId === picker.slotId && (
+              <div className="border-b border-line bg-surface-2/40 px-3 py-3">
+                <p className="mb-2 text-xs text-muted">{room.name} · {line.role} · {dayHead(picker.date)}</p>
+                <FillPositionPicker
+                  positionId={picker.slotId}
+                  positionRole={picker.role}
+                  roomId={picker.roomId}
+                  date={picker.date}
+                  onCancel={() => setPicker(null)}
+                  onFilled={() => { setPicker(null); router.refresh() }}
+                />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="mt-4">
       <div className="overflow-x-auto">
-        <div className="min-w-[720px]">
+        <div className="min-w-[760px]">
           {/* Day header — a LIGHT strip, because the show masthead above is the
               screen's one solid band. Each day carries its activities label:
               that is what explains which cells exist at all. */}
           <div style={cols} className="grid border-b-2 border-ink bg-surface-2">
-            <div className="px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-ink">Room</div>
+            <div className="px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-ink">Position</div>
             {board.days.map(d => (
-              <div key={d.date} className="min-w-0 px-3 py-2">
+              <div key={d.date} className="min-w-0 border-l border-line px-3 py-2">
                 <div className="truncate text-[11px] font-bold uppercase tracking-wide text-ink">{dayHead(d.date)}</div>
                 {dayLabel(d.activities) && (
                   <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] uppercase text-muted">
@@ -125,44 +176,7 @@ export default function ScheduleBoard({
             ))}
           </div>
 
-          {board.roomNames.map(roomName => (
-            <div key={roomName} className="border-b border-line last:border-b-0">
-              <div style={cols} className="grid">
-                <div className="bg-surface-2 px-3 py-3 font-display text-[12px] font-semibold uppercase tracking-[0.08em] text-ink">
-                  {roomName}
-                </div>
-                {board.days.map(d => {
-                  const cell = board.cells[cellKey(roomName, d.date)]
-                  return (
-                    <div key={d.date} className="flex min-w-0 flex-col gap-2 border-l border-line px-3 py-3">
-                      {!cell?.roomId ? (
-                        <span className="text-xs text-muted">—</span>
-                      ) : cell.entries.length === 0 ? (
-                        <span className="text-xs text-muted">No positions</span>
-                      ) : (
-                        cell.entries.map(e => entryNode(e, roomName, d.date))
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* The picker for THIS room, full width under its row. */}
-              {picker?.roomName === roomName && (
-                <div className="border-t border-line px-3 py-3">
-                  <p className="mb-2 text-xs text-muted">{roomName} · {dayHead(picker.date)}</p>
-                  <FillPositionPicker
-                    positionId={picker.slotId}
-                    positionRole={picker.role}
-                    roomId={picker.roomId}
-                    date={picker.date}
-                    onCancel={() => setPicker(null)}
-                    onFilled={() => { setPicker(null); router.refresh() }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+          {board.rooms.map(roomBlock)}
         </div>
       </div>
 
