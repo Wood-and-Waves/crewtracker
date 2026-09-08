@@ -186,7 +186,12 @@ export type BookingRequestInput = {
   organizationName: string
   role: string | null
   days: EngagementDay[]
+  /** The page. Kept for the SMS text, which carries no action link at all. */
   link: string
+  /** The two BUTTONS (2026-09-08). Confirm answers on arrival; Decline opens
+   *  the page with the note box ready, since a decline carries a message. */
+  confirmUrl: string
+  declineUrl: string
 }
 
 export function buildBookingRequestEmail(input: BookingRequestInput) {
@@ -217,8 +222,11 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
     ...scheduleText,
     where ? `Where:  ${where}` : null,
     '',
-    'Let them know if you can do it:',
-    input.link,
+    'Yes, I can do it:',
+    input.confirmUrl,
+    '',
+    "No, I can't:",
+    input.declineUrl,
     '',
     '— CrewTracker',
   ].filter(Boolean).join('\n')
@@ -244,9 +252,13 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
     ${where ? `<tr><td style="padding:6px 0;color:#71717a">Where</td><td style="padding:6px 0">${escapeHtml(where)}</td></tr>` : ''}
   </table>
   <p style="margin:0 0 24px">
-    <a href="${escapeHtml(input.link)}"
+    <a href="${escapeHtml(input.confirmUrl)}"
        style="display:inline-block;background:#3366CC;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">
-      Confirm or decline
+      Confirm
+    </a>
+    <a href="${escapeHtml(input.declineUrl)}"
+       style="display:inline-block;margin-left:10px;background:#fff;color:#c63b30;text-decoration:none;padding:10px 19px;border:1px solid #c63b30;border-radius:8px;font-size:15px;font-weight:600">
+      Decline
     </a>
   </p>
   <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
@@ -263,7 +275,10 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
  * the reply comes back to the scheduler by phone anyway — which is why they can
  * record the answer on the crew member's behalf.
  */
-export function buildBookingRequestText(input: Omit<BookingRequestInput, 'to' | 'link'>): string {
+export function buildBookingRequestText(
+  // No links of any kind reach the SMS — see the note above.
+  input: Omit<BookingRequestInput, 'to' | 'link' | 'confirmUrl' | 'declineUrl'>,
+): string {
   const { range, qualifiers } = describeDateParts(input.days)
   const where = input.venue || input.cityState
   // Company names very often already end in a period ("Northwind Staging Co."),

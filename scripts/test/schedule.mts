@@ -21,7 +21,7 @@ import { byShowAndDate, coverageFor, crewKey, resolveWindow,
          type ScheduleBooking, type ScheduleShow } from '../../lib/schedule.ts'
 import { todayInZone, showStatus } from '../../lib/showStatus.ts'
 import {
-  describeDates, buildBookingRequestText, describeDayLines, hasAnyDayActivity,
+  describeDates, buildBookingRequestText, describeDayLines, hasAnyDayActivity, buildBookingRequestEmail,
 } from '../../lib/bookingEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import {
@@ -821,6 +821,27 @@ console.log('\n--- evening digest ---')
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
   check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
+}
+
+console.log('\n--- the crew booking request email ---')
+{
+  const { text, html } = buildBookingRequestEmail({
+    to: 'alex@x.test', crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West',
+    cityState: null, organizationName: 'Wood & Waves', role: 'A1',
+    days: [{ date: '2026-09-10', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }],
+    link: 'https://crewtracker.app/book/abc',
+    confirmUrl: 'https://crewtracker.app/book/abc?a=confirm',
+    declineUrl: 'https://crewtracker.app/book/abc?a=decline',
+  })
+  check('both answers are in the email', 
+    [text.includes('https://crewtracker.app/book/abc?a=confirm'), text.includes('https://crewtracker.app/book/abc?a=decline')], [true, true])
+  check('and both are buttons in the HTML',
+    [html.includes('>\n      Confirm\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
+  check('the old single "confirm or decline" link is gone', text.includes('Confirm or decline'), false)
+  check('the SMS still carries no link at all',
+    buildBookingRequestText({ crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West', cityState: null,
+      organizationName: 'Wood & Waves', role: 'A1',
+      days: [{ date: '2026-09-10', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }] }).includes('http'), false)
 }
 
 console.log('\n--- the PM invitation email ---')

@@ -299,6 +299,7 @@ lib/
   crewCall.ts   — position counting (summarizeCall/describeCallSize) + day scopes
   crewCallGrid.ts — the rooms×days call model, pure and unit-tested
   bookingEmail.ts / callHandoffEmail.ts / bookingInvite.ts — crew requests and the handoff
+  bookingResponse.ts — recording a crew answer; the page's buttons and the email's Confirm button both go through it
   supabase/client.ts / server.ts / admin.ts
   payroll.ts    — TypeScript port of iOS PayrollCalculator
   punches.ts    — punch ordering/labels + chronology validation; formatPunchTime takes a use24Hour flag
@@ -1299,7 +1300,7 @@ tint, which is what explains which cells exist; changing them stays on Edit Show
   - `/dashboard/schedule` — company-wide calendar, rooms×days grid on desktop, agenda on mobile. `lib/schedule.ts` holds the cross-show query.
   - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
   - **The scheduling queue** — `shows.sent_to_scheduling_at`, sent from the show page to EVERY member holding `can_manage_scheduling` (nobody owns a sent show; see piece C below). Requires at least one position. `shows.scheduler_id` / `call_approved_at` are history, superseded 2026-09-07.
-  - **Booking requests** — `booking_invites`, emailed confirm/decline link at `/book/[token]` with no login, plus an SMS-ready text with deliberately no link. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
+  - **Booking requests** — `booking_invites`, with **Confirm and Decline as two BUTTONS in the email** (2026-09-08, Dan: "This should have a Accept or Decline button. Not a link to accept or decline"). Confirm answers on arrival — `?a=confirm`, handled by the page through `lib/bookingResponse.ts`, the same function the page's own buttons post to. Decline does NOT answer on the link: `?a=decline` opens `/book/[token]` with the note box ready, because a decline carries a message to whoever is staffing the show and the reason is the useful part. No login either way. The SMS version still carries **no link at all**, deliberately. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
   - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reached by tapping **Open** in a cell of the Scheduling screen (the tracker's open rows and Positions panel are gone since 2026-09-08). Since piece B it books a definition's other open days too (a checklist, one insert), and since 2026-09-08 booking somebody who DECLINED revives their own row instead of inserting a second one.
 
 This list drifted badly once and sent a session off to re-implement finished work. If something here looks missing, search the repo before believing it.

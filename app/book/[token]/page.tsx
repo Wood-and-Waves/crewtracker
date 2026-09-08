@@ -1,6 +1,7 @@
 import { loadBookingInvite } from '@/lib/bookingInvite'
 import { describeDayLines } from '@/lib/bookingEmail'
 import BookingResponseForm from './BookingResponseForm'
+import { respondToBooking } from '@/lib/bookingResponse'
 import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
 
@@ -33,11 +34,21 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export default async function BookingPage({
-  params,
+  params, searchParams,
 }: {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ a?: string }>
 }) {
   const { token } = await params
+  const { a } = await searchParams
+
+  // The email carries two BUTTONS (2026-09-08). Confirm answers here, as the
+  // page loads, so one tap is the whole job. Decline does not: it opens the
+  // page with the note box ready, because a decline carries a message to
+  // whoever is staffing the show and the reason is the useful part.
+  // Answering twice is harmless — the page lets anybody change their mind.
+  if (a === 'confirm') await respondToBooking(token, 'confirmed')
+
   const invite = await loadBookingInvite(token)
 
   if (!invite) {
@@ -113,6 +124,7 @@ export default async function BookingPage({
         token={invite.token}
         alreadyResponded={invite.response}
         respondedAt={invite.respondedAt}
+        startDeclining={a === 'decline'}
       />
     </Shell>
   )

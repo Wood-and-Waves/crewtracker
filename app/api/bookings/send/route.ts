@@ -158,7 +158,13 @@ export async function POST(request: Request) {
       warning: `${crew.full_name} has no email address. Text or copy the message instead.` })
   }
 
-  const result = await sendBookingRequestEmail({ to: crew.email, ...common, link })
+  // Two buttons, two links: ?a=confirm answers on arrival, ?a=decline opens the
+  // page with the note box ready (2026-09-08).
+  const result = await sendBookingRequestEmail({
+    to: crew.email, ...common, link,
+    confirmUrl: `${link}?a=confirm`,
+    declineUrl: `${link}?a=decline`,
+  })
   if (result.error) {
     return NextResponse.json({ ok: true, emailed: false, link, smsText,
       warning: `The email didn't send (${result.error}). The link below still works.` })

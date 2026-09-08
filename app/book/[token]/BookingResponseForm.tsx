@@ -14,16 +14,20 @@ export default function BookingResponseForm({
   token,
   alreadyResponded,
   respondedAt,
+  startDeclining = false,
 }: {
   token: string
   alreadyResponded: 'confirmed' | 'declined' | null
   respondedAt: string | null
+  /** They pressed Decline in the email: show the note and the two buttons,
+   *  even if an answer is already on file, rather than the recorded answer. */
+  startDeclining?: boolean
 }) {
   const [answer, setAnswer] = useState<'confirmed' | 'declined' | null>(alreadyResponded)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [changing, setChanging] = useState(false)
+  const [changing, setChanging] = useState(startDeclining)
 
   async function respond(response: 'confirmed' | 'declined') {
     setBusy(true)
