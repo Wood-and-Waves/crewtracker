@@ -677,22 +677,7 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   scheduling happens at a desk). It scrolls sideways below 1024px rather than restructuring.
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
   time, not a grid.
-- **A DEMO COMPANY on production** (Dan, 2026-09-08: "I need to devise a demo company and site
-  that can run on the actual production site"). Today there is nowhere safe to show the app: dev
-  holds the fake data but lives on localhost or behind Vercel's login, and crewtracker.app holds
-  real people, so every button on it sends real email to real crew. A demo needs to be a REAL
-  organization on production, with its own crew whose email addresses are all reachable by Dan,
-  so a booking request, a PM invitation and a ready email can all be pressed in front of somebody
-  without touching a customer. The pieces: superadmin mints the org and its invite link (the
-  existing onboarding path, no new code); its members are Dan under plus-addressed aliases so
-  every login is his; its crew directory carries names and `dan+alex@…` style addresses; and one
-  show is built to a script — a two-room, week-long run with positions by kind of day, a PM
-  invitation already accepted, some crew confirmed, one declined and one still pencilled, so the
-  Scheduling screen shows every state at once. Two things to decide before building it: whether
-  the demo org is reset between demos (a SQL script that deletes and rebuilds it is easy, and
-  makes rehearsal repeatable), and whether it is ever visible to a real customer — it must not
-  appear in anybody else's org, which the existing per-organization scoping already guarantees.
-  Roughly an evening, most of it writing the seed script; the app needs no changes.
+- ~~A DEMO COMPANY on production.~~ **DONE 2026-09-08** — see "The demo company" below.
 - **A crew member's own week: one screen with their hours** (Dan, 2026-09-08: "For the crew
   links. Would it be possible to have an overview type screen they can click on and see the
   week's hours?"). Both crew-facing screens — the no-login clock link (`/clock/[token]`) and the
@@ -1341,6 +1326,55 @@ This list drifted badly once and sent a session off to re-implement finished wor
 - **Per-crew timesheet Text/Share/Copy** — `SendHoursButton.tsx`.
 - **Named payroll presets, Continuous Time, Pay As Half Day UI, room rename/delete, per-crew removal, show archiving, batch travel-day toggle, reset punches, Copy Crew, Add Day from the tracker** — all shipped.
 - The whole Settings page: 24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, AV Roles editor, payroll presets, Final Report recipients.
+
+## The demo company (2026-09-08)
+
+**There are two organizations on production and both are Dan's.** They were renamed the day the
+demo was built, because the names said the opposite of the truth: the live PwC work was sitting in
+"Test Production Company" and the spare org was called "Smith Audio, LLC".
+
+- **CrewTracker Shows** (`ccfbe4b6-…`) — the real one. Dan's own shows, real crew, real emails.
+  **Nothing may be pressed here**: every scheduling button sends real mail to real people, which
+  is why a production check is reads only (see the shipping procedure below).
+- **CrewTracker Demo** (`e24655eb-…`) — the safe one. Twelve crew whose addresses are ALL
+  `dan+alex@theaudiosmith.com` style aliases and whose phones are all in the `(214) 555-01xx`
+  range reserved for fiction, so a booking request, a PM invitation, a removal notice and a ready
+  email can be pressed in front of somebody and every one of them lands in Dan's inbox. This is
+  the answer to "there is nowhere safe to show the app": dev is on localhost or behind Vercel's
+  login, and it is the wrong database to demonstrate anyway.
+
+**Renaming an organization is SQL — there is no field for it.** Settings → Organization carries
+only timecard rounding and the Final Report recipients, so both renames were two `UPDATE`s. A name
+field on that screen is a small job (the `organizations` UPDATE policy is already gated to
+`can_manage_users`, and `name` is not one of the operator-guarded columns) and worth doing before
+a customer ever asks.
+
+**`scripts/sql/demo/seed-crewtracker-demo.sql` builds the demo org, and re-running it is the
+reset.** It deletes the demo org's shows and crew and builds them again, so a rehearsal that ended
+with everything confirmed is one command from being a fresh demo, and the show's dates are
+computed from `current_date + 7` so it is always next week. Two guards, both load-bearing: the
+organization id is hard-coded AND its name is checked before the first delete, so pointing it at
+the wrong database or renaming the org raises instead of deleting somebody's shows; and the file
+is sent as ONE query, so a DO block that fails part-way rolls the whole thing back rather than
+leaving a half-built show.
+
+    npm run db:sql -- --prod scripts/sql/demo/seed-crewtracker-demo.sql
+
+**The show is built to show every scheduling state at once** — *Northwind Global Sales Kickoff*,
+Hilton Anatole, six days (travel · load-in · rehearsal · show · show · show + load-out + travel),
+two rooms, six position definitions by kind of day, 33 derived slots. Dan is the PM and has
+accepted, and the show is sent to scheduling, so it sits in the Needs-scheduling queue. Of the
+crew: four confirmed, two asked and waiting, one declined, one still pencilled, and five positions
+open (three Camera Operator, two the decliner's — a declined booking does not hold its slot). Four
+more people sit in the directory unbooked so the fill picker has somebody to choose between.
+
+Two things it deliberately does NOT have, so nobody goes looking:
+- **No punches, so no tracker or reports demo.** The show is next week; a future show with hours
+  on it would be a lie. Demonstrating the tracker and Reports needs a SECOND show, finished and
+  punched, seeded the same way — worth adding the next time the demo needs to cover payroll.
+- **One login.** Dan is the admin, the PM and (through the aliases) every crew member. Showing the
+  scheduler's own view, or a crew login, needs more members, which the invite flow can mint under
+  plus-addressed aliases whenever that demo is wanted.
 
 ## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
 
