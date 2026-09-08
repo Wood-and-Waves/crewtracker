@@ -50,15 +50,23 @@ Dan (the developer) has no professional dev background — so explain the *why* 
   - **Revoked privileges.** `pg_dump` emits GRANTs computed against Postgres's built-in default, so a REVOKE is an *absence* — and on Supabase an absence is inherited from `ALTER DEFAULT PRIVILEGES` rather than removed. The `day_rate` lockdown is written as an absence, so without `grants.sql` it silently doesn't exist in the rebuilt database. `npm run db:grants` regenerates it from production; re-run after changing any privilege.
 
   Verified 2026-07-26 to reproduce production exactly: 15 tables, 43 policies, 17 functions, 12 public + 6 non-public triggers, 2 views, 23 indexes, 47 constraints, 7 event triggers, 208 table grants, 1390 column privileges.
-- **Dev logins that exist** (dev database only): `dan@theaudiosmith.com` is the admin;
-  `crewtest@example.test` is the crew-side fixture (no company permissions at all); and
-  **`scheduler@example.test`** ("Sasha Vine", added 2026-09-08) is a scheduler-ONLY member —
-  `can_manage_scheduling` and `can_edit_timecards`, no `can_edit_all_shows`, no admin. That last
-  one exists because the Scheduling screen is built for exactly that person and nobody had ever
-  opened it as one: verified 2026-09-08 that they see a SENT show's grid in full, get a 404 on an
-  unsent show, and see only their entitled shows in the Needs-scheduling queue. A new dev member
-  also needs `profiles.active_organization_id` set — the invite flow does it (`lib/invite.ts`),
-  so a hand-made fixture must too, or every page renders the "Almost there" no-organization card.
+- **Dev logins that exist** (dev database only, password `crewtracker-dev` on the three
+  fixtures). One per ROLE in the show flow, because every one of them sees a different app:
+  - `dan@theaudiosmith.com` — admin: builds shows, writes positions, names the PM, sends to scheduling.
+  - `scheduler@example.test` — "Sasha Vine", scheduler ONLY (`can_manage_scheduling` +
+    `can_edit_timecards`, no `can_edit_all_shows`, no admin). Added 2026-09-08 because the
+    Scheduling screen is built for exactly this person and nobody had ever opened it as one.
+    Verified: sees a SENT show's grid in full, gets a 404 on a show that was never sent, and sees
+    only entitled shows in the Needs-scheduling queue.
+  - `pm@example.test` — "Jordan Vega", a PM with no admin rights, so the PM INVITATION can be
+    tested properly. Naming yourself as PM proves nothing: accepting is what grants access, and
+    you already have it.
+  - `crewtest@example.test` — the crew-side login, linked by email to the directory entry for
+    **Alex Reyes** (migration 0028 links `crew_members.profile_id` by email). Until 2026-09-08 no
+    crew row carried that address, so the crew screen had nobody to be and the path was untestable.
+
+  A hand-made member also needs `profiles.active_organization_id` set — the invite flow does it
+  (`lib/invite.ts`), so a fixture must too, or every page renders the "Almost there" card.
 - **Dev browser sign-in**: `app/api/dev/login/route.ts` mints a session so a browser can be signed in for UI verification. Three independent gates — `NODE_ENV` must be development (Vercel builds everything, preview included, as production), the Supabase project must not be production, and `DEV_LOGIN_SECRET` from `.env.local` must match. Every rejection is a bare 404.
 - **Vercel CLI**: installed globally (2026-08-03) and signed in as `dan-2811`; the repo is linked to `crew-tracker/crewtracker`. `vercel inspect crewtracker-lime.vercel.app` / `vercel ls crewtracker` check deployment status after a push instead of guessing whether a deploy succeeded. `vercel link` appends a managed `VERCEL_OIDC_TOKEN` to `.env.local` — that is normal, and it leaves the existing keys alone.
   - **`vercel env pull` cannot read the values back.** Every variable on this project is flagged sensitive, so the pulled file contains the literal string `[SENSITIVE]` in place of all five. Don't diff those placeholders against real keys and conclude anything — that produces a confident, wrong answer. Read values from the dashboard, or test behaviour directly.
@@ -625,6 +633,19 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   scheduling happens at a desk). It scrolls sideways below 1024px rather than restructuring.
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
   time, not a grid.
+- **A crew member's own week: one screen with their hours** (Dan, 2026-09-08: "For the crew
+  links. Would it be possible to have an overview type screen they can click on and see the
+  week's hours?"). Both crew-facing screens — the no-login clock link (`/clock/[token]`) and the
+  crew-side login (`CrewShowScreen`) — show ONE day at a time behind arrows, so the question crew
+  actually ask ("did all my punches land, and what am I owed hours-wise?") cannot be answered
+  without walking the whole show a day at a time. Build: a summary under the punch grid, or a
+  tab beside it — every day of theirs on this show, each with its in/out times, the day's net
+  hours, and a total at the bottom; tapping a day opens that day, which is the screen that
+  already exists. Rules it must keep: **hours only, never money** (the crew-facing rule the
+  timesheet and the booking email already follow); the org's rounding, threaded through like
+  every other total; travel and absent days carry their label instead of times; and it must never
+  read `punches.source` — a crew-entered hour is worth what a PM-entered one is. Read-only. Half
+  a day, most of it presentation, since `lib/payroll.ts` already computes every number.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
