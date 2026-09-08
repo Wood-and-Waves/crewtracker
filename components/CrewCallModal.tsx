@@ -302,7 +302,10 @@ export default function CrewCallModal({
               <ul className="mb-4 divide-y divide-line rounded-field border border-line">
                 {positions.map(p => (
                   <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                    <div className="min-w-0">
+                    {/* flex-1: without it the action cluster on the right could
+                        squeeze this column to nothing — the name vanished
+                        (Dan's screenshot, 2026-09-07). */}
+                    <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-ink">{p.role}</div>
                       <div className="truncate text-xs text-muted">
                         {p.filledBy ?? 'Open'}

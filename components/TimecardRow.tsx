@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { PUNCH_ORDER, PUNCH_LABELS, nextPunchType, isWrapped, formatPunchTime, Punch, PunchType } from '@/lib/punches'
 import { calculateNetHours, PayrollRuleset, TimecardLike, type Absence } from '@/lib/payroll'
 import TimeEntryModal from '@/components/TimeEntryModal'
+import BookingStatusChip from '@/components/BookingStatusChip'
 import { cn } from '@/lib/cn'
 import { punchGridCols } from '@/lib/trackerLayout'
 
@@ -23,8 +24,14 @@ export default function TimecardRow({
   visibleTypes,
   authorId,
   locked = false,
+  showId,
+  schedulingEnabled = false,
 }: {
-  timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean; absence?: Absence | null }
+  timecard: { id: string; crew_member_id: string | null; crew_member_name: string; role: string; day_rate: number; is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean; pay_as_half_day: boolean; absence?: Absence | null; booking_status?: string | null }
+  /** With the scheduling module, the booking status chip (tap to record an
+   *  answer) renders beside the role. Needs the show for the record route. */
+  showId?: string
+  schedulingEnabled?: boolean
   punches: Punch[]
   timezone: string
   ruleset: PayrollRuleset
@@ -298,6 +305,12 @@ export default function TimecardRow({
           {/* Desktop: stacked to fit the narrow crew column */}
           <p className="hidden lg:block text-sm font-semibold text-ink">{timecard.crew_member_name}</p>
           <p className="hidden lg:block text-xs text-muted">{timecard.role}</p>
+          {/* Booking status, and the chip is the control (see BookingStatusChip). */}
+          {schedulingEnabled && showId && timecard.crew_member_id && (
+            <div className="mt-1">
+              <BookingStatusChip showId={showId} crewMemberId={timecard.crew_member_id} crewName={timecard.crew_member_name} status={timecard.booking_status} locked={locked} />
+            </div>
+          )}
         </div>
 
         {timecard.absence ? (

@@ -162,6 +162,8 @@ export default function MobileRoomTracker({
         roundingMinutes={roundingMinutes}
         visibleTypes={dayPunchTypes}
         authorId={authorId}
+        showId={showId}
+        schedulingEnabled={schedulingEnabled}
       />
     ))
   }
@@ -298,7 +300,14 @@ export default function MobileRoomTracker({
               // halves of this screen must never disagree again.
               <section key={room.id}>
                 <div className={cn(BAND, 'flex items-center justify-between px-4 py-2')}>
-                  <h2 className="font-display text-lg font-bold uppercase tracking-wide">{room.name}</h2>
+                  <h2 className="font-display text-lg font-bold uppercase tracking-wide">
+                    {room.name}
+                    {schedulingEnabled && crew.length > 0 && (
+                      <span className="ml-3 font-sans text-xs font-normal normal-case tracking-normal opacity-80">
+                        {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} confirmed
+                      </span>
+                    )}
+                  </h2>
                   <RoomActionsMenu onBand schedulingEnabled={schedulingEnabled} locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={showId} />
                 </div>
                 <div className={RULE_MAJOR}>
@@ -315,7 +324,14 @@ export default function MobileRoomTracker({
           return (
             <section>
               <div className={cn(BAND, 'flex items-center justify-between px-4 py-2')}>
-                <h2 className="font-display text-lg font-bold uppercase tracking-wide">{activeRoom!.name}</h2>
+                <h2 className="font-display text-lg font-bold uppercase tracking-wide">
+                  {activeRoom!.name}
+                  {schedulingEnabled && crew.length > 0 && (
+                    <span className="ml-3 font-sans text-xs font-normal normal-case tracking-normal opacity-80">
+                      {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} confirmed
+                    </span>
+                  )}
+                </h2>
                 <RoomActionsMenu onBand schedulingEnabled={schedulingEnabled} locked={locked} roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={showId} />
               </div>
               {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} authorId={authorId} roundingMinutes={roundingMinutes} locked={locked} />}

@@ -569,7 +569,15 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   only, refused on a finalized show unless unlocked first, and never from the tracker — Edit Show,
   at the bottom, below Archive. Cascades already exist on every child table, so the write is one
   verified delete on `shows`; the work is the dialog and the permission.
-- **Booking status on the tracker crew row, and the chip IS the control** (Dan, 2026-09-07:
+- ~~Booking status on the tracker crew row, and the chip IS the control.~~ **DONE 2026-09-07
+  (`components/BookingStatusChip.tsx`)** — Pencilled / Asked chips on every crew row in both
+  trackers open an in-place menu: They confirmed · They declined · Ask by email; Confirmed is
+  a plain chip; the room band reads "2 of 3 confirmed". Plus the GROUP ask
+  (`components/AskPencilledButton.tsx`, on Edit Show's Scheduling section and on each
+  Needs-scheduling row): one booking-request email per person still pencilled, through the
+  same `/api/bookings/send` as the single Ask. The Positions panel's name column got `flex-1`
+  (it collapsed to nothing beside the action cluster). Original ask, kept for the reasoning
+  (Dan, 2026-09-07:
   "The 3 dots are not intuitive and that is critical information… Click the pencilled to have
   a context menu… The less extra buttons on the tracker the better"). Build: a chip beside the
   role on every crew row — Pencilled / Asked / Confirmed (`booking_status` is already in

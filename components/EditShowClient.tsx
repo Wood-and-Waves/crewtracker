@@ -11,6 +11,7 @@ import AddDayButton from '@/components/AddDayButton'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import PositionDefsSection, { type DefRow, type SlotFlag } from '@/components/PositionDefsSection'
 import SendToSchedulingButton from '@/components/SendToSchedulingButton'
+import AskPencilledButton from '@/components/AskPencilledButton'
 import PmField, { type PmState } from '@/components/PmField'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
@@ -557,6 +558,12 @@ export default function EditShowClient({
             callSize={scheduling.callSize}
             initialOpen={scheduling.openHandoff}
           />
+          {scheduling.sentAt && (
+            <div className="mt-3">
+              <AskPencilledButton showId={show.id} />
+              <p className="mt-1 text-xs text-muted">One booking request email per person still pencilled, covering all their days. People already asked or answered are left alone.</p>
+            </div>
+          )}
         </section>
       )}
 

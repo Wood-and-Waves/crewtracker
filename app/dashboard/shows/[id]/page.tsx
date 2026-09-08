@@ -507,7 +507,14 @@ export default async function ShowDetailPage({
             // opens a dropdown out of it, and clipping would cut the menu off.
             <section key={room.id} className="min-w-0">
               <div className={cn(BAND, 'flex items-center justify-between px-4 py-2')}>
-                <h2 className="font-display text-lg font-bold uppercase tracking-wide">{room.name}</h2>
+                <h2 className="font-display text-lg font-bold uppercase tracking-wide">
+                  {room.name}
+                  {schedulingOn && crew.length > 0 && (
+                    <span className="ml-3 font-sans text-xs font-normal normal-case tracking-normal opacity-80">
+                      {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} confirmed
+                    </span>
+                  )}
+                </h2>
                 <RoomActionsMenu onBand schedulingEnabled={schedulingOn} locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={show.id} />
               </div>
 
@@ -573,6 +580,8 @@ export default async function ShowDetailPage({
                     use24Hour={user.use24Hour}
                     roundingMinutes={roundingMinutes}
                     visibleTypes={dayPunchTypes}
+                    showId={show.id}
+                    schedulingEnabled={schedulingOn}
                   />
                 ))}
 

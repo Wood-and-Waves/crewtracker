@@ -3,6 +3,7 @@ import { RULE_MAJOR } from '@/lib/panel'
 import { describeShowDates } from '@/lib/pmInviteEmail'
 import { cn } from '@/lib/cn'
 import type { QueueRow } from '@/lib/schedulingQueue'
+import AskPencilledButton from '@/components/AskPencilledButton'
 
 // The queue at the top of the Schedule screen: sent shows that still need a
 // scheduler's hands — open positions, replies waiting, or a flag to sort out.
@@ -30,26 +31,24 @@ export default function NeedsSchedulingList({ rows }: { rows: QueueRow[] }) {
 
       <div className={cn('divide-y divide-line', RULE_MAJOR)}>
         {rows.map(row => (
-          <Link
-            key={row.id}
-            href={`/dashboard/shows/${row.id}`}
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2 md:px-5"
-          >
-            <div className="min-w-0">
+          <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 md:px-5">
+            <Link href={`/dashboard/shows/${row.id}`} className="min-w-0 transition-colors hover:text-accent">
               <div className="truncate text-sm font-semibold text-ink">{row.name}</div>
               <div className="truncate text-xs text-muted">
                 {[row.venue, describeShowDates(row.startDate, row.endDate)].filter(Boolean).join(' · ')}
               </div>
-            </div>
-            <div className="text-right">
+            </Link>
+            <div className="flex flex-col items-end gap-1 text-right">
               <div className="text-xs text-ink">
                 {row.openSlots} open of {row.totalSlots}
                 {row.waiting > 0 && <> · {row.waiting} waiting</>}
                 {row.flags > 0 && <> · <span className="text-ot">{row.flags} to sort out</span></>}
               </div>
               <div className="text-[10.5px] text-muted">{sentAgo(row.sentAt)}</div>
+              {/* Group ask (Dan, 2026-09-07): one email per person still pencilled. */}
+              {row.waiting > 0 && <AskPencilledButton showId={row.id} />}
             </div>
-          </Link>
+          </div>
         ))}
       </div>
     </div>
