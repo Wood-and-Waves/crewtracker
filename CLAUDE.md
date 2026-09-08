@@ -1056,6 +1056,15 @@ from Edit Show, and from every Needs-scheduling row, so **a scheduler never has 
 tracker**. Desktop-first, like New Show; it scrolls sideways on an iPad and is not built for a
 phone.
 
+**The day header and the position column stay put** (Dan, 2026-09-08: *"Can the position date
+header be sticky to the top?"*). The grid is its OWN scroll box to make that possible: a
+horizontal scroller is a vertical one too — CSS turns the other axis to `auto` whatever you ask
+for — so a header sticking to the page would leave with the box. Two traps came with it, both
+fixed and both invisible until you scroll sideways: the rows are block-level, so without the
+grid's own width (`190 + days × 150`) a sticky header's BACKGROUND stopped at the box edge and
+the rows underneath showed through the right-hand days; and a room strip that already spans the
+scroll cannot stick to the left, so the room NAME is what sticks, not the strip.
+
 **IT IS A GRID, AND A GRID KEEPS ITS ROWS.** The first cut stacked whatever a room-day held into
 its cell, and Dan took it apart in two messages (2026-09-08): *"Why are the names in different
 orders?"* — slots are per room-day rows and filling one takes whichever is open, so the same four

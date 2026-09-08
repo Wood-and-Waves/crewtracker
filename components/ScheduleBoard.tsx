@@ -24,6 +24,15 @@ import type { Board, BoardEntry, BoardRoom } from '@/lib/scheduleBoard'
 // The column template is an inline style on purpose: the day count varies at
 // runtime and Tailwind only generates classes it can SEE in the source (the
 // same trap punchGridCols avoids with literal class names).
+//
+// THE GRID IS ITS OWN SCROLL BOX so the day header can stay put (Dan,
+// 2026-09-08: "Can the position date header be sticky to the top? When I
+// scroll down, it goes away"). It has to be: a horizontal scroller is a
+// vertical one too — CSS turns the other axis to `auto` whatever you ask for —
+// so a header sticking to the PAGE would leave with the box. Inside its own
+// box, `sticky top-0` pins to the box and the days stay overhead all the way
+// down. The position column pins the same way to the left, so a name still
+// says what it is seven days across.
 
 function dayHead(date: string) {
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -42,6 +51,12 @@ export default function ScheduleBoard({
   const [changed, setChanged] = useState<{ id: string; name: string }[]>([])
 
   const cols = { gridTemplateColumns: `minmax(140px, 190px) repeat(${board.days.length}, minmax(150px, 1fr))` }
+  // The grid is wider than the box on anything but a big screen, and the rows
+  // inside are block-level: without a width of their own they stop at the box's
+  // edge, so a sticky header's BACKGROUND stopped there too and the rows
+  // underneath showed through the right-hand days once you scrolled sideways.
+  // Give the whole stack the grid's own width — the same minima as the template.
+  const gridWidth = { minWidth: `${190 + board.days.length * 150}px` }
 
   function cellNode(e: BoardEntry | null, roomName: string, date: string, runs: boolean) {
     // A day this room does not run at all reads as nothing, not as a gap to
@@ -114,8 +129,13 @@ export default function ScheduleBoard({
       <div key={room.name}>
         {/* The room's own strip, spanning the grid: a light rule-closed band,
             never a second solid slab (the masthead above is the one band). */}
-        <div className="border-y border-ink/20 bg-surface-2 px-3 py-1.5">
-          <span className="font-display text-[12px] font-semibold uppercase tracking-[0.1em] text-ink">{room.name}</span>
+        <div className="border-y border-ink/20 bg-surface-2 py-1.5">
+          {/* The strip runs the width of the grid, so the NAME is what rides
+              along when you scroll sideways — sticky on the strip itself would
+              do nothing, since it is already as wide as the scroll. */}
+          <span className="sticky left-0 z-20 inline-block px-3 font-display text-[12px] font-semibold uppercase tracking-[0.1em] text-ink">
+            {room.name}
+          </span>
         </div>
 
         {room.lines.length === 0 ? (
@@ -123,7 +143,7 @@ export default function ScheduleBoard({
         ) : room.lines.map(line => (
           <div key={line.key}>
             <div style={cols} className="grid border-b border-line">
-              <div className="flex items-center px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <div className="sticky left-0 z-10 flex items-center bg-bg px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
                 <span className="truncate">{line.role || 'Crew'}</span>
               </div>
               {board.days.map(d => (
@@ -156,13 +176,17 @@ export default function ScheduleBoard({
 
   return (
     <div className="mt-4">
-      <div className="overflow-x-auto">
-        <div className="min-w-[760px]">
+      {/* Tall enough to be worth pinning a header to, short enough that the
+          definitions editor below is still reachable by scrolling the page.
+          The bottom tab bar owns the last 6rem below lg, so the box is shorter
+          there. */}
+      <div className="max-h-[calc(100vh-19rem)] overflow-auto lg:max-h-[calc(100vh-16rem)]">
+        <div style={gridWidth}>
           {/* Day header — a LIGHT strip, because the show masthead above is the
               screen's one solid band. Each day carries its activities label:
               that is what explains which cells exist at all. */}
-          <div style={cols} className="grid border-b-2 border-ink bg-surface-2">
-            <div className="px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-ink">Position</div>
+          <div style={cols} className="sticky top-0 z-30 grid border-b-2 border-ink bg-surface-2">
+            <div className="sticky left-0 z-10 bg-surface-2 px-3 py-2 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-ink">Position</div>
             {board.days.map(d => (
               <div key={d.date} className="min-w-0 border-l border-line px-3 py-2">
                 <div className="truncate text-[11px] font-bold uppercase tracking-wide text-ink">{dayHead(d.date)}</div>
