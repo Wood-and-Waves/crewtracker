@@ -9,12 +9,16 @@ import Chip from '@/components/ui/Chip'
 // Dan (2026-09-07): "The 3 dots are not intuitive and that is critical
 // information… Click the pencilled to have a context menu… The less extra
 // buttons on the tracker the better." Then: "Simplicity and less verbiage is
-// key." So the menu is APPROVED and DECLINED, nothing else — asking by email
-// is the group button on Edit Show (or the Positions panel for one person),
-// and removing a booking stays under ⋮ → Edit crew. Every status is tappable
-// while the show is open: a confirmed person can still decline (backed out).
-// Posts to /api/bookings/record (show-wide, like a decline; a recorded yes can
-// complete the show and send the ready email).
+// key." So ON THE TRACKER the menu is APPROVED and DECLINED, nothing else, and
+// a confirmed person shows no chip at all — removing a booking stays under
+// ⋮ → Edit crew.
+//
+// The SCHEDULING screen is the other half of the same control: there a
+// confirmed chip is shown and tappable (somebody backs out), and a pencilled
+// one also offers Ask by email, which is the single-person ask the Positions
+// panel used to hold. Posts to /api/bookings/record (show-wide, like a decline;
+// a recorded yes can complete the show and send the ready email) and to
+// /api/bookings/send for the ask.
 //
 // Scheduling-module only: booking status is a scheduling state. Without the
 // module the row shows nothing here, exactly as before.
@@ -24,13 +28,16 @@ type Status = 'pencilled' | 'invited' | 'confirmed' | 'declined'
 const LABEL: Record<Status, string> = { pencilled: 'Pencilled', invited: 'Asked', confirmed: 'Confirmed', declined: 'Declined' }
 
 export default function BookingStatusChip({
-  showId, crewMemberId, crewName, status: initial, locked = false,
+  showId, crewMemberId, crewName, status: initial, locked = false, context = 'tracker',
 }: {
   showId: string
   crewMemberId: string | null
   crewName: string
   status: string | null | undefined
   locked?: boolean
+  /** 'tracker' hides a confirmed chip entirely; 'scheduling' shows it and lets
+   *  it be tapped (somebody backed out) and offers the single Ask by email. */
+  context?: 'tracker' | 'scheduling'
 }) {
   const router = useRouter()
   const [status, setStatus] = useState<Status>((initial as Status) || 'pencilled')
@@ -39,12 +46,13 @@ export default function BookingStatusChip({
   const [note, setNote] = useState('')
 
   if (!crewMemberId) return null
-  // A confirmed person shows NOTHING (Dan, 2026-09-07: "the tracker should be
-  // simple"). The chip exists only while an answer is still owed; a confirmed
-  // person who backs out is recorded from the Positions panel / the scheduling
-  // screen, not from the tracker row.
-  if (status === 'confirmed') return null
+  // On the TRACKER a confirmed person shows NOTHING (Dan, 2026-09-07: "the
+  // tracker should be simple") — the chip exists only while an answer is owed.
+  // On the SCHEDULING screen it stays: recording that somebody backed out is a
+  // scheduling job, and there has to be somewhere to do it.
+  if (status === 'confirmed' && context === 'tracker') return null
   const tappable = !locked
+  const tone = status === 'declined' ? 'danger' : status === 'confirmed' ? 'good' : 'neutral'
 
   async function post(url: string, body: Record<string, unknown>) {
     setBusy(true); setNote('')
@@ -63,6 +71,19 @@ export default function BookingStatusChip({
     router.refresh()
   }
 
+  // Ask ONE person by email. The group ask covers a whole show, but a scheduler
+  // who has just booked somebody wants to ask them now — and the Positions
+  // panel that used to own this is gone. Scheduling screen only: the tracker's
+  // menu stays Approved / Declined.
+  async function ask() {
+    const body = await post('/api/bookings/send', { showId, crewMemberId })
+    if (!body) return
+    setStatus('invited')
+    setOpen(false)
+    setNote(body.emailed ? `Asked ${crewName.split(' ')[0]} by email.` : (body.warning || 'No email on file for them.'))
+    router.refresh()
+  }
+
   return (
     <span className="relative inline-flex items-center">
       {tappable ? (
@@ -74,22 +95,30 @@ export default function BookingStatusChip({
           title="Tap to record their answer"
           className="rounded-pill focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent"
         >
-          <Chip tone={status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]} ▾</Chip>
+          <Chip tone={tone}>{LABEL[status]} ▾</Chip>
         </button>
       ) : (
-        <Chip tone={status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]}</Chip>
+        <Chip tone={tone}>{LABEL[status]}</Chip>
       )}
 
       {open && (
         <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge">
-          <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
-            className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-            Approved
-          </button>
+          {status !== 'confirmed' && (
+            <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+              Approved
+            </button>
+          )}
           {status !== 'declined' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
               className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
               Declined
+            </button>
+          )}
+          {context === 'scheduling' && status === 'pencilled' && (
+            <button type="button" role="menuitem" disabled={busy} onClick={ask}
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+              Ask by email
             </button>
           )}
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}
