@@ -617,6 +617,16 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   automatically, registration is optional. Build side: an `accepted_terms_at` on profiles and a
   click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
   consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
+- **"Pencilled" is on the wording list too** (Dan, 2026-09-08, screenshotting the group-ask
+  confirm: "Email a booking request to the 4 people still pencilled on this show?"). It is the
+  app's word for a booking nobody has been asked about yet, and it is on screen in six places
+  that must all change together: the chip's own label and the status word behind it
+  (`components/BookingStatusChip.tsx`), the button "Ask everyone pencilled" plus its confirm
+  sentence and its "Nobody is pencilled — everyone has been asked or has answered" note
+  (`components/AskPencilledButton.tsx`), and the explainer under it on Edit Show, "One booking
+  request email per person still pencilled…" (`components/EditShowClient.tsx`). The database
+  value `booking_status = 'pencilled'` can stay as it is — renaming a column value is a
+  migration for no visible gain, the same call the `crew_call_positions` table already got.
 - **"Named you" has to go** (Dan, 2026-09-08: "I don't like the verbiage 'named you'"). It is
   the app's own word for assigning a production manager and it has spread through every
   PM-facing string. The replacement is Dan's to choose — "assigned", "put you on", "asked you to
