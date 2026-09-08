@@ -680,6 +680,22 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   scheduling happens at a desk). It scrolls sideways below 1024px rather than restructuring.
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
   time, not a grid.
+- **A DEMO COMPANY on production** (Dan, 2026-09-08: "I need to devise a demo company and site
+  that can run on the actual production site"). Today there is nowhere safe to show the app: dev
+  holds the fake data but lives on localhost or behind Vercel's login, and crewtracker.app holds
+  real people, so every button on it sends real email to real crew. A demo needs to be a REAL
+  organization on production, with its own crew whose email addresses are all reachable by Dan,
+  so a booking request, a PM invitation and a ready email can all be pressed in front of somebody
+  without touching a customer. The pieces: superadmin mints the org and its invite link (the
+  existing onboarding path, no new code); its members are Dan under plus-addressed aliases so
+  every login is his; its crew directory carries names and `dan+alex@…` style addresses; and one
+  show is built to a script — a two-room, week-long run with positions by kind of day, a PM
+  invitation already accepted, some crew confirmed, one declined and one still pencilled, so the
+  Scheduling screen shows every state at once. Two things to decide before building it: whether
+  the demo org is reset between demos (a SQL script that deletes and rebuilds it is easy, and
+  makes rehearsal repeatable), and whether it is ever visible to a real customer — it must not
+  appear in anybody else's org, which the existing per-organization scoping already guarantees.
+  Roughly an evening, most of it writing the seed script; the app needs no changes.
 - **A crew member's own week: one screen with their hours** (Dan, 2026-09-08: "For the crew
   links. Would it be possible to have an overview type screen they can click on and see the
   week's hours?"). Both crew-facing screens — the no-login clock link (`/clock/[token]`) and the
