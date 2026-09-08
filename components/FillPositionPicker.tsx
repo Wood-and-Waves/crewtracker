@@ -46,7 +46,10 @@ type Candidate = {
   name: string
   roles: string[]
   /** Where they are already committed on this date, within this organization. */
-  conflicts: { showName: string; roomName: string; sameRoom: boolean }[]
+  conflicts: { showId: string; showName: string; roomName: string; sameRoom: boolean; status: string | null }[]
+  /** They said no to THIS show. Kept on purpose (migration 0012) so the
+   *  scheduler is not the last to know; booking them again is allowed. */
+  declinedThisShow: boolean
 }
 
 /** Another open slot of the same definition, on another day. */
@@ -54,6 +57,23 @@ type SiblingSlot = { id: string; roomId: string; roomName: string; date: string 
 
 function fmtDay(date: string) {
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+/**
+ * "Already scheduled on Northwind · pending on this show". Scheduled = a
+ * confirmed booking that day; pending = pencilled or invited (Dan, 2026-09-07:
+ * say which, so the scheduler knows whether the other show is real yet).
+ */
+function describeConflicts(conflicts: Candidate['conflicts']): string {
+  const byShow = new Map<string, { name: string; confirmed: boolean }>()
+  for (const c of conflicts) {
+    const e = byShow.get(c.showId) ?? { name: c.showName, confirmed: false }
+    if (c.status === 'confirmed') e.confirmed = true
+    byShow.set(c.showId, e)
+  }
+  return [...byShow.values()]
+    .map((e, i) => `${i === 0 ? 'Already ' : ''}${e.confirmed ? 'scheduled' : 'pending'} on ${e.name}`)
+    .join(' · ')
 }
 
 export default function FillPositionPicker({
@@ -131,7 +151,10 @@ export default function FillPositionPicker({
     let active = true
     ;(async () => {
       setLoading(true)
-      const [{ data: crew, error: crewErr }, { data: rates }, { data: booked }] = await Promise.all([
+      // This room's show, for "this show" wording and for the declines below.
+      const { data: roomRow } = await supabase.from('rooms').select('show_id').eq('id', roomId).maybeSingle()
+      const thisShowId = ((roomRow as any)?.show_id ?? null) as string | null
+      const [{ data: crew, error: crewErr }, { data: rates }, { data: booked }, { data: declined }] = await Promise.all([
         supabase.from('crew_members').select('id, full_name').order('full_name'),
         // Roles come from rate cards — the only place the app records what a
         // person does. Someone with no rate card simply has no roles listed and
@@ -145,9 +168,14 @@ export default function FillPositionPicker({
           .from('timecards')
           .select(`
             crew_member_id, booking_status, room_id,
-            rooms!inner ( name, work_days!inner ( date, shows!inner ( name ) ) )
+            rooms!inner ( name, work_days!inner ( date, shows!inner ( id, name ) ) )
           `))
           .eq('rooms.work_days.date', date),
+        // Who already said NO to this show (Dan, 2026-09-07: "so the scheduler
+        // doesn't try to schedule the same person over again").
+        thisShowId
+          ? supabase.from('timecards').select('crew_member_id').eq('show_id', thisShowId).eq('booking_status', 'declined')
+          : Promise.resolve({ data: [] as any[] }),
       ])
       if (!active) return
 
@@ -172,15 +200,17 @@ export default function FillPositionPicker({
         if (!room || !show) continue
         conflictsByCrew.set(t.crew_member_id, [
           ...(conflictsByCrew.get(t.crew_member_id) ?? []),
-          { showName: show.name, roomName: room.name, sameRoom: t.room_id === roomId },
+          { showId: show.id, showName: show.id === thisShowId ? 'this show' : show.name, roomName: room.name, sameRoom: t.room_id === roomId, status: t.booking_status ?? null },
         ])
       }
+      const declinedIds = new Set(((declined ?? []) as any[]).map(t => t.crew_member_id).filter(Boolean))
 
       setCandidates((crew ?? []).map((c: any) => ({
         id: c.id,
         name: c.full_name,
         roles: rolesByCrew.get(c.id) ?? [],
         conflicts: conflictsByCrew.get(c.id) ?? [],
+        declinedThisShow: declinedIds.has(c.id),
       })))
       setLoading(false)
     })()
@@ -337,12 +367,13 @@ export default function FillPositionPicker({
                   <div className="truncate text-sm text-ink">{c.name}</div>
                   {c.conflicts.length > 0 && (
                     <div className="truncate text-[11px] text-ot">
-                      {sameRoom
-                        ? 'Already in this room today'
-                        : `On ${c.conflicts.map(x => x.showName).join(', ')} today`}
+                      {sameRoom ? 'Already in this room today' : describeConflicts(c.conflicts)}
                     </div>
                   )}
-                  {c.conflicts.length === 0 && !c.roles.includes(positionRole) && (
+                  {c.conflicts.length === 0 && c.declinedThisShow && (
+                    <div className="truncate text-[11px] text-danger">Declined this show</div>
+                  )}
+                  {c.conflicts.length === 0 && !c.declinedThisShow && !c.roles.includes(positionRole) && (
                     <div className="truncate text-[11px] text-muted">
                       {c.roles.length ? c.roles.join(', ') : 'No roles listed'}
                     </div>
@@ -352,12 +383,12 @@ export default function FillPositionPicker({
                     one show and a rehearsal on another in one day is normal. */}
                 <Button
                   size="sm"
-                  variant={c.conflicts.length ? 'ghost' : 'primary'}
+                  variant={c.conflicts.length || c.declinedThisShow ? 'ghost' : 'primary'}
                   disabled={busy || !!sameRoom}
                   title={sameRoom ? 'They are already in this room today.' : undefined}
                   onClick={() => fill(c)}
                 >
-                  {sameRoom ? 'In room' : c.conflicts.length ? 'Book anyway' : 'Book'}
+                  {sameRoom ? 'In room' : c.conflicts.length || c.declinedThisShow ? 'Book anyway' : 'Book'}
                 </Button>
               </li>
             )
