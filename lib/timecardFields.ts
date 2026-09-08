@@ -89,8 +89,9 @@ export const TIMECARD_SELECT = TIMECARD_FIELDS_NO_RATE.join(', ')
 // The filter is applied in SQL rather than JS on purpose: a caller who forgot
 // to select `booking_status` would compare `undefined` and silently let
 // everything through. `.neq` is safe here because 0012 declares the column
-// `not null default 'pencilled'` — this is not the nullable-column trap
-// documented in lib/schedule.ts, where `.eq(false)` drops every NULL row.
+// `not null default 'pencilled'`, so every row has a value to compare. The trap
+// to remember is the NULLABLE column: `.eq('archived', false)` silently drops
+// every row where archived is NULL, because in SQL null is not false.
 //
 // NOT every timecards query wants this. Write paths that set the status, the
 // duplicate-staffing guards (the room/crew unique index has no booking_status

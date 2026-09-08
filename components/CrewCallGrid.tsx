@@ -195,8 +195,7 @@ export default function CrewCallGrid({
       <div className="overflow-x-auto">
         <div style={{ minWidth }}>
           <div className="grid" style={{ gridTemplateColumns }}>
-            {/* Sticky room column, copied from ScheduleGrid which sits on
-                identical scaffolding. Without it, scrolling right on a long run
+            {/* Sticky room column. Without it, scrolling right on a long run
                 loses which room you are looking at. The opaque background is
                 NOT optional: without it the day cells scroll visibly
                 underneath — and here it is the band itself. */}

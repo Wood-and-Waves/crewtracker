@@ -237,7 +237,9 @@ app/
                                   position with its answer; the strip, and the definitions editor under it
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
     shows/new/page.tsx          — create a show: details, payroll preset, and the rooms×days positions grid
-    schedule/page.tsx           — company-wide calendar across shows, plus the Needs-scheduling queue
+    schedule/page.tsx           — the scheduler's work queue: shows sent to scheduling that still
+                                  need hands. The shows x dates chart that used to sit under it was
+                                  deleted 2026-09-08; see "Already built" below.
     settings/page.tsx           — personal prefs, org settings, AV Roles editor, payroll presets
   api/
     admin/create-invite/route.ts — server-side invite creation (service role, bypasses RLS)
@@ -295,7 +297,6 @@ components/
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
-  schedule.ts   — the cross-show booking query; the only place that reads across shows
   crewCall.ts   — position counting (summarizeCall/describeCallSize) + day scopes
   crewCallGrid.ts — the rooms×days call model, pure and unit-tested
   bookingEmail.ts / callHandoffEmail.ts / bookingInvite.ts — crew requests and the handoff
@@ -343,7 +344,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 533 assertions as of 2026-09-08.
+                  helper, no framework. 498 assertions as of 2026-09-08.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1174,8 +1175,8 @@ named, twice.
 
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
-existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 288 +
-clock 72 + rls 131 = 533 assertions.
+existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 253 +
+clock 72 + rls 131 = 498 assertions (schedule lost 35 with the cross-show chart on 2026-09-08).
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
@@ -1305,7 +1306,22 @@ tint, which is what explains which cells exist; changing them stays on Edit Show
 ### Already built — do not rebuild these
 
 - **Scheduling (2026-07-28; in production since the 2026-08-06 cutover).** The whole workflow:
-  - `/dashboard/schedule` — company-wide calendar, rooms×days grid on desktop, agenda on mobile. `lib/schedule.ts` holds the cross-show query.
+  - `/dashboard/schedule` — **the scheduler's work queue, and nothing else since 2026-09-08.**
+    It used to carry a chart under the queue: shows down the side, dates across the top, a
+    headcount in each cell, with an unstaffed show day drawn as a visible gap. Dan asked what it
+    was for, and the honest answer was that the queue built after it does the same job better —
+    it lists the shows needing work and says why, instead of leaving you to spot a gap. Two
+    other things sealed it: **the headcount could not tell the truth**, because it counted people
+    booked rather than people who had said yes, so a show nobody had answered looked exactly like
+    a confirmed one; and it never answered the question its shape implied. Turning it round into
+    a CREW chart — "is Alex free next Tuesday" — is the version that would earn its place, and
+    Dan killed that too: *"The number of people that would need to be on that sheet would be
+    terrible to look at."* A directory of dozens, nearly all idle in any given fortnight, is not
+    a chart anybody reads. **Do not rebuild either without asking.** Availability is still
+    checked where the decision is actually made: `FillPositionPicker` warns that somebody is
+    already booked that day, inside this company only. Deleted with it: `components/ScheduleGrid`,
+    `components/ScheduleAgenda`, `lib/schedule.ts` (the only cross-show query in the app) and 35
+    assertions in `schedule.mts`.
   - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
   - **The scheduling queue** — `shows.sent_to_scheduling_at`, sent from the show page to EVERY member holding `can_manage_scheduling` (nobody owns a sent show; see piece C below). Requires at least one position. `shows.scheduler_id` / `call_approved_at` are history, superseded 2026-09-07.
   - **Booking requests** — `booking_invites`, with **Confirm and Decline as two BUTTONS in the email** (2026-09-08, Dan: "This should have a Accept or Decline button. Not a link to accept or decline"). Confirm answers on arrival — `?a=confirm`, handled by the page through `lib/bookingResponse.ts`, the same function the page's own buttons post to. Decline does NOT answer on the link: `?a=decline` opens `/book/[token]` with the note box ready, because a decline carries a message to whoever is staffing the show and the reason is the useful part. No login either way. The SMS version still carries **no link at all**, deliberately. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
