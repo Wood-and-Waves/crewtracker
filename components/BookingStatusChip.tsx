@@ -2,7 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import Chip from '@/components/ui/Chip'
+import { logStaffingEvent } from '@/lib/staffingEvents'
+import { compressDays } from '@/lib/readyEmail'
 
 // The booking status on a tracker crew row — and the chip IS the control.
 //
@@ -22,22 +25,32 @@ type Status = 'pencilled' | 'invited' | 'confirmed' | 'declined'
 const LABEL: Record<Status, string> = { pencilled: 'Pencilled', invited: 'Asked', confirmed: 'Confirmed', declined: 'Declined' }
 
 export default function BookingStatusChip({
-  showId, crewMemberId, crewName, status: initial, locked = false,
+  showId, crewMemberId, crewName, status: initial, locked = false, timecardId, role, dayLabel,
 }: {
   showId: string
   crewMemberId: string | null
   crewName: string
   status: string | null | undefined
   locked?: boolean
+  /** This row's timecard — "Remove from this room" deletes it (the same write
+   *  the ⋮ → Edit crew panel makes; Dan, 2026-09-07: that job should not live
+   *  behind the three dots). */
+  timecardId: string
+  role?: string | null
+  /** The row's date (YYYY-MM-DD), for the staffing event's "Tue 8". */
+  dayLabel?: string | null
 }) {
   const router = useRouter()
+  const supabase = createClient()
   const [status, setStatus] = useState<Status>((initial as Status) || 'pencilled')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
 
   if (!crewMemberId) return null
-  const tappable = !locked && (status === 'pencilled' || status === 'invited')
+  // Every status is tappable while the show is open: a confirmed person can
+  // back out ("Declined"), and anyone can be removed from the room.
+  const tappable = !locked
 
   async function post(url: string, body: Record<string, unknown>) {
     setBusy(true); setNote('')
@@ -52,6 +65,17 @@ export default function BookingStatusChip({
     const ok = await post('/api/bookings/record', { showId, crewMemberId, response })
     if (!ok) return
     setStatus(response)
+    setOpen(false)
+    router.refresh()
+  }
+
+  async function remove() {
+    if (!confirm(`Remove ${crewName} from this room today? This deletes their punches for this day.`)) return
+    setBusy(true); setNote('')
+    const { data, error } = await supabase.from('timecards').delete().eq('id', timecardId).select('id')
+    setBusy(false)
+    if (error || !data?.length) { setNote(error?.message ?? 'That did not save.'); return }
+    await logStaffingEvent(supabase, { showId, kind: 'released', crewMemberId, crewMemberName: crewName, role: role ?? null, days: dayLabel ? compressDays([dayLabel]) : null })
     setOpen(false)
     router.refresh()
   }
@@ -76,7 +100,7 @@ export default function BookingStatusChip({
           title="Tap to record their answer"
           className="rounded-pill focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent"
         >
-          <Chip tone="neutral">{LABEL[status]} ▾</Chip>
+          <Chip tone={status === 'confirmed' ? 'good' : status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]} ▾</Chip>
         </button>
       ) : (
         <Chip tone={status === 'confirmed' ? 'good' : status === 'declined' ? 'danger' : 'neutral'}>{LABEL[status]}</Chip>
@@ -84,20 +108,28 @@ export default function BookingStatusChip({
 
       {open && (
         <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge">
-          <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
-            className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-            Approved
-          </button>
-          <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
-            className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
-            Declined
-          </button>
+          {status !== 'confirmed' && (
+            <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+              Approved
+            </button>
+          )}
+          {status !== 'declined' && (
+            <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
+              className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
+              {status === 'confirmed' ? 'Declined (backed out)' : 'Declined'}
+            </button>
+          )}
           {status === 'pencilled' && (
             <button type="button" role="menuitem" disabled={busy} onClick={ask}
               className="block w-full border-t border-line px-3 py-2 text-left text-sm text-accent hover:bg-surface-2 disabled:opacity-40">
               Ask by email
             </button>
           )}
+          <button type="button" role="menuitem" disabled={busy} onClick={remove}
+            className="block w-full border-t border-line px-3 py-2 text-left text-sm text-muted hover:bg-surface-2 hover:text-danger disabled:opacity-40">
+            Remove from this room
+          </button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}
             className="block w-full px-3 py-1.5 text-left text-xs text-muted hover:text-ink">
             Cancel

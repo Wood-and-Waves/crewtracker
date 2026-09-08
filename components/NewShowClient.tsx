@@ -169,7 +169,13 @@ export default function NewShowClient({
     // Naming a PM sends them an email, so it is asked out loud, once, before
     // anything is written. Not on a retry: the invitation went with the first
     // attempt or the person is already told where to send it from.
-    if (pm && !createdShowId && !confirm(`Create the show and invite ${pm.name} as PM? They'll get an email and the show once they accept.`)) return
+    if (!createdShowId) {
+      const asks = [
+        sendToScheduler ? 'send it to scheduling? Everyone with the scheduling permission gets an email' : null,
+        pm ? `invite ${pm.name} as PM? They'll get an email and the show once they accept` : null,
+      ].filter(Boolean)
+      if (asks.length && !confirm(`Create the show and ${asks.join(', and ')}.`)) return
+    }
     setError('')
     setLoading(true)
 
@@ -341,7 +347,21 @@ export default function NewShowClient({
       }
     }
 
-    router.push(sendToScheduler ? `/dashboard/shows/${showId}/edit?handoff=1` : `/dashboard/shows/${showId}`)
+    // "Create show and send to scheduler" SENDS (Dan, 2026-09-07: it used to
+    // land on Edit Show with the confirm open, which read as already sent).
+    // A retry after a partial failure may find it already sent — that is fine.
+    if (sendToScheduler) {
+      const res = await fetch('/api/shows/send-to-scheduling', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ showId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok && !/already with scheduling/i.test(body.error ?? '')) {
+        setError(`Show created, but it couldn't be sent to scheduling: ${body.error ?? 'unknown error'}. Send it from Edit Show.`)
+        setLoading(false)
+        return
+      }
+    }
+    router.push(`/dashboard/shows/${showId}`)
   }
 
   return (
