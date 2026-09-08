@@ -103,18 +103,23 @@ export default function SendToSchedulingButton({
     </div>
   ) : (
     <div>
-      <Button
-        variant="ghost"
-        size="md"
-        onClick={() => setOpen(true)}
-        disabled={nothingToSend}
-        title={nothingToSend ? 'Add positions first — there is nothing to schedule yet.' : undefined}
-      >
-        Send to scheduler
-      </Button>
+      {/* The opener steps aside while the confirm is showing. Left in place it
+          was a button that did nothing (Dan, 2026-09-07, arriving from New
+          Show with the confirm already open). */}
+      {!open && (
+        <Button
+          variant="ghost"
+          size="md"
+          onClick={() => setOpen(true)}
+          disabled={nothingToSend}
+          title={nothingToSend ? 'Add positions first — there is nothing to schedule yet.' : undefined}
+        >
+          Send to scheduler
+        </Button>
+      )}
 
       {open && (
-        <div className="mt-2 border-l-[3px] border-accent py-1 pl-3">
+        <div className="border-l-[3px] border-accent py-1 pl-3">
           <p className="text-sm text-ink">
             Send {callSize} to scheduling? Everyone with the scheduling permission gets an email, and any of them can fill the positions.
           </p>
