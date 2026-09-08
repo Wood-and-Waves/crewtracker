@@ -96,7 +96,9 @@ export default function MobileRoomTracker({
   addDayControl?: React.ReactNode
   /** Show is finalized: punch and timecard writes are refused. */
   locked?: boolean
-  /** Scheduling module available — gates the room menu's Positions panel. */
+  /** Scheduling module available — gates the crew row's status chip and the
+   *  room band's confirmed count. Filling and positions live on the
+   *  Scheduling screen now. */
   schedulingEnabled?: boolean
 }) {
   const [selected, setSelected] = useState<'all' | string>('all')
@@ -308,7 +310,7 @@ export default function MobileRoomTracker({
                       </span>
                     )}
                   </h2>
-                  <RoomActionsMenu onBand schedulingEnabled={schedulingEnabled} locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={showId} />
+                  <RoomActionsMenu onBand locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={showId} />
                 </div>
                 <div className={RULE_MAJOR}>
                   {crew.length === 0 && emptyRoster(room.id)}
@@ -332,7 +334,7 @@ export default function MobileRoomTracker({
                     </span>
                   )}
                 </h2>
-                <RoomActionsMenu onBand schedulingEnabled={schedulingEnabled} locked={locked} roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={showId} />
+                <RoomActionsMenu onBand locked={locked} roomId={activeRoom!.id} roomName={activeRoom!.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: ratesByTimecardId[tc.id] ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={showId} />
               </div>
               {crew.length > 0 && <BatchPunchBar timecards={crew} dayDate={dayDate} timezone={timezone} authorId={authorId} roundingMinutes={roundingMinutes} locked={locked} />}
               <div className={RULE_MAJOR}>

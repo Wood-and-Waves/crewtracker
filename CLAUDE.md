@@ -193,6 +193,8 @@ app/
     shows/[id]/edit/page.tsx   — Edit Show: info, timezone, financials toggle, full payroll ruleset, Crew Clock links
     shows/[id]/clock/print/page.tsx — printable venue QR sign (AppShell chrome is print:hidden)
     shows/[id]/edit?handoff=1   — the same page with the send-to-scheduling confirm already open ("Create show and send to scheduler")
+    shows/[id]/schedule/page.tsx — THE SCHEDULING SCREEN: rooms down, days across, every cell a
+                                  position with its answer; the strip, and the definitions editor under it
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
     shows/new/page.tsx          — create a show: details, payroll preset, and the rooms×days positions grid
     schedule/page.tsx           — company-wide calendar across shows, plus the Needs-scheduling queue
@@ -242,7 +244,10 @@ components/
   PositionDefsEditor.tsx / PositionDefsSection.tsx — positions by kind of day: the controlled editor (New Show) and the self-saving Edit Show section with the Move / Keep / Release flags
   PmField.tsx                    — the production manager picker: an INVITATION on both New Show and Edit Show, with Invited/Accepted/Resend
   SendToSchedulingButton.tsx     — sends a show to the scheduling queue or takes it back, in-place confirm (replaced HandoffToSchedulerButton)
-  NeedsSchedulingList.tsx        — the schedule screen's queue: sent shows with open slots, replies waiting, or flags, oldest first
+  NeedsSchedulingList.tsx        — the schedule screen's queue: sent shows with open slots, replies waiting, or flags, oldest first; rows open the Scheduling screen
+  ScheduleBoard.tsx              — the Scheduling screen's grid: cells hold chips and Open buttons; the Fill picker opens under a room's row
+  SlotFlagActions.tsx            — Move / Keep / Release for one flagged booking, shared by the grid's cells and Edit Show's list
+  BookingStatusChip.tsx          — the answer chip: hidden once confirmed on the tracker, always shown and tappable on the Scheduling screen
   CrewChangeNotice.tsx           — the offered-never-forced "tell the crew whose days changed" bar, posted from PositionDefsSection, RoomActionsMenu and AddDayButton
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
@@ -275,6 +280,7 @@ lib/
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
   pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
   schedulingQueue.ts — the Needs-scheduling list: summarizeQueue (pure) + fetchSchedulingQueue, scoped by the caller's RLS
+  scheduleBoard.ts — the Scheduling screen's model: buildBoard (rooms x days x slots x bookings x flags) and describeBoard's counting rules. Pure, unit-tested.
   readyEmail.ts / showReadiness.ts — the "fully staffed" email to the PM (compressDays/buildReadyEmail/sendReadyEmail) and the ONE gate that decides whether to send it (maybeSendReadyEmail)
   staffingEvents.ts — logStaffingEvent(): best-effort, never throws, the digest's diary
   digestEmail.ts  — the evening digest's copy (describeEvent, sendDigestEmail)
@@ -290,7 +296,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 455 assertions as of 2026-09-07.
+                  helper, no framework. 475 assertions as of 2026-09-08.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -571,6 +577,16 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   shape. Never per-accept emails (three schedulers × thirty crew = ninety emails per show)
   and not browser push (a service worker + permission prompts + a key: a project, not an
   evening). Roughly one evening, inline.
+- **Setting travel days while booking.** The tracker's ⋮ → Positions panel could mark a person
+  Work / Travel / Travel + work as they were booked; that panel is gone (2026-09-08) and the
+  tracker's flag pills are now the only place. Decide whether a Scheduling-screen cell wants it:
+  the argument for is that the booking request email says which days are travel, so a scheduler
+  wants it set before asking. Small either way — one menu item on the chip, or a third state on
+  the cell.
+- **The Scheduling screen on a phone.** Desktop-first by design (it is a grid, and Dan's
+  scheduling happens at a desk). It scrolls sideways below 1024px rather than restructuring.
+  Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
+  time, not a grid.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
@@ -580,9 +596,10 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   at the bottom, below Archive. Cascades already exist on every child table, so the write is one
   verified delete on `shows`; the work is the dialog and the permission.
 - ~~Booking status on the tracker crew row, and the chip IS the control.~~ **DONE 2026-09-07
-  (`components/BookingStatusChip.tsx`)** — Pencilled / Asked chips on every crew row in both
-  trackers open an in-place menu: They confirmed · They declined · Ask by email; Confirmed is
-  a plain chip; the room band reads "2 of 3 confirmed". Plus the GROUP ask
+  (`components/BookingStatusChip.tsx`)**, refined 2026-09-08 — Pencilled / Asked chips on every
+  crew row in both trackers open an in-place menu of **Approved / Declined**; a confirmed row
+  shows no chip at all; the room band reads "2 of 3 confirmed". The Scheduling screen passes
+  `context="scheduling"` for the other half of the same control (see that section). Plus the GROUP ask
   (`components/AskPencilledButton.tsx`, on Edit Show's Scheduling section and on each
   Needs-scheduling row): one booking-request email per person still pencilled, through the
   same `/api/bookings/send` as the single Ask. The Positions panel's name column got `flex-1`
@@ -631,7 +648,7 @@ It lives in permissions.ts because it is pure and session.ts is server-only — 
 session.ts into a test drags in `next/headers` and dies.
 
 **What is in the module**: positions (`crew_call_positions`) and the New Show positions grid ·
-room ⋮ → Positions · Fill position · open-position rows on the tracker · the scheduling queue ·
+the Scheduling screen (`/dashboard/shows/[id]/schedule`) and everything on it · the scheduling queue ·
 booking requests (emails, SMS text, `/book/[token]`, record-by-phone) · `/dashboard/schedule` ·
 the shows list's **Staffing** column and its sort. **What is NOT**: everything else, including
 **day types** (they label what the production is doing and belong to the show) and staffing crew
@@ -999,25 +1016,67 @@ named, twice.
 
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
-existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 232 +
-clock 61 + rls 120 = 455 assertions.
+existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 247 +
+clock 61 + rls 125 = 475 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
-### Tonight's tracker rule and the next piece (2026-09-07, late)
+### The Scheduling screen (2026-09-08) — and what left the tracker
 
-After piece C went live Dan tested on the preview and set the rule that decides the next piece:
-**the tracker is show day and stays simple.** The only scheduling thing on a crew row is the
-status chip, and only while an answer is owed (pencilled / asked) — tap it for Approved /
-Declined, nothing else (`components/BookingStatusChip.tsx`); a confirmed row is name and role.
-"Ask everyone pencilled" (`components/AskPencilledButton.tsx`, one booking request per person
-covering all their days) sits on Edit Show and on each Needs-scheduling row. Open positions sit
-at the TOP of a room. The New Show button "Create show and send to scheduler" really sends
-(it used to only open the confirm — Dan read that as sent). The ⋮ menu is still carrying the
-Positions panel, Fill and open rows, and Dan wants those OFF the tracker and onto a dedicated
-**Scheduling screen** — designed in
-`docs/superpowers/specs/2026-09-07-scheduling-screen-design.md`, to be planned and built
-inline next (no subagents without his yes). Migrations 0035–0037 are on production.
+**The tracker is show day. Scheduling is weeks earlier, at a desk, and now has its own screen.**
+Dan, testing piece C on the preview: *"Too much lives there. I think we need to rethink the
+scheduler page. Maybe scheduling is separate from the tracker."* And repeatedly: *"the tracker
+should be simple."* Spec: `docs/superpowers/specs/2026-09-07-scheduling-screen-design.md`.
+Plan: `docs/superpowers/plans/2026-09-07-scheduling-screen.md`. No migration — composition of
+what piece B and piece C already built.
+
+`/dashboard/shows/[id]/schedule` is **a grid: rooms down the side, days across the top**, the
+same shape as New Show's positions grid, and every cell holds that room-day's positions. Tap
+**Open** and `FillPositionPicker` opens in a full-width row under that room (never a dialog over
+the cell). Tap a **chip** and the answer menu opens in place. A booking whose day no longer fits
+its definition says **Day no longer fits** and opens Move / Keep / Release right there. Above the
+grid, one strip: the counts, the PM and whether they accepted, **Ask everyone pencilled**, and
+Send to scheduler / With scheduling since … / Take back. Below it, the definitions editor
+(`PositionDefsSection`, unchanged — Edit Show keeps its copy). Reached from the tracker header,
+from Edit Show, and from every Needs-scheduling row, so **a scheduler never has to open a
+tracker**. Desktop-first, like New Show; it scrolls sideways on an iPad and is not built for a
+phone.
+
+**The counting rules are in `lib/scheduleBoard.ts` and are unit-tested, because the units are
+what got misread before** (Dan on a "12 waiting" that was person-days: *"There are not 12 people
+on the Test Show 3"*). The strip reads `12 of 20 positions confirmed · 2 people waiting · 3 open
+· 1 to sort out`: **positions** are grid entries — one person on four days is four positions, and
+the word "positions" is on the line on purpose; **waiting** is distinct PEOPLE, the same unit and
+wording as the Needs-scheduling row. Counts are computed FROM THE CELLS, so the strip can never
+disagree with the grid. **A person staffed by hand with no slot** (StaffRoomModal, Copy Crew, Add
+Day) is a real booking and appears on the grid and in the counts; leaving them off would make the
+screen lie about who is on the show.
+
+**What left the tracker:** the room ⋮ → Positions panel (`CrewCallModal`, deleted), the Fill
+picker's tracker entry point, and the open-position rows (`OpenPositionRow`, deleted). The
+tracker keeps exactly ONE scheduling thing: the status chip on a crew row, and only while an
+answer is owed — a confirmed person's row is name and role. The room ⋮ is back to room jobs:
+Edit crew, Rename room, Delete room.
+
+**`BookingStatusChip` has two contexts.** `tracker` (the default): a confirmed chip renders
+nothing, and the menu is Approved / Declined. `scheduling`: the confirmed chip IS shown and
+tappable (that is where "they backed out" gets recorded), and a pencilled chip also offers **Ask
+by email** — the single-person ask the Positions panel used to hold. The chip re-seeds its status
+from its prop on every refresh: recording an answer is show-WIDE, so one click changes every day
+that person holds, and on this screen those other days are on screen (an effect, not a `key` —
+a key would remount the chip and close an open menu when a sibling's refresh lands).
+
+**Booking somebody who DECLINED is an UPDATE, not an insert** (`FillPositionPicker`, fixed
+2026-09-08 while proving this screen). A decline keeps its timecard on purpose (0012) and
+`timecards_room_crew_uniq` has no status predicate, so that row still occupies (room, person) —
+inserting a second one is refused by the index, which made "Book anyway" on a decliner impossible
+however many times it was pressed, with a clash message that named nobody. Reviving their own row
+is what "they changed their mind" means, and it keeps THE ONE RULE: nothing is deleted.
+
+**Two things deliberately did NOT move here**, so don't go looking for them: setting a person's
+travel day (the tracker's flag pills own it — the Positions panel could set it at booking time
+and no longer can), and editing day activities (the grid's day header shows each day's label and
+tint, which is what explains which cells exist; changing them stays on Edit Show).
 
 ### Already built — do not rebuild these
 
@@ -1026,7 +1085,7 @@ inline next (no subagents without his yes). Migrations 0035–0037 are on produc
   - **Positions** — `crew_call_positions`, one row per person per day, hung off a room. Built in the rooms×days grid on `/dashboard/shows/new` or from a room's ⋮ → Positions. `lib/crewCallGrid.ts` is the pure model; `lib/crewCall.ts` has `summarizeCall`/`describeCallSize` and the day-scope helpers.
   - **The scheduling queue** — `shows.sent_to_scheduling_at`, sent from the show page to EVERY member holding `can_manage_scheduling` (nobody owns a sent show; see piece C below). Requires at least one position. `shows.scheduler_id` / `call_approved_at` are history, superseded 2026-09-07.
   - **Booking requests** — `booking_invites`, emailed confirm/decline link at `/book/[token]` with no login, plus an SMS-ready text with deliberately no link. `booking_status` on `timecards` is `pencilled → invited → confirmed | declined`. A decline frees the position (partial unique index) while keeping the row.
-  - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reachable from the positions panel **and** from open-position rows in the tracker. Since piece B it books a definition's other open days too (a checklist, one insert).
+  - **Filling positions** — `FillPositionPicker`, role-filtered, warns on same-day conflicts *within this organization only*. Reached by tapping **Open** in a cell of the Scheduling screen (the tracker's open rows and Positions panel are gone since 2026-09-08). Since piece B it books a definition's other open days too (a checklist, one insert), and since 2026-09-08 booking somebody who DECLINED revives their own row instead of inserting a second one.
 
 This list drifted badly once and sent a session off to re-implement finished work. If something here looks missing, search the repo before believing it.
 

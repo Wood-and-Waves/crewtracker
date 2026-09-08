@@ -1,5 +1,11 @@
 # The Scheduling screen — design
 
+> **BUILT 2026-09-08**, inline, no subagents. Plan:
+> `docs/superpowers/plans/2026-09-07-scheduling-screen.md`. On the `scheduling` branch (preview
+> only until merged). What shipped matches this spec, with three decisions recorded in CLAUDE.md:
+> the strip's counting rules, day activities stay read-only here, and travel-at-booking did not
+> move across.
+
 Agreed with Dan in conversation on 2026-09-07 (late evening), after piece C shipped to
 production. Not yet planned; the plan comes next (`writing-plans`), then an inline build —
 **no subagents, no model other than the session's without Dan's explicit yes** (see the memory
