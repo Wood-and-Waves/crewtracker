@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendPmInviteEmail, describeShowDates } from '@/lib/pmInviteEmail'
 import { siteOrigin } from '@/lib/siteOrigin'
+import { maybeSendReadyEmail, isExpectedReadyReason } from '@/lib/showReadiness'
 
 // Naming (or clearing, or re-inviting) the production manager on a show.
 //
@@ -18,9 +19,18 @@ import { siteOrigin } from '@/lib/siteOrigin'
 // NAMING GRANTS NOTHING. The show_assignments row that actually opens the show
 // is written by /api/pm/accept, when the person presses Accept — never here.
 //
+// RECORDING AN ACCEPTANCE IS THE ONE EXCEPTION, and it is deliberate (Dan,
+// 2026-09-08: "I should also be able to accept for them as well"). A PM often
+// says yes on the phone, exactly as crew do — and whoever can edit this show
+// can already grant the same access by hand on Edit Show → Show Access. So the
+// power is not new; this puts it where the answer arrives, and says in words
+// that it opens the show to them. It is never automatic: naming still grants
+// nothing on its own.
+//
 // Body: { showId, profileId }             name somebody (re-naming replaces)
 //       { showId, profileId: null }       nobody is PM
 //       { showId, profileId, resend: true } send the existing invitation again
+//       { showId, markAccepted: true }    record that they said yes (grants it)
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -30,8 +40,9 @@ export async function POST(request: Request) {
   let showId: string | undefined
   let profileId: string | null | undefined
   let resend: boolean | undefined
+  let markAccepted: boolean | undefined
   try {
-    ({ showId, profileId, resend } = await request.json())
+    ({ showId, profileId, resend, markAccepted } = await request.json())
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
@@ -46,6 +57,53 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient()
   const now = new Date().toISOString()
+
+  if (markAccepted) {
+    const pmId = show.pm_profile_id
+    if (!pmId) return NextResponse.json({ error: 'Nobody is named as PM on this show.' }, { status: 400 })
+    if (profileId && profileId !== pmId) {
+      return NextResponse.json({ error: 'Somebody else is named on this show now. Reload and look again.' }, { status: 409 })
+    }
+    // Read first, write second: a membership that has gone means there is
+    // nothing to grant, and stamping the show before finding that out would
+    // leave it reading "accepted" with no access behind it.
+    const { data: member } = await admin
+      .from('memberships').select('profile_id')
+      .eq('profile_id', pmId).eq('organization_id', show.organization_id).is('deactivated_at', null).maybeSingle()
+    if (!member) return NextResponse.json({ error: 'They are no longer a member of this company.' }, { status: 400 })
+
+    // The stamp, through the caller's session: zero rows means they may not
+    // change this show, and nothing else happens. Same authorization as naming.
+    const { data: ok } = await supabase.from('shows').update({ pm_accepted_at: now }).eq('id', show.id).select('id')
+    if (!ok?.length) return NextResponse.json({ error: 'You cannot change this show.' }, { status: 403 })
+
+    // The grant itself. A hand-granted assignment may already exist; then there
+    // is nothing to add and nothing to relabel.
+    const { data: existing } = await admin
+      .from('show_assignments').select('id').eq('show_id', show.id).eq('profile_id', pmId).maybeSingle()
+    if (!existing) {
+      const { error } = await admin
+        .from('show_assignments')
+        .insert({ show_id: show.id, profile_id: pmId, source: 'pm' })  // organization_id: its trigger
+      if (error) {
+        // Never leave the show saying accepted with no access behind it.
+        await supabase.from('shows').update({ pm_accepted_at: null }).eq('id', show.id)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+    }
+    // Their emailed link now finds an accepted invitation and says so rather
+    // than granting a second time.
+    await admin.from('pm_invites').update({ accepted_at: now })
+      .eq('show_id', show.id).eq('profile_id', pmId).is('accepted_at', null)
+
+    // A show can be fully staffed before its PM accepts — the same second path
+    // into the ready email that /api/pm/accept covers. Never fails the record.
+    const { sent, reason } = await maybeSendReadyEmail(admin, show.id)
+    if (!sent && !isExpectedReadyReason(reason)) {
+      console.error('maybeSendReadyEmail failed after a recorded PM accept:', reason)
+    }
+    return NextResponse.json({ ok: true, accepted: true })
+  }
 
   if (resend) {
     if (!show.pm_profile_id || show.pm_profile_id !== profileId) {
