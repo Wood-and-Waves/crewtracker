@@ -34,6 +34,7 @@ import { buildBoard, describeBoard } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
+import { buildPmDeclinedEmail } from '../../lib/pmInviteEmail.ts'
 import { routeEmail, isProductionData } from '../../lib/sendEmail.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
@@ -820,6 +821,21 @@ console.log('\n--- evening digest ---')
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
   check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
+}
+
+console.log('\n--- a PM saying no ---')
+{
+  const withNote = buildPmDeclinedEmail({ to: 'dan@x.test', inviterName: 'Dan Smith', pmName: 'Jordan Vega',
+    showName: 'Northwind', orgName: 'Wood & Waves', note: "I'm on the Kestrel load-out that week." })
+  check('subject names who and which show', withNote.subject, 'Jordan Vega declined PM on Northwind')
+  check('body says what happened', withNote.text.includes('Jordan Vega declined the production manager role on Northwind.'), true)
+  check('their note is carried through unedited', withNote.text.includes('They said: "I\'m on the Kestrel load-out that week."'), true)
+  check('and it says where that leaves the show', withNote.text.includes('has no production manager now'), true)
+
+  const bare = buildPmDeclinedEmail({ to: 'dan@x.test', inviterName: null, pmName: 'Jordan Vega',
+    showName: 'Northwind', orgName: 'Wood & Waves', note: null })
+  check('no note, no empty quote', bare.text.includes('They said'), false)
+  check('no inviter name still greets somebody', bare.text.startsWith('Hi,'), true)
 }
 
 console.log('\n--- the email guard ---')

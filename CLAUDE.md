@@ -245,7 +245,8 @@ app/
     clock/identify/route.ts      — trades a venue QR for one person's personal link (POST only)
     clock/punch/route.ts         — the public punch write; owns every rule the DB doesn't (POST only)
     pm/invite/route.ts           — name / clear / re-invite the PM, and record that they accepted (session; the shows UPDATE policy is the authorization)
-    pm/accept/route.ts           — the PM accepting from their email link (public, POST only, rate-limited)
+    pm/accept/route.ts           — the PM accepting from the page's button (public, POST only, rate-limited); the emailed LINK accepts through the page itself
+    pm/decline/route.ts          — the PM saying no, with an optional note to whoever named them (public, POST only, rate-limited)
     shows/send-to-scheduling/route.ts — sends a show to every member with can_manage_scheduling, or takes it back (replaced approve-call)
     crew/days-changed/route.ts   — emails the crew change notice; session, scheduling-gated, caller's RLS decides who's readable
     bookings/remove/route.ts     — takes somebody off a show from the status chip: show-wide, refuses on punches, offers to tell them
@@ -321,7 +322,7 @@ lib/
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
   dayActivities.ts — what the show does each day: five activities, any set; label and tint DERIVED; the legacy day_type mapping (fromLegacy/toLegacy). lib/dayTypes.ts is a shim over it.
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
-  pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
+  pmInviteEmail.ts / pmInvite.ts — the PM invitation and "they declined" emails, and the service-role loader plus acceptPmInvite/declinePmInvite behind the public page; explicit columns, never select('*')
   schedulingQueue.ts — the Needs-scheduling list: summarizeQueue (pure) + fetchSchedulingQueue, scoped by the caller's RLS
   useDropDirection.ts — open a menu upward when the scroll box below it has no room
   useDismiss.ts — close on an outside click or Escape; the shared version of a pattern Select and AccountMenu each wrote by hand
@@ -964,10 +965,28 @@ of the definition's other open days the person is doing (all ticked; one slot pe
 the clicked slot's own room) and books them in ONE multi-row insert; a 23505 names the clashing
 day. A slot without a definition fills one day, exactly as before.
 
+**THE EMAILED LINK ACCEPTS** (2026-09-08). Dan: *"I would like the accept from the email to be an
+actual accept."* The link carries `?accept=1`, the page accepts before it renders, and what opens
+is a confirmation — you have the show, here is the run day by day, here is how to hand it back.
+One tap, the way Planning Center does it. I argued for the button first, on the grounds that
+Microsoft Defender Safe Links and gateways like Proofpoint fetch URLs before a person reads them
+and would accept on their behalf; Dan's answer is the right one and is now the design: **the page
+carries DECLINE**, so an accidental acceptance is undone in a tap, and whoever named them is told.
+Accepting is idempotent, so a scanner's fetch and a refresh both change nothing the second time.
+This is the ONLY GET in the app that writes anything.
+
+**Declining gives the show back and carries a note** (`/api/pm/decline`, `declinePmInvite`).
+It removes the pointer, both stamps, the invitation and any access the acceptance granted, so the
+show honestly has no PM again — and emails whoever named them, with the person's note quoted
+whole (Dan: "when a decline happens they can add a note to the scheduler"; the note is optional,
+since somebody who wants out should not have to write an excuse first). A decline leaves NO
+record on the show: if "we asked Jordan and he said no" ever needs to survive, that is a column
+and a migration, deliberately not built for one.
+
 **The PM is INVITED, and accepting is the only thing that grants access** (Dan: a silent accept
 is dangerous). Naming somebody — `PmField` on New Show or Edit Show, confirmed in words —
 writes `shows.pm_profile_id` through the caller's session (the shows UPDATE policy is the
-authorization) and mints a `pm_invites` token, then emails `/pm/<token>`. Naming grants NOTHING;
+authorization) and mints a `pm_invites` token, then emails `/pm/<token>?accept=1`. Naming grants NOTHING;
 the `show_assignments` row with `source='pm'` is what opens the show, and exactly two things
 write it: `/api/pm/accept` (public, POST only, rate-limited per token and per IP) when the PM
 presses Accept, and — since 2026-09-08 — `/api/pm/invite` with `{ markAccepted: true }` when

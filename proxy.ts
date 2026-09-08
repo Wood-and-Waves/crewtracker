@@ -32,6 +32,7 @@ export async function proxy(request: NextRequest) {
     // to. The token is the authorization, and the person may not be signed in.
     path.startsWith("/pm/") ||
     path.startsWith("/api/pm/accept") ||
+    path.startsWith("/api/pm/decline") ||
     // Crew clock links, same bargain as booking requests above: the page AND
     // the routes it posts to must both be reachable signed-out, or a crew
     // member gets asked to log in to an app they have no account for. The

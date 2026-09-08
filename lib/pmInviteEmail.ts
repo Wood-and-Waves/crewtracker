@@ -51,7 +51,7 @@ export function buildPmInviteEmail(input: PmInviteInput) {
     '',
     `${where} — you've been named production manager by ${by}.`,
     '',
-    "Accept to get the show in your CrewTracker. Until you do, nothing changes on your side.",
+    'Open the show to accept it — it lands in your CrewTracker straight away, and the page that opens can decline it instead if it is not yours.',
     '',
     input.acceptUrl,
     '',
@@ -65,7 +65,8 @@ export function buildPmInviteEmail(input: PmInviteInput) {
     <strong>${escapeHtml(where)}</strong> — you've been named production manager by ${escapeHtml(by)}.
   </p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">
-    Accept to get the show in your CrewTracker. Until you do, nothing changes on your side.
+    Open the show to accept it — it lands in your CrewTracker straight away, and the page that
+    opens can decline it instead if it is not yours.
   </p>
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.acceptUrl)}"
@@ -83,6 +84,69 @@ export async function sendPmInviteEmail(input: PmInviteInput): Promise<{ error?:
   const key = process.env.RESEND_API_KEY
   if (!key) return { error: 'Email is not configured.' }
   const { subject, text, html } = buildPmInviteEmail(input)
+  try {
+    const { error } = await sendEmail({ from: FROM, to: input.to, subject, text, html })
+    if (error) return { error }
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Could not send the email.' }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "They said no" — back to whoever named them
+// ---------------------------------------------------------------------------
+//
+// Sent when a PM declines (lib/pmInvite.ts). The show has already gone back to
+// having no PM by the time this lands, so the email is the only thing that
+// tells the person who has to act on it. Their NOTE is carried through whole
+// and unedited (Dan, 2026-09-08: "when a decline happens they can add a note to
+// the scheduler") — the reason is usually the useful part, and paraphrasing
+// somebody's "I'm on another show that week" helps nobody.
+
+export type PmDeclinedInput = {
+  to: string
+  inviterName: string | null
+  pmName: string
+  showName: string
+  orgName: string
+  note: string | null
+}
+
+export function buildPmDeclinedEmail(input: PmDeclinedInput) {
+  const subject = `${input.pmName} declined PM on ${input.showName}`
+  const text = [
+    input.inviterName ? `Hi ${input.inviterName.split(' ')[0]},` : 'Hi,',
+    '',
+    `${input.pmName} declined the production manager role on ${input.showName}.`,
+    ...(input.note ? ['', `They said: "${input.note}"`] : []),
+    '',
+    `${input.showName} has no production manager now — name somebody else when you have one.`,
+    '',
+    '— CrewTracker',
+  ].join('\n')
+
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
+  <p style="font-size:15px;margin:0 0 16px">${escapeHtml(input.inviterName ? `Hi ${input.inviterName.split(' ')[0]},` : 'Hi,')}</p>
+  <p style="font-size:15px;line-height:1.5;margin:0 0 16px">
+    <strong>${escapeHtml(input.pmName)}</strong> declined the production manager role on
+    <strong>${escapeHtml(input.showName)}</strong>.
+  </p>
+  ${input.note ? `<p style="font-size:15px;line-height:1.5;margin:0 0 16px;padding:12px 14px;background:#f4f4f5;border-radius:8px">${escapeHtml(input.note)}</p>` : ''}
+  <p style="font-size:14px;line-height:1.5;margin:0 0 20px">
+    ${escapeHtml(input.showName)} has no production manager now — name somebody else when you have one.
+  </p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
+</div>`.trim()
+
+  return { subject, text, html }
+}
+
+export async function sendPmDeclinedEmail(input: PmDeclinedInput): Promise<{ error?: string }> {
+  const key = process.env.RESEND_API_KEY
+  if (!key) return { error: 'Email is not configured.' }
+  const { subject, text, html } = buildPmDeclinedEmail(input)
   try {
     const { error } = await sendEmail({ from: FROM, to: input.to, subject, text, html })
     if (error) return { error }

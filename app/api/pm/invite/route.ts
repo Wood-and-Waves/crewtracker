@@ -175,7 +175,10 @@ async function send(
     venue: show.venue || show.city_state || null,
     orgName: org?.name ?? 'Your company',
     inviterName: user.fullName,
-    acceptUrl: `${siteOrigin()}/pm/${token}`,  // never the Host header — lib/siteOrigin.ts
+    // ?accept=1: the link IS the acceptance (2026-09-08). The page it opens
+    // confirms it and can hand the show straight back. Never the Host header —
+    // see lib/siteOrigin.ts.
+    acceptUrl: `${siteOrigin()}/pm/${token}?accept=1`,
   })
   // The naming happened either way; only the email did not. Say so rather
   // than pretend, and let Resend on Edit Show try again.
