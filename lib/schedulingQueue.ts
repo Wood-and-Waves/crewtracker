@@ -7,18 +7,31 @@ export type QueueRow = {
 }
 export type QueueSummary = { open: number; total: number; waiting: number; flags: number }
 
-/** Pure: per show, open slots, slots total, bookings waiting on a reply, flags. */
+/**
+ * Pure: per show, open slots, slots total, PEOPLE waiting on a reply, flags.
+ * A slot is one person on one day, so slots are counted as slots — but
+ * "waiting" is people, not person-days: three crew over four days read as
+ * "12 waiting" until 2026-09-07, and Dan rightly called it misleading. `person`
+ * is whatever identifies the booking's person (crew id, else name); a slot
+ * without one counts once.
+ */
 export function summarizeQueue(
-  slots: { showId: string; filled: boolean; status: string | null }[],
+  slots: { showId: string; filled: boolean; status: string | null; person?: string | null }[],
   flags: { showId: string }[],
 ): Map<string, QueueSummary> {
   const m = new Map<string, QueueSummary>()
+  const waitingPeople = new Map<string, Set<string>>()
   const at = (id: string) => m.get(id) ?? (m.set(id, { open: 0, total: 0, waiting: 0, flags: 0 }), m.get(id)!)
-  for (const s of slots) {
+  slots.forEach((s, i) => {
     const q = at(s.showId); q.total++
     if (!s.filled) q.open++
-    else if (s.status === 'pencilled' || s.status === 'invited') q.waiting++
-  }
+    else if (s.status === 'pencilled' || s.status === 'invited') {
+      const set = waitingPeople.get(s.showId) ?? new Set<string>()
+      set.add(s.person ?? `row-${i}`)
+      waitingPeople.set(s.showId, set)
+      q.waiting = set.size
+    }
+  })
   for (const f of flags) at(f.showId).flags++
   return m
 }
@@ -37,14 +50,14 @@ export async function fetchSchedulingQueue(supabase: { from: (t: string) => any 
   if (!ids.length) return []
   const [{ data: slots }, { data: flags }] = await Promise.all([
     supabase.from('crew_call_positions')
-      .select('id, rooms!inner(show_id), timecards(booking_status)').in('rooms.show_id', ids),
+      .select('id, rooms!inner(show_id), timecards(booking_status, crew_member_id, crew_member_name)').in('rooms.show_id', ids),
     supabase.from('position_slot_flags').select('show_id').in('show_id', ids),
   ])
   const summary = summarizeQueue(
     ((slots ?? []) as any[]).map(p => {
       const room = Array.isArray(p.rooms) ? p.rooms[0] : p.rooms
       const live = ((p.timecards ?? []) as any[]).find(t => t.booking_status !== 'declined')
-      return { showId: room?.show_id, filled: !!live, status: live?.booking_status ?? null }
+      return { showId: room?.show_id, filled: !!live, status: live?.booking_status ?? null, person: live?.crew_member_id ?? live?.crew_member_name ?? null }
     }),
     ((flags ?? []) as any[]).map(f => ({ showId: f.show_id })),
   )

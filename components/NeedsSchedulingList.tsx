@@ -40,8 +40,8 @@ export default function NeedsSchedulingList({ rows }: { rows: QueueRow[] }) {
             </Link>
             <div className="flex flex-col items-end gap-1 text-right">
               <div className="text-xs text-ink">
-                {row.openSlots} open of {row.totalSlots}
-                {row.waiting > 0 && <> · {row.waiting} waiting</>}
+                {row.openSlots} of {row.totalSlots} slots open
+                {row.waiting > 0 && <> · {row.waiting} {row.waiting === 1 ? 'person' : 'people'} waiting</>}
                 {row.flags > 0 && <> · <span className="text-ot">{row.flags} to sort out</span></>}
               </div>
               <div className="text-[10.5px] text-muted">{sentAgo(row.sentAt)}</div>

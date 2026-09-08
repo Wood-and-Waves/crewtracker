@@ -614,11 +614,18 @@ console.log('\n--- scheduling queue summary ---')
       { showId: 'a', filled: true, status: 'invited' },
       { showId: 'a', filled: false, status: null },
       { showId: 'b', filled: true, status: 'pencilled' },
+      // show c: one person across four days, still one person waiting
+      { showId: 'c', filled: true, status: 'invited', person: 'sam' },
+      { showId: 'c', filled: true, status: 'invited', person: 'sam' },
+      { showId: 'c', filled: true, status: 'pencilled', person: 'sam' },
+      { showId: 'c', filled: true, status: 'pencilled', person: 'sam' },
+      { showId: 'c', filled: true, status: 'pencilled', person: 'bo' },
     ],
     [{ showId: 'a' }, { showId: 'a' }],
   )
   check('show a: 1 open of 3, 1 waiting, 2 flags', m.get('a'), { open: 1, total: 3, waiting: 1, flags: 2 })
   check('show b: full but 1 waiting (pencilled counts)', m.get('b'), { open: 0, total: 1, waiting: 1, flags: 0 })
+  check('show c: waiting counts PEOPLE, not person-days', m.get('c'), { open: 0, total: 5, waiting: 2, flags: 0 })
 }
 
 console.log('\n--- ready email: day compression ---')
