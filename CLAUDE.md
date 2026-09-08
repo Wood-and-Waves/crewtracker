@@ -600,6 +600,19 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   automatically, registration is optional. Build side: an `accepted_terms_at` on profiles and a
   click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
   consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
+- **"Named you" has to go** (Dan, 2026-09-08: "I don't like the verbiage 'named you'"). It is
+  the app's own word for assigning a production manager and it has spread through every
+  PM-facing string. The replacement is Dan's to choose — "assigned", "put you on", "asked you to
+  PM", something else — and once he does it is a find-and-replace across seven user-facing
+  places, all of which should end up saying the same thing:
+  `lib/pmInviteEmail.ts` (the subject "you're named PM on X" and the body "you've been named
+  production manager by Y", in both the text and HTML versions), `app/pm/[token]/page.tsx`
+  (the invitation line "X named you production manager on", the confirmation "It's in your
+  CrewTracker now. X named you.", and the dead-link line "Check with whoever named you"),
+  `app/pm/[token]/AcceptPmForm.tsx` ("Whoever named you has been told"), `lib/pmInvite.ts` (the
+  replaced-invitation error), and `components/NewShowClient.tsx` (the couldn't-be-named-PM
+  error). Do the whole set in one go, with [[the email copy review]] if that happens first —
+  the invitation is on that list anyway.
 - **Review every email's wording with Dan** (Dan, 2026-09-07: "I'll want to change them").
   All of it was written by Claude and none of it has been read by the person whose name goes on
   it. One sitting, one file at a time: `lib/inviteEmail.ts` (team invite), `lib/pmInviteEmail.ts`
