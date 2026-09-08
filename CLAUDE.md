@@ -550,6 +550,17 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   automatically, registration is optional. Build side: an `accepted_terms_at` on profiles and a
   click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
   consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
+- **Review every email's wording with Dan** (Dan, 2026-09-07: "I'll want to change them").
+  All of it was written by Claude and none of it has been read by the person whose name goes on
+  it. One sitting, one file at a time: `lib/inviteEmail.ts` (team invite), `lib/pmInviteEmail.ts`
+  (PM invitation), `lib/callHandoffEmail.ts` (needs scheduling), `lib/bookingEmail.ts` (crew
+  request + decline notice + the SMS text), `lib/readyEmail.ts` (fully staffed),
+  `lib/digestEmail.ts` (evening digest), `lib/daysChangedEmail.ts` (crew change notice), plus
+  the Final Report email in `app/api/reports/final/route.ts` and the four Supabase Auth
+  templates in `docs/email-templates/`. `npm run preview:emails`, `preview:pm` and
+  `preview:booking` print most of them without sending. Change subject lines, greetings and
+  sign-offs freely; the facts each email carries (no money, no other crew, the accept/confirm
+  link) are rules, not copy.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
