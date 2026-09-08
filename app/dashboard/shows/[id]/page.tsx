@@ -449,6 +449,14 @@ export default async function ShowDetailPage({
               currentWorkDayId={activeDay.id}
               remainingWorkDayIds={remainingWorkDayIds}
             />
+            {/* Scheduling lives on its own screen (2026-09-07): positions,
+                filling and answers are a desk job, weeks earlier, and the
+                tracker is show day. */}
+            {schedulingOn && (
+              <Link href={`/dashboard/shows/${id}/schedule`}>
+                <Button variant="ghost" size="sm">Scheduling</Button>
+              </Link>
+            )}
             <Link href={`/dashboard/shows/${id}/edit`}>
               <Button variant="ghost" size="sm">Edit Show</Button>
             </Link>

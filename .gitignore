@@ -44,3 +44,4 @@ next-env.d.ts
 # (schema only, no rows) because it's the authoritative description of the database.
 /backups
 .playwright-mcp/
+.superpowers/

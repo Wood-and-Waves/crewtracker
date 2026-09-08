@@ -32,7 +32,9 @@ export default function NeedsSchedulingList({ rows }: { rows: QueueRow[] }) {
       <div className={cn('divide-y divide-line', RULE_MAJOR)}>
         {rows.map(row => (
           <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 md:px-5">
-            <Link href={`/dashboard/shows/${row.id}`} className="min-w-0 transition-colors hover:text-accent">
+            {/* Straight to the Scheduling screen: a scheduler never has to
+                open a tracker (2026-09-07 spec). */}
+            <Link href={`/dashboard/shows/${row.id}/schedule`} className="min-w-0 transition-colors hover:text-accent">
               <div className="truncate text-sm font-semibold text-ink">{row.name}</div>
               <div className="truncate text-xs text-muted">
                 {[row.venue, describeShowDates(row.startDate, row.endDate)].filter(Boolean).join(' · ')}
