@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { logStaffingEvent } from '@/lib/staffingEvents'
@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
 import { cn } from '@/lib/cn'
+import { useDismiss } from '@/lib/useDismiss'
 
 type RoomCrew = { id: string; crewMemberId: string | null; name: string; role: string; dayRate: number }
 
@@ -69,6 +70,11 @@ export default function RoomActionsMenu({
     })
     return () => { active = false }
   }, [mode])
+
+  // The ⋮ menu shuts on an outside click or Escape, like every other menu in
+  // the app. close() resets the mode too, so it never reopens mid-rename.
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  useDismiss(menuOpen, menuRef, () => close())
 
   function close() {
     setMenuOpen(false)
@@ -160,7 +166,7 @@ export default function RoomActionsMenu({
   }
 
   return (
-    <div className="relative">
+    <div ref={menuRef} className="relative">
       <button
         onClick={() => setMenuOpen(v => !v)}
         className={cn(

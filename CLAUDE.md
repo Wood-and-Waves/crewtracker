@@ -147,6 +147,15 @@ scroll box; `color-scheme` alone is the fallback everywhere else.
 
 **Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
 
+**Anything that opens closes on an outside click or Escape** — `lib/useDismiss.ts`, added
+2026-09-08 (Dan: *"It is normal to click outside a dialogue box and have it go away. This one
+forces me to click cancel"*). It listens on `mousedown`, not `click`, so pressing another menu's
+trigger closes this one and opens that in a single press. `ui/Select` and `ui/AccountMenu` keep
+their own hand-written copies — they work and their effects are tangled with keyboard navigation
+— but every new menu, chip menu or in-place editor uses the hook. In use: `BookingStatusChip`
+(menu and the removal question), `PmStatusChip`, `RoomActionsMenu`, and the Scheduling screen's
+fill picker.
+
 **Reusable primitives** in `components/ui/`: `Button` (variants: primary/ghost/danger), `Chip` (tones: neutral/live/ot/good/danger — semantic status color, kept separate from the brand accent), `Toggle` (squared on/off switch, replaces native checkboxes everywhere), `Select` (the Showbill picker — replaces native `<select>` everywhere; zero native selects remain in the app), `NumberedHead` (numbered section head on a 3px rule), `ThemeToggle`, `AccountMenu`, and legacy `Card` (splash/onboarding/superadmin only — never new work). The old `Dropdown` primitive is deleted; `Select` is its replacement. Compose new UI from these rather than writing raw styled `<button>`/`<div>` markup.
 
 **One deliberate exception to the token rule:** `lib/reportPdf.tsx` uses literal hex colors. `@react-pdf/renderer` renders outside the browser, so CSS variables don't exist there, and a PDF is a fixed document with no light/dark mode to respond to. Don't "fix" it into tokens.
@@ -290,6 +299,7 @@ lib/
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
   pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
   schedulingQueue.ts — the Needs-scheduling list: summarizeQueue (pure) + fetchSchedulingQueue, scoped by the caller's RLS
+  useDismiss.ts — close on an outside click or Escape; the shared version of a pattern Select and AccountMenu each wrote by hand
   scheduleBoard.ts — the Scheduling screen's model: buildBoard turns rooms x days x slots x bookings x flags into POSITION LINES (a row per position, running the width of the show), plus describeBoard's counting rules. Pure, unit-tested.
   readyEmail.ts / showReadiness.ts — the "fully staffed" email to the PM (compressDays/buildReadyEmail/sendReadyEmail) and the ONE gate that decides whether to send it (maybeSendReadyEmail)
   staffingEvents.ts — logStaffingEvent(): best-effort, never throws, the digest's diary
@@ -1140,7 +1150,10 @@ tracker first"; the absence flags are what a day that went wrong is for). Author
 the delete is verified, and a `released` staffing event is logged. **Telling them is a yes/no in
 the same breath, not a second dialog**: a pencilled person was never contacted, so the slip just
 asks to remove; somebody ASKED or CONFIRMED is expecting to work, so the slip says which and
-offers **Remove and tell them** beside **Remove, say nothing** (Dan, 2026-09-08). The email is the
+offers **Remove and tell them** beside **Remove, say nothing** (Dan, 2026-09-08). In the menu,
+**Confirmed and Declined are both ink** and only Remove is red: they are answers being written
+down, and the red belongs to the one item that destroys something (Declined was danger-coloured
+until Dan said he could not tell it from Remove at a glance). The email is the
 crew change notice's removal wording — `buildDaysChangedEmail({ removed: true })`, "you are no
 longer on Northwind" — because a person with no days left must not be sent an empty schedule.
 

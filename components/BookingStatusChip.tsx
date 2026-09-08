@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
+import { useDismiss } from '@/lib/useDismiss'
 
 // The booking status on a tracker crew row — and the chip IS the control.
 //
@@ -55,6 +56,10 @@ export default function BookingStatusChip({
   // over the top of it. Somebody who was ASKED or said YES is expecting to
   // work, so that question carries the offer to tell them (Dan, 2026-09-08).
   const [removing, setRemoving] = useState(false)
+  // Click anywhere else, or press Escape, and it goes away — including the
+  // removal question, which asks something and should not trap anybody.
+  const wrapRef = useRef<HTMLSpanElement | null>(null)
+  useDismiss(open, wrapRef, () => { setOpen(false); setRemoving(false) })
 
   if (!crewMemberId) return null
   // On the TRACKER a confirmed person shows NOTHING (Dan, 2026-09-07: "the
@@ -110,7 +115,7 @@ export default function BookingStatusChip({
   }
 
   return (
-    <span className="relative inline-flex items-center">
+    <span ref={wrapRef} className="relative inline-flex items-center">
       {tappable ? (
         <button
           type="button"
@@ -170,9 +175,13 @@ export default function BookingStatusChip({
               Confirmed
             </button>
           )}
+          {/* Confirmed and Declined are both just ANSWERS being written down, so
+              they read alike; the red belongs to the one act that destroys
+              something. Declined was danger-coloured until 2026-09-08 and Dan
+              could not tell it from Remove at a glance. */}
           {status !== 'declined' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('declined')}
-              className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
               Declined
             </button>
           )}
@@ -183,7 +192,7 @@ export default function BookingStatusChip({
             </button>
           )}
           <button type="button" role="menuitem" disabled={busy} onClick={() => setRemoving(true)}
-            className="block w-full border-t border-line px-3 py-2 text-left text-sm text-danger hover:bg-surface-2 disabled:opacity-40">
+            className="mt-1 block w-full border-t-2 border-line px-3 py-2 text-left text-sm font-semibold text-danger hover:bg-danger/10 disabled:opacity-40">
             Remove
           </button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}

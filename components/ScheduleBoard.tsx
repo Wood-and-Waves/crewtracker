@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useDismiss } from '@/lib/useDismiss'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/cn'
 import BookingStatusChip from '@/components/BookingStatusChip'
@@ -55,6 +56,11 @@ export default function ScheduleBoard({
   // only thing that happened on screen was the button reading "Filling…"
   // (Dan, 2026-09-08). Bring it to where the person is looking.
   const pickerRef = useRef<HTMLDivElement | null>(null)
+  // Clicking anywhere else closes it, like any other editor in the app. The
+  // Open button that spawned it is outside the panel, so pressing another
+  // one closes this and opens that in a single click — mousedown closes,
+  // the click that follows opens.
+  useDismiss(!!picker, pickerRef, () => setPicker(null))
   useEffect(() => {
     // Instant, not smooth: a smooth scroll is driven by animation frames, so it
     // silently does nothing in a backgrounded tab — and the point here is that
@@ -81,9 +87,7 @@ export default function ScheduleBoard({
         <button
           type="button"
           disabled={locked}
-          onClick={() => setPicker(p => p?.slotId === e.slotId
-            ? null
-            : { slotId: e.slotId, roomId: e.roomId, role: e.role, date, roomName })}
+          onClick={() => setPicker({ slotId: e.slotId, roomId: e.roomId, role: e.role, date, roomName })}
           title={locked ? 'Times are locked — the final report has been sent.' : `Fill ${e.role}`}
           className={cn(
             'w-full truncate rounded-field border border-dashed border-accent px-2 py-1 text-left text-xs font-semibold text-accent hover:bg-accent-wash disabled:opacity-40',

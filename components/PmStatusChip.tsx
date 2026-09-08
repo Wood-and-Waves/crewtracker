@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Chip from '@/components/ui/Chip'
+import { useDismiss } from '@/lib/useDismiss'
 import type { PmState } from '@/components/PmField'
 
 // The PM's answer, as a chip that IS the control — the same gesture as a crew
@@ -32,6 +33,8 @@ export default function PmStatusChip({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const wrapRef = useRef<HTMLSpanElement | null>(null)
+  useDismiss(open, wrapRef, () => setOpen(false))
 
   // Nobody named: there is no answer to record and no invitation to resend, so
   // the only thing to offer is the screen that names one.
@@ -73,7 +76,7 @@ export default function PmStatusChip({
   }
 
   return (
-    <span className="relative inline-flex items-center gap-1.5">
+    <span ref={wrapRef} className="relative inline-flex items-center gap-1.5">
       <span className="text-xs text-muted">PM: <span className="text-ink">{name}</span></span>
       <button
         type="button"
