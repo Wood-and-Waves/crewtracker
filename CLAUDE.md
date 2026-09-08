@@ -1004,6 +1004,21 @@ clock 61 + rls 120 = 455 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
+### Tonight's tracker rule and the next piece (2026-09-07, late)
+
+After piece C went live Dan tested on the preview and set the rule that decides the next piece:
+**the tracker is show day and stays simple.** The only scheduling thing on a crew row is the
+status chip, and only while an answer is owed (pencilled / asked) — tap it for Approved /
+Declined, nothing else (`components/BookingStatusChip.tsx`); a confirmed row is name and role.
+"Ask everyone pencilled" (`components/AskPencilledButton.tsx`, one booking request per person
+covering all their days) sits on Edit Show and on each Needs-scheduling row. Open positions sit
+at the TOP of a room. The New Show button "Create show and send to scheduler" really sends
+(it used to only open the confirm — Dan read that as sent). The ⋮ menu is still carrying the
+Positions panel, Fill and open rows, and Dan wants those OFF the tracker and onto a dedicated
+**Scheduling screen** — designed in
+`docs/superpowers/specs/2026-09-07-scheduling-screen-design.md`, to be planned and built
+inline next (no subagents without his yes). Migrations 0035–0037 are on production.
+
 ### Already built — do not rebuild these
 
 - **Scheduling (2026-07-28; in production since the 2026-08-06 cutover).** The whole workflow:
