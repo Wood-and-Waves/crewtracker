@@ -407,12 +407,21 @@ scripts/
                        · 0036 staffing_events INSERT requires can_edit_timecards (0035 let any
                        viewer of a show — crew-side logins included — write digest lines);
                        extend_all_day_positions() keeps the person's booking_status. No rows.
+                       · 0038 colleagues can see each other's NAMES:
+                       shares_my_organization() (SECURITY DEFINER) replaces the
+                       memberships subquery inside the profiles SELECT policy,
+                       which under the caller's own RLS matched only their own
+                       row — so a non-admin could read exactly one profile,
+                       their own. Permissions stay admin-only. No rows.
                        · 0037 sync_position_slots() makes a slot's role follow its definition;
                        deleting a definition drops its UNFILLED slots first (BEFORE DELETE
                        trigger — the FK's set-null used to orphan them as "legacy" slots the
                        sync then ignored, so a removed position kept counting). No rows.
-                       ALL applied to BOTH databases (0018–0020 shipped 2026-09-05,
-                       0021–0027 2026-09-06, 0028–0037 2026-09-07). Nothing is dev-only.
+                       0018–0037 applied to BOTH databases (0018–0020 shipped
+                       2026-09-05, 0021–0027 2026-09-06, 0028–0037 2026-09-07).
+                       **0038 is DEV ONLY** — it ships with the next production
+                       cutover, and until then a non-admin on crewtracker.app
+                       still cannot see a colleague's name.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -455,6 +464,14 @@ Triggers: `on_auth_user_created → handle_new_user()` (had a `search_path` bug 
 ## Permissions system
 
 Two-layer model on `profiles`: `base_role` (admin/staff/pm/crew preset) + individual boolean toggles, customizable per user by an admin. **No cross-organization visibility, ever — including scheduling.** One login can hold memberships in several companies, but nothing about company A's work may surface in company B. Specifically: if a person is booked on a show at A, a scheduler at B must **not** see them flagged as unavailable, busy, or double-booked. Dan stated this as a hard rule (2026-07-28), and it holds today by construction rather than by intent — `crew_members` rows are per-organization with no shared identity between them, and every schedule query is scoped by the caller's RLS, so another org's bookings are never in the result set to begin with. Two things would break it, so don't do either: matching people across organizations by email/phone/name to build a "same person" link, or reading bookings with the service role in any scheduling path. This gets more dangerous, not less, when crew logins arrive — one human with one login across two companies is exactly where the leak would appear.
+
+**A ROLE IS NOT MONEY.** `rate_cards` carries both, and `day_rate` is the part behind
+`can_view_pay_rates` (through the `crew_rate_cards_visible` view). `role` and `crew_member_id`
+are not: they hold an ordinary org-scoped policy and a plain SELECT grant. `FillPositionPicker`
+read roles through the pay-gated view until 2026-09-08, so every candidate showed as "No roles
+listed" and the role filter matched nobody — for the schedulers the screen exists for, who have
+no business holding a pay-rate permission. Read `rate_cards(crew_member_id, role)` directly for
+roles; keep the view for rates. Pinned by `rls.mts`.
 
 Financial visibility in reports/exports requires **both** `show.show_financials` (does this show track $ at all) **and** `profile.can_view_pay_rates` (is this user allowed to see pay rates).
 

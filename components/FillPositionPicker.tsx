@@ -159,7 +159,17 @@ export default function FillPositionPicker({
         // Roles come from rate cards — the only place the app records what a
         // person does. Someone with no rate card simply has no roles listed and
         // shows up when the filter is off.
-        supabase.from('crew_rate_cards_visible').select('crew_member_id, role'),
+        //
+        // Straight from `rate_cards`, NOT through crew_rate_cards_visible: that
+        // view exists to gate `day_rate` and is therefore behind
+        // can_view_pay_rates, which a scheduler has no business holding. Reading
+        // it here meant every candidate showed as "No roles listed" and the role
+        // filter matched nobody, for the one person the screen is built for
+        // (found 2026-09-08). A ROLE IS NOT MONEY: `rate_cards.role` and
+        // `crew_member_id` carry an ordinary org-scoped policy and a SELECT
+        // grant; only `day_rate` is revoked, so asking for those two columns is
+        // exactly as safe and works for everybody.
+        supabase.from('rate_cards').select('crew_member_id, role'),
         // Who is already on something this date. Scoped by RLS to this
         // organization's shows; see the header note.
         // A declined booking is not a commitment — the position is free and so
