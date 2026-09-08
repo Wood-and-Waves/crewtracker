@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
 
@@ -41,6 +41,13 @@ export default function BookingStatusChip({
 }) {
   const router = useRouter()
   const [status, setStatus] = useState<Status>((initial as Status) || 'pencilled')
+  // Re-seed from the prop after a refresh. Recording an answer is show-WIDE, so
+  // one click changes every day that person holds — and on the Scheduling
+  // screen those other days are on screen. Without this they kept painting the
+  // old status until a full reload, which reads as the write having failed.
+  // Deliberately an effect, not a `key`: a key would remount the chip and close
+  // an open menu whenever a sibling's refresh landed (the TimecardRow lesson).
+  useEffect(() => { setStatus((initial as Status) || 'pencilled') }, [initial])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
