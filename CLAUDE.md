@@ -147,6 +147,12 @@ scroll box; `color-scheme` alone is the fallback everywhere else.
 
 **Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
 
+**A menu opens UP when there is no room below it** — `lib/useDropDirection.ts`. The room is
+measured against the nearest SCROLLING ancestor, not the window, because an absolute panel inside
+an overflow box is clipped by that box (the last row of the Scheduling grid). Menus also sit at
+`z-50`, above the grid's sticky day header at `z-30`: equal z-indexes paint in DOM order, so the
+PM chip's menu, opened from the strip ABOVE the grid, was disappearing behind it.
+
 **Anything that opens closes on an outside click or Escape** — `lib/useDismiss.ts`, added
 2026-09-08 (Dan: *"It is normal to click outside a dialogue box and have it go away. This one
 forces me to click cancel"*). It listens on `mousedown`, not `click`, so pressing another menu's
@@ -299,6 +305,7 @@ lib/
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
   pmInviteEmail.ts / pmInvite.ts — the PM invitation email (build + send) and the service-role loader for the public accept page; explicit columns, never select('*')
   schedulingQueue.ts — the Needs-scheduling list: summarizeQueue (pure) + fetchSchedulingQueue, scoped by the caller's RLS
+  useDropDirection.ts — open a menu upward when the scroll box below it has no room
   useDismiss.ts — close on an outside click or Escape; the shared version of a pattern Select and AccountMenu each wrote by hand
   scheduleBoard.ts — the Scheduling screen's model: buildBoard turns rooms x days x slots x bookings x flags into POSITION LINES (a row per position, running the width of the show), plus describeBoard's counting rules. Pure, unit-tested.
   readyEmail.ts / showReadiness.ts — the "fully staffed" email to the PM (compressDays/buildReadyEmail/sendReadyEmail) and the ONE gate that decides whether to send it (maybeSendReadyEmail)
@@ -1141,6 +1148,13 @@ by email** — the single-person ask the Positions panel used to hold. The chip 
 from its prop on every refresh: recording an answer is show-WIDE, so one click changes every day
 that person holds, and on this screen those other days are on screen (an effect, not a `key` —
 a key would remount the chip and close an open menu when a sibling's refresh lands).
+
+**"Ask everyone pencilled" appears only while somebody has not been asked.** It emails people
+whose every live booking is still `pencilled`, so once they have all been asked it had nobody to
+write to and said so only after being pressed (Dan, 2026-09-08). Both the Scheduling strip and
+each Needs-scheduling row now gate on a count of exactly those people — `pencilledPeople` on the
+board summary, `pencilled` on the queue summary — not on "somebody has not answered", which
+stays true long after everyone has been asked.
 
 **Remove takes somebody off the whole show, and refuses on punches**
 (`app/api/bookings/remove`). It is show-wide because everything else that chip does is: a chip

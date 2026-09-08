@@ -624,9 +624,12 @@ console.log('\n--- scheduling queue summary ---')
     ],
     [{ showId: 'a' }, { showId: 'a' }],
   )
-  check('show a: 1 open of 3, 1 waiting, 2 flags', m.get('a'), { open: 1, total: 3, waiting: 1, flags: 2 })
-  check('show b: full but 1 waiting (pencilled counts)', m.get('b'), { open: 0, total: 1, waiting: 1, flags: 0 })
-  check('show c: waiting counts PEOPLE, not person-days', m.get('c'), { open: 0, total: 5, waiting: 2, flags: 0 })
+  check('show a: 1 open of 3, 1 waiting, 2 flags', m.get('a'), { open: 1, total: 3, waiting: 1, pencilled: 0, flags: 2 })
+  check('show b: full but 1 waiting (pencilled counts)', m.get('b'), { open: 0, total: 1, waiting: 1, pencilled: 1, flags: 0 })
+  check('show c: waiting counts PEOPLE, not person-days', m.get('c'), { open: 0, total: 5, waiting: 2, pencilled: 1, flags: 0 })
+  check('show a: nobody is still only pencilled, so nobody is left to ask', m.get('a')!.pencilled, 0)
+  check('show b: one person has never been asked', m.get('b')!.pencilled, 1)
+  check('show c: sam was asked somewhere, so only bo counts as unasked', m.get('c')!.pencilled, 1)
 }
 
 console.log('\n--- scheduling board ---')
@@ -682,7 +685,12 @@ console.log('\n--- scheduling board ---')
   check('a flagged booking carries its flag', (at('Ballroom', 0, '2026-09-09') as any).flag.slot_id, 's3')
   check('an unflagged booking carries null', (at('Ballroom', 0, '2026-09-08') as any).flag, null)
   check('summary counts positions, not people',
-    board.summary, { total: 5, confirmed: 1, open: 2, waitingPeople: 2, flags: 1 })
+    // Alex is confirmed on the second day, so only Bo has never been asked.
+    board.summary, { total: 5, confirmed: 1, open: 2, waitingPeople: 2, pencilledPeople: 1, flags: 1 })
+  check('somebody asked on any day is no longer "still pencilled"',
+    buildBoard({ days, rooms, slots, flags: [],
+      bookings: [booking({ timecardId: 'q1', slotId: 's1', status: 'invited' }), booking({ timecardId: 'q2', roomId: 'r2', slotId: 's3' })],
+    }).summary.pencilledPeople, 0)
   check('the strip reads in one line',
     describeBoard(board.summary), '1 of 5 positions confirmed · 2 people waiting · 2 open · 1 to sort out')
   check('nothing to schedule says so',

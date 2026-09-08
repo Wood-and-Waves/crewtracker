@@ -47,8 +47,10 @@ export default function NeedsSchedulingList({ rows }: { rows: QueueRow[] }) {
                 {row.flags > 0 && <> · <span className="text-ot">{row.flags} to sort out</span></>}
               </div>
               <div className="text-[10.5px] text-muted">{sentAgo(row.sentAt)}</div>
-              {/* Group ask (Dan, 2026-09-07): one email per person still pencilled. */}
-              {row.waiting > 0 && <AskPencilledButton showId={row.id} />}
+              {/* Group ask (Dan, 2026-09-07): one email per person still
+                  pencilled — so it appears only while somebody has not been
+                  asked, not merely while somebody has not answered. */}
+              {row.pencilled > 0 && <AskPencilledButton showId={row.id} />}
             </div>
           </div>
         ))}

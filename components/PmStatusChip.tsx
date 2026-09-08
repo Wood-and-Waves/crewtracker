@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Chip from '@/components/ui/Chip'
 import { useDismiss } from '@/lib/useDismiss'
+import { useDropDirection } from '@/lib/useDropDirection'
+import { cn } from '@/lib/cn'
 import type { PmState } from '@/components/PmField'
 
 // The PM's answer, as a chip that IS the control — the same gesture as a crew
@@ -35,6 +37,10 @@ export default function PmStatusChip({
   const [note, setNote] = useState('')
   const wrapRef = useRef<HTMLSpanElement | null>(null)
   useDismiss(open, wrapRef, () => setOpen(false))
+  const drop = useDropDirection(open, wrapRef, 170)
+  // z-50: the grid below has a sticky day header at z-30, and equal z-indexes
+  // are painted in DOM order — so a menu opened from the strip above the grid
+  // disappeared behind it (Dan, 2026-09-08: "this needs to overlay. It is lost").
 
   // Nobody named: there is no answer to record and no invitation to resend, so
   // the only thing to offer is the screen that names one.
@@ -90,7 +96,8 @@ export default function PmStatusChip({
       </button>
 
       {open && (
-        <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[12rem] border-2 border-ink bg-surface p-1 shadow-edge">
+        <div role="menu" className={cn('absolute left-0 z-50 min-w-[12rem] border-2 border-ink bg-surface p-1 shadow-edge',
+          drop === 'up' ? 'bottom-full mb-1' : 'top-full mt-1')}>
           {!accepted && (
             <>
               <button type="button" role="menuitem" disabled={busy} onClick={record}

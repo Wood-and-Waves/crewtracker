@@ -71,6 +71,10 @@ export type BoardSummary = {
   open: number
   /** Distinct PEOPLE still owing an answer, never person-days. */
   waitingPeople: number
+  /** Distinct people NOBODY HAS ASKED YET: every live booking of theirs is
+   *  still pencilled. The same rule AskPencilledButton emails by, so the
+   *  button can be hidden when there is nobody left to ask. */
+  pencilledPeople: number
   flags: number
 }
 
@@ -208,6 +212,8 @@ export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput):
   // Counted FROM THE GRID, so the strip can never disagree with what is on it.
   let total = 0, confirmed = 0, open = 0, flagCount = 0
   const waiting = new Set<string>()
+  // Per person: have they been asked (or answered) anywhere on this show?
+  const onlyPencilled = new Map<string, boolean>()
   for (const room of boardRooms) {
     for (const line of room.lines) {
       for (const e of Object.values(line.byDate)) {
@@ -217,13 +223,20 @@ export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput):
         if (e.flag) flagCount++
         if (e.booking.status === 'confirmed') confirmed++
         else waiting.add(personKey(e.booking))
+        const k = personKey(e.booking)
+        onlyPencilled.set(k, (onlyPencilled.get(k) ?? true) && e.booking.status === 'pencilled')
       }
     }
   }
 
   return {
     days, rooms: boardRooms,
-    summary: { total, confirmed, open, waitingPeople: waiting.size, flags: flagCount },
+    summary: {
+      total, confirmed, open,
+      waitingPeople: waiting.size,
+      pencilledPeople: [...onlyPencilled.values()].filter(Boolean).length,
+      flags: flagCount,
+    },
   }
 }
 

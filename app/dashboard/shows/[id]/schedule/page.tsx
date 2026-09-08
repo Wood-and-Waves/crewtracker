@@ -137,7 +137,10 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
           editHref={`/dashboard/shows/${id}/edit`}
         />
         <div className="ml-auto flex flex-wrap items-center gap-3">
-          {show.sent_to_scheduling_at && <AskPencilledButton showId={id} />}
+          {/* Only while somebody is still pencilled: once everyone has been
+              asked, the button had nobody to email and said so after the fact
+              (Dan, 2026-09-08). */}
+          {show.sent_to_scheduling_at && board.summary.pencilledPeople > 0 && <AskPencilledButton showId={id} />}
           <SendToSchedulingButton
             showId={id}
             sentAt={show.sent_to_scheduling_at ?? null}

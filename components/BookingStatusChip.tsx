@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
 import { useDismiss } from '@/lib/useDismiss'
+import { useDropDirection } from '@/lib/useDropDirection'
+import { cn } from '@/lib/cn'
 
 // The booking status on a tracker crew row — and the chip IS the control.
 //
@@ -60,6 +62,9 @@ export default function BookingStatusChip({
   // removal question, which asks something and should not trap anybody.
   const wrapRef = useRef<HTMLSpanElement | null>(null)
   useDismiss(open, wrapRef, () => { setOpen(false); setRemoving(false) })
+  // On the last row of the grid there is nothing below to open into.
+  const drop = useDropDirection(open, wrapRef, removing ? 220 : 190)
+  const panelSide = drop === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
 
   if (!crewMemberId) return null
   // On the TRACKER a confirmed person shows NOTHING (Dan, 2026-09-07: "the
@@ -132,7 +137,7 @@ export default function BookingStatusChip({
       )}
 
       {open && removing && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-64 border-2 border-ink bg-surface p-3 shadow-edge">
+        <div className={cn('absolute left-0 z-50 w-64 border-2 border-ink bg-surface p-3 shadow-edge', panelSide)}>
           <p className="text-sm text-ink">
             Remove {crewName.split(' ')[0]} from this show? Every day of theirs goes with it.
           </p>
@@ -168,7 +173,7 @@ export default function BookingStatusChip({
       )}
 
       {open && !removing && (
-        <div role="menu" className="absolute left-0 top-full z-30 mt-1 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge">
+        <div role="menu" className={cn('absolute left-0 z-50 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge', panelSide)}>
           {status !== 'confirmed' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
               className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
