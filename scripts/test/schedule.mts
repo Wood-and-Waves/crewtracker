@@ -34,6 +34,7 @@ import { buildBoard, describeBoard } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
+import { routeEmail, isProductionData } from '../../lib/sendEmail.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -819,6 +820,36 @@ console.log('\n--- evening digest ---')
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
   check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
+}
+
+console.log('\n--- the email guard ---')
+{
+  // Production: untouched, whoever it is addressed to.
+  check('production sends to the real recipient',
+    routeEmail({ to: 'alex@example.com', subject: 'Northwind needs scheduling', productionData: true }),
+    { to: 'alex@example.com', subject: 'Northwind needs scheduling' })
+
+  // Anywhere else: one inbox, and the subject says who it was for.
+  const dev = routeEmail({ to: 'alex@example.test', subject: 'You are booked', productionData: false, devInbox: 'me@mine.test' })
+  check('dev redirects to the one inbox', (dev as any).to, 'me@mine.test')
+  check('and names the intended recipient in the subject', (dev as any).subject, '[dev \u2192 alex@example.test] You are booked')
+
+  const many = routeEmail({ to: ['a@x.test', 'b@x.test'], subject: 'Final Payroll Report', productionData: false, devInbox: 'me@mine.test' })
+  check('several recipients collapse to the one inbox', (many as any).to, 'me@mine.test')
+  check('and all of them are named', (many as any).subject, '[dev \u2192 a@x.test, b@x.test] Final Payroll Report')
+
+  // Fails CLOSED: nothing is sent rather than reaching a stranger.
+  const blocked = routeEmail({ to: 'someone@real.test', subject: 'You are booked', productionData: false })
+  check('no dev inbox means nothing is sent', 'blocked' in blocked, true)
+  check('and the caller is told who it would have reached', (blocked as any).blocked.includes('someone@real.test'), true)
+  check('an empty dev inbox counts as unset',
+    'blocked' in routeEmail({ to: 'a@x.test', subject: 's', productionData: false, devInbox: '   ' }), true)
+
+  // The test is the DATABASE, not NODE_ENV — a preview build runs as
+  // production and must still be guarded.
+  check('the production project ref is production', isProductionData('https://nfrvxkwemtittrqboebl.supabase.co'), true)
+  check('the dev project ref is not', isProductionData('https://oeflzwgtrkgjuvjdcwnv.supabase.co'), false)
+  check('no url at all is not production', isProductionData(undefined), false)
 }
 
 console.log('\n--- days changed email ---')

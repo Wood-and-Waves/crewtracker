@@ -11,7 +11,7 @@
 // can_view_pay_rates, and an email is the one surface where that check cannot
 // be made per reader — so it carries none.
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 import { describeShowDates } from '@/lib/pmInviteEmail'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
@@ -96,14 +96,14 @@ export async function sendCallHandoffEmail(
 
   const { subject, text, html } = buildCallHandoffEmail(input)
   try {
-    const { error } = await new Resend(key).emails.send({
+    const { error } = await sendEmail({
       from: FROM,
       to: input.to,
       subject,
       text,
       html,
     })
-    if (error) return { error: error.message }
+    if (error) return { error }
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not send the email.' }

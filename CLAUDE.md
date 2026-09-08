@@ -299,6 +299,7 @@ lib/
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
   trackerLayout.ts — shared grid template for the tracker console punch table (kept out of a 'use client' file on purpose, see Past incidents)
   rateLimit.ts  — the throttle for the three public write routes; counters live in the database (0025)
+  sendEmail.ts  — the one door every email leaves through; redirects to DEV_EMAIL_TO off production
   siteOrigin.ts — the origin for every link the app EMAILS; fixed per environment, never the Host header
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
   dayActivities.ts — what the show does each day: five activities, any set; label and tint DERIVED; the legacy day_type mapping (fromLegacy/toLegacy). lib/dayTypes.ts is a shim over it.
@@ -589,7 +590,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   `lib/digestEmail.ts` (evening digest), `lib/daysChangedEmail.ts` (crew change notice), plus
   the Final Report email in `app/api/reports/final/route.ts` and the four Supabase Auth
   templates in `docs/email-templates/`. `npm run preview:emails`, `preview:pm` and
-  `preview:booking` print most of them without sending. Change subject lines, greetings and
+  `preview:booking` print most of them without sending — and since 2026-09-08 you can also send
+  them to yourself from the dev site, because every dev email lands in `DEV_EMAIL_TO`. Change subject lines, greetings and
   sign-offs freely; the facts each email carries (no money, no other crew, the accept/confirm
   link) are rules, not copy.
 - **Scheduler digest for accepts** (Dan, 2026-09-07: "declines are instant, accepts are a
@@ -1325,7 +1327,35 @@ act that ships to customers, and any pending migrations go through the steps abo
 
 ## Environment variables
 
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings. `RESEND_API_KEY` (beta-signup email). `CRON_SECRET` (Vercel-only, not in `.env.local` — locks down the keepalive cron endpoint; see Notes).
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings. `RESEND_API_KEY` (every email). `CRON_SECRET` (Vercel-only, not in `.env.local` — locks down the keepalive cron endpoint; see Notes). **`DEV_EMAIL_TO`** — the one inbox every email goes to while the app is pointed at a NON-production database (see "One door for email" below). Set in `.env.local` and in Vercel's **Preview** scope; production neither has it nor needs it.
+
+## One door for email (2026-09-08)
+
+**Every message this app sends goes through `lib/sendEmail.ts`, and when the app is not pointed
+at the PRODUCTION database it is redirected to a single inbox** (`DEV_EMAIL_TO`), with the
+intended recipient written into the subject: `[dev → alex@example.test] You are booked`. Dan:
+*"I have real people on the production site. I cannot test there. Emails would go out."* So
+testing lives on dev — and dev was sending real mail to whatever address was on the row, which
+for the seeded crew is `@example.test`: it bounces, and the bounce rate is charged against
+`contact.crewtracker.app`, the same domain the real invitations leave from.
+
+Three things about it that are deliberate:
+
+- **The test is the DATABASE, not `NODE_ENV`.** Vercel builds every deployment as production,
+  preview included, and the preview is exactly where the guard has to work because it carries the
+  dev database. `NEXT_PUBLIC_SUPABASE_URL` names the project, so that is what decides.
+- **It fails CLOSED.** On a non-production database with no `DEV_EMAIL_TO`, nothing is sent and
+  the caller is told who it would have gone to. The senders surface that as their usual warning
+  ("they are named, but the email did not send: …"), so it is visible rather than silent.
+- **Supabase Auth's own emails do not come through here** — magic link, password reset and
+  recovery are sent by Supabase over its own SMTP, so those still reach whatever address is typed
+  into the login page. That is the one hole, and it only opens for an address somebody types.
+
+All nine senders were converted (`inviteEmail`, `pmInviteEmail`, `callHandoffEmail`,
+`bookingEmail`, `readyEmail`, `digestEmail`, `daysChangedEmail`, the Final Report route and the
+beta-signup route) and none constructs Resend for itself any more. `routeEmail()` is pure and
+unit-tested in `schedule.mts`; a tenth sender that skips the door would be a real bug, so grep
+for `new Resend(` before adding one.
 
 ## Notes
 

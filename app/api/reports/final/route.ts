@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -180,9 +180,8 @@ export async function POST(request: Request) {
 
   // --- Send ----------------------------------------------------------------
   const safeName = show.name.replace(/[^\w.-]+/g, '_')
-  const resend = new Resend(process.env.RESEND_API_KEY)
   try {
-    const { error: sendError } = await resend.emails.send({
+    const { error: sendError } = await sendEmail({
       from: FROM,
       // All recipients in To: so each can see who else received it.
       to: recipients,
@@ -204,7 +203,7 @@ export async function POST(request: Request) {
       ],
     })
     if (sendError) {
-      console.error('final-report: Resend rejected the send', sendError)
+      console.error('final-report: the send was rejected', sendError)
       return NextResponse.json({ error: 'The email could not be sent.' }, { status: 502 })
     }
   } catch (err) {

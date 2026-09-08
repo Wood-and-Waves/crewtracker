@@ -11,7 +11,7 @@
 // Carries no money, no crew names, no show notes, no job number: the same rule
 // as the crew booking request. The PM sees all of that once they are in.
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
 
@@ -84,8 +84,8 @@ export async function sendPmInviteEmail(input: PmInviteInput): Promise<{ error?:
   if (!key) return { error: 'Email is not configured.' }
   const { subject, text, html } = buildPmInviteEmail(input)
   try {
-    const { error } = await new Resend(key).emails.send({ from: FROM, to: input.to, subject, text, html })
-    if (error) return { error: error.message }
+    const { error } = await sendEmail({ from: FROM, to: input.to, subject, text, html })
+    if (error) return { error }
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not send the email.' }

@@ -10,7 +10,7 @@
 // top-level `new Resend(...)` throws during `next build` when the key is absent,
 // which is what broke every Vercel Preview deployment until 2026-07-27.
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
 
@@ -134,14 +134,14 @@ export async function sendInviteEmail(input: InviteEmailInput): Promise<{ error?
 
   try {
     // No replyTo: this is a no-reply sender by design.
-    const { error } = await new Resend(key).emails.send({
+    const { error } = await sendEmail({
       from: FROM,
       to: input.to,
       subject,
       text,
       html,
     })
-    if (error) return { error: error.message }
+    if (error) return { error }
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not send the email.' }

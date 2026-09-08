@@ -16,7 +16,7 @@
 // through a paid SMS gateway, and a texted action-link is also exactly the
 // shape of a phishing message.
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 import { dayLabel } from '@/lib/dayActivities'
 
 const FROM = 'CrewTracker <noreply@contact.crewtracker.app>'
@@ -308,8 +308,8 @@ export async function sendBookingRequestEmail(
   if (!key) return { error: 'Email is not configured (RESEND_API_KEY is missing).' }
   const { subject, text, html } = buildBookingRequestEmail(input)
   try {
-    const { error } = await new Resend(key).emails.send({ from: FROM, to: input.to, subject, text, html })
-    if (error) return { error: error.message }
+    const { error } = await sendEmail({ from: FROM, to: input.to, subject, text, html })
+    if (error) return { error }
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not send the email.' }
@@ -359,8 +359,8 @@ export async function sendDeclineNoticeEmail(input: DeclineNoticeInput): Promise
 </div>`.trim()
 
   try {
-    const { error } = await new Resend(key).emails.send({ from: FROM, to: input.to, subject, text, html })
-    if (error) return { error: error.message }
+    const { error } = await sendEmail({ from: FROM, to: input.to, subject, text, html })
+    if (error) return { error }
     return {}
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not send the email.' }
