@@ -42,12 +42,15 @@ export default async function BookingPage({
   const { token } = await params
   const { a } = await searchParams
 
-  // The email carries two BUTTONS (2026-09-08). Confirm answers here, as the
-  // page loads, so one tap is the whole job. Decline does not: it opens the
-  // page with the note box ready, because a decline carries a message to
-  // whoever is staffing the show and the reason is the useful part.
-  // Answering twice is harmless — the page lets anybody change their mind.
+  // The email carries two BUTTONS, and EITHER ONE IS THE ANSWER (Dan,
+  // 2026-09-08: "A click from the email is definitive. There can be a reversal,
+  // but a decline click in the email should not bring up another decline
+  // button"). So both answer here, as the page loads, and what opens says what
+  // was recorded. Changing your mind is a button on that page — people
+  // genuinely confirm and then have something come up, and the alternative is a
+  // phone call to the scheduler.
   if (a === 'confirm') await respondToBooking(token, 'confirmed')
+  if (a === 'decline') await respondToBooking(token, 'declined')
 
   const invite = await loadBookingInvite(token)
 
@@ -124,7 +127,6 @@ export default async function BookingPage({
         token={invite.token}
         alreadyResponded={invite.response}
         respondedAt={invite.respondedAt}
-        startDeclining={a === 'decline'}
       />
     </Shell>
   )

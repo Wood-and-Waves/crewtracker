@@ -408,6 +408,10 @@ scripts/
                        · 0036 staffing_events INSERT requires can_edit_timecards (0035 let any
                        viewer of a show — crew-side logins included — write digest lines);
                        extend_all_day_positions() keeps the person's booking_status. No rows.
+                       · 0039 pm_invites.declined_at / declined_note: a PM's
+                       decline is RECORDED rather than deleting the invitation,
+                       so the email's Decline button can be definitive and still
+                       reversible, and a note can follow it. No rows.
                        · 0038 colleagues can see each other's NAMES:
                        shares_my_organization() (SECURITY DEFINER) replaces the
                        memberships subquery inside the profiles SELECT policy,
@@ -420,9 +424,10 @@ scripts/
                        sync then ignored, so a removed position kept counting). No rows.
                        0018–0037 applied to BOTH databases (0018–0020 shipped
                        2026-09-05, 0021–0027 2026-09-06, 0028–0037 2026-09-07).
-                       **0038 is DEV ONLY** — it ships with the next production
-                       cutover, and until then a non-admin on crewtracker.app
-                       still cannot see a colleague's name.
+                       **0038 and 0039 are DEV ONLY** — they ship with the next
+                       production cutover. Until then a non-admin on
+                       crewtracker.app cannot see a colleague's name, and a PM
+                       decline there still deletes the invitation.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -1018,13 +1023,18 @@ carries DECLINE**, so an accidental acceptance is undone in a tap, and whoever n
 Accepting is idempotent, so a scanner's fetch and a refresh both change nothing the second time.
 This is the ONLY GET in the app that writes anything.
 
-**Declining gives the show back and carries a note** (`/api/pm/decline`, `declinePmInvite`).
-It removes the pointer, both stamps, the invitation and any access the acceptance granted, so the
-show honestly has no PM again — and emails whoever named them, with the person's note quoted
-whole (Dan: "when a decline happens they can add a note to the scheduler"; the note is optional,
-since somebody who wants out should not have to write an excuse first). A decline leaves NO
-record on the show: if "we asked Jordan and he said no" ever needs to survive, that is a column
-and a migration, deliberately not built for one.
+**BOTH BUTTONS ANSWER ON THE CLICK, and the page carries the reversal** (Dan, 2026-09-08: "A
+click from the email is definitive. There can be a reversal, but a decline click in the email
+should not bring up another decline button"). Declining removes the pointer, both stamps and any
+access the acceptance granted, so the show honestly has no PM again, and emails whoever named
+them at once. **The invitation itself SURVIVES** (0039: `pm_invites.declined_at` /
+`declined_note`) — deleting it, as the first cut did, left the token dead, so there was no way
+back and no way to add a note. The declined page offers "Actually, I can do this show", which
+re-points the show at them, and a note box: the reason is worth having but must never stand
+between somebody and saying no, so it is sent afterwards, on its own. `replaced` now means
+"somebody ELSE holds this show", because a declined invitation points at nobody and must still
+open. The crew booking request works the same way, through `booking_invites`, which has recorded
+answers since 0014.
 
 **The PM is INVITED, and accepting is the only thing that grants access** (Dan: a silent accept
 is dangerous). Naming somebody — `PmField` on New Show or Edit Show, confirmed in words —

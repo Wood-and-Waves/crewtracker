@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { loadPmInvite, acceptPmInvite } from '@/lib/pmInvite'
+import { loadPmInvite, acceptPmInvite, declinePmInvite } from '@/lib/pmInvite'
 import { describeShowDates } from '@/lib/pmInviteEmail'
 import { dayLabel } from '@/lib/dayActivities'
 import AcceptPmForm from './AcceptPmForm'
@@ -58,11 +58,14 @@ export default async function PmInvitePage({
   // The link's whole job. Idempotent, so a refresh — or a mail scanner that
   // fetched the URL before the person read it — changes nothing the second
   // time, and either way the page below can hand the show straight back.
+  // EITHER BUTTON IS THE ANSWER (Dan, 2026-09-08: "A click from the email is
+  // definitive. There can be a reversal, but a decline click in the email
+  // should not bring up another decline button"). So both answer here, before
+  // the page renders, and what opens says what was recorded. The way back is a
+  // button on that page — accepting after a decline re-points the show at them
+  // (0039), and the note can still be added afterwards.
   if (accept === '1') await acceptPmInvite(token)
-  // ?decline=1 does NOT decline on the link: it opens the page on its note
-  // step, because a decline carries a message back to whoever named them and
-  // the reason is the useful part. One tap in the email, then send.
-  const startDeclining = decline === '1'
+  if (decline === '1') await declinePmInvite(token)
 
   const invite = await loadPmInvite(token)
 
@@ -107,6 +110,22 @@ export default async function PmInvitePage({
     </div>
   )
 
+  if (invite.declinedAt) {
+    return (
+      <Shell>
+        <p className="text-center text-sm text-muted">You&rsquo;ve declined</p>
+        <h1 className="mb-1 mt-1 text-center text-2xl font-extrabold text-ink">{invite.showName}</h1>
+        <p className="mb-5 text-center text-sm text-muted">
+          {describeShowDates(invite.startDate, invite.endDate)}{where ? ` · ${where}` : ''}
+        </p>
+        <p className="mb-5 text-center text-sm text-ink">
+          {namedBy} has been told, and the show is theirs to give to somebody else.
+        </p>
+        <AcceptPmForm token={invite.token} declined note={invite.declinedNote} />
+      </Shell>
+    )
+  }
+
   if (invite.acceptedAt) {
     return (
       <Shell>
@@ -125,7 +144,7 @@ export default async function PmInvitePage({
           </span>
         </Link>
         <div className="mt-4">
-          <AcceptPmForm token={invite.token} accepted startDeclining={startDeclining} />
+          <AcceptPmForm token={invite.token} accepted />
         </div>
       </Shell>
     )
@@ -142,7 +161,7 @@ export default async function PmInvitePage({
       <p className="mb-5 text-center text-sm text-ink">
         Accept to get the show in your CrewTracker. Until you do, nothing changes on your side.
       </p>
-      <AcceptPmForm token={invite.token} startDeclining={startDeclining} />
+      <AcceptPmForm token={invite.token} />
     </Shell>
   )
 }

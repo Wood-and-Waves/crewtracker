@@ -23,7 +23,11 @@ export type PmInviteView = {
   inviterName: string | null
   pmName: string | null
   acceptedAt: string | null
-  /** The show has since been given to somebody else; this link is dead. */
+  /** They said no. The invitation stays open so it can be reversed (0039). */
+  declinedAt: string | null
+  declinedNote: string | null
+  /** Somebody ELSE holds this show now; this link is dead. A declined
+   *  invitation points at nobody and must still open — see 0039. */
   replaced: boolean
   /** The run, day by day, so the page can say what the show actually IS.
    *  Dates and what happens on them — never crew, never money. */
@@ -36,7 +40,7 @@ export async function loadPmInvite(token: string): Promise<PmInviteView | null> 
 
   const { data: invite } = await admin
     .from('pm_invites')
-    .select('id, token, show_id, profile_id, organization_id, sent_by, accepted_at')
+    .select('id, token, show_id, profile_id, organization_id, sent_by, accepted_at, declined_at, declined_note')
     .eq('token', token)
     .maybeSingle()
   if (!invite) return null
@@ -64,7 +68,9 @@ export async function loadPmInvite(token: string): Promise<PmInviteView | null> 
     inviterName: inviter?.full_name ?? null,
     pmName: pm?.full_name ?? null,
     acceptedAt: invite.accepted_at ?? null,
-    replaced: show.pm_profile_id !== invite.profile_id,
+    declinedAt: invite.declined_at ?? null,
+    declinedNote: invite.declined_note ?? null,
+    replaced: !!show.pm_profile_id && show.pm_profile_id !== invite.profile_id,
     days: (days ?? []).map(d => ({ date: d.date as string, activities: (d.activities ?? []) as string[] })),
   }
 }
@@ -94,18 +100,22 @@ export async function acceptPmInvite(token: string): Promise<AcceptResult> {
 
   const { data: invite } = await admin
     .from('pm_invites')
-    .select('id, show_id, profile_id, organization_id, accepted_at')
+    .select('id, show_id, profile_id, organization_id, accepted_at, declined_at')
     .eq('token', token)
     .maybeSingle()
   if (!invite) return { ok: false, status: 404, error: 'This link is not valid.' }
-  if (invite.accepted_at) return { ok: true, showId: invite.show_id }
+  if (invite.accepted_at && !invite.declined_at) return { ok: true, showId: invite.show_id }
 
-  // Still the named PM? Naming somebody else deletes the old invites, but a
-  // race is cheap to close here too.
   const { data: show } = await admin.from('shows').select('id, pm_profile_id').eq('id', invite.show_id).maybeSingle()
-  if (!show || show.pm_profile_id !== invite.profile_id) {
+  if (!show) return { ok: false, status: 404, error: 'That show no longer exists.' }
+  // Somebody ELSE holds it: this link is dead however it was answered before.
+  if (show.pm_profile_id && show.pm_profile_id !== invite.profile_id) {
     return { ok: false, status: 410, error: 'This invitation has been replaced. Check with whoever named you.' }
   }
+  // REVERSING A DECLINE (0039). They said no, the show went back to having no
+  // PM, and now they can do it after all — so accepting re-points the show at
+  // them rather than refusing because it points at nobody.
+  const reversing = !show.pm_profile_id
   const { data: member } = await admin
     .from('memberships').select('profile_id')
     .eq('profile_id', invite.profile_id).eq('organization_id', invite.organization_id)
@@ -126,8 +136,11 @@ export async function acceptPmInvite(token: string): Promise<AcceptResult> {
   }
 
   const [{ error: e1 }, { error: e2 }] = await Promise.all([
-    admin.from('pm_invites').update({ accepted_at: now }).eq('id', invite.id),
-    admin.from('shows').update({ pm_accepted_at: now }).eq('id', show.id),
+    admin.from('pm_invites').update({ accepted_at: now, declined_at: null, declined_note: null }).eq('id', invite.id),
+    admin.from('shows').update({
+      pm_accepted_at: now,
+      ...(reversing ? { pm_profile_id: invite.profile_id, pm_invited_at: now } : {}),
+    }).eq('id', show.id),
   ])
   if (e1 || e2) return { ok: false, status: 500, error: (e1 ?? e2)!.message }
 
@@ -172,18 +185,46 @@ export async function declinePmInvite(token: string, note?: string | null): Prom
     admin.from('organizations').select('name').eq('id', invite.organization_id).maybeSingle(),
   ])
   if (!show) return { ok: false, status: 404, error: 'That show no longer exists.' }
-  if (show.pm_profile_id !== invite.profile_id) {
+  if (show.pm_profile_id && show.pm_profile_id !== invite.profile_id) {
     return { ok: false, status: 410, error: 'This invitation has already been replaced.' }
+  }
+  // Already declined. Nothing to undo — but a NOTE arriving now is the reason
+  // they came back to write, so it is recorded and sent on its own.
+  if (!show.pm_profile_id) {
+    const text = (note ?? '').trim()
+    if (!text) return { ok: true, showName: show.name, told: null }
+    await admin.from('pm_invites').update({ declined_note: text }).eq('id', invite.id)
+    let toldLate: string | null = null
+    if (invite.sent_by) {
+      const { data: inviter } = await admin.from('profiles').select('full_name, email').eq('id', invite.sent_by).maybeSingle()
+      if (inviter?.email) {
+        const { error: mailError } = await sendPmDeclinedEmail({
+          to: inviter.email,
+          inviterName: inviter.full_name ?? null,
+          pmName: pm?.full_name ?? 'They',
+          showName: show.name,
+          orgName: org?.name ?? 'Your company',
+          note: text,
+        })
+        if (mailError) console.error('pm decline note: it did not send:', mailError)
+        else toldLate = inviter.email
+      }
+    }
+    return { ok: true, showName: show.name, told: toldLate }
   }
 
   // Undo everything the invitation created, including an acceptance that a mail
-  // scanner may have made on their behalf.
+  // scanner may have made on their behalf. The SHOW goes back to having no PM;
+  // the INVITATION stays, carrying the answer, so the decline can be reversed
+  // and a note added afterwards (0039).
   await admin.from('show_assignments').delete()
     .eq('show_id', show.id).eq('profile_id', invite.profile_id).eq('source', 'pm')
   const { error } = await admin.from('shows')
     .update({ pm_profile_id: null, pm_invited_at: null, pm_accepted_at: null }).eq('id', show.id)
   if (error) return { ok: false, status: 500, error: error.message }
-  await admin.from('pm_invites').delete().eq('id', invite.id)
+  await admin.from('pm_invites')
+    .update({ declined_at: new Date().toISOString(), accepted_at: null, declined_note: (note ?? '').trim() || null })
+    .eq('id', invite.id)
 
   // Tell whoever named them. Best effort: the decline itself has happened, and
   // a failed email must not make it look otherwise.

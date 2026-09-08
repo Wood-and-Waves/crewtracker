@@ -14,20 +14,16 @@ export default function BookingResponseForm({
   token,
   alreadyResponded,
   respondedAt,
-  startDeclining = false,
 }: {
   token: string
   alreadyResponded: 'confirmed' | 'declined' | null
   respondedAt: string | null
-  /** They pressed Decline in the email: show the note and the two buttons,
-   *  even if an answer is already on file, rather than the recorded answer. */
-  startDeclining?: boolean
 }) {
   const [answer, setAnswer] = useState<'confirmed' | 'declined' | null>(alreadyResponded)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [changing, setChanging] = useState(startDeclining)
+  const [changing, setChanging] = useState(false)
 
   async function respond(response: 'confirmed' | 'declined') {
     setBusy(true)
@@ -59,11 +55,14 @@ export default function BookingResponseForm({
             : 'Thanks for letting them know.'}
           {respondedAt && !busy ? '' : ''}
         </p>
+        {/* The reversal. A decline that arrived from the email was one tap, so
+            the way back has to be one too, and it says what it does rather
+            than making somebody work out that "change my answer" is it. */}
         <button
           onClick={() => setChanging(true)}
           className="mt-4 text-xs text-muted underline hover:text-ink"
         >
-          Change my answer
+          {answer === 'declined' ? 'Actually, I can make it' : 'Change my answer'}
         </button>
       </div>
     )
