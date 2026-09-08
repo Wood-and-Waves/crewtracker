@@ -6,7 +6,12 @@ import { sendCallHandoffEmail } from '@/lib/callHandoffEmail'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 import { siteOrigin } from '@/lib/siteOrigin'
 
-// Send a show to scheduling — to EVERYONE with the permission — or take it back.
+// Send a show to scheduling — to EVERYONE with the permission.
+//
+// One direction only. Taking a show BACK was here until 2026-09-08 and Dan cut
+// it ("I don't think we need take back. That is just confusing."): sent is a
+// state a show reaches, not a switch. A show sent by mistake is archived, and
+// one with nothing left to do drops off the Needs-scheduling queue by itself.
 //
 // AUTHORIZATION IS THE shows UPDATE POLICY: the stamp is written through the
 // caller's session as a verified update. The service role is used only to
@@ -25,8 +30,7 @@ export async function POST(request: Request) {
   }
 
   let showId: string | undefined
-  let takeBack: boolean | undefined
-  try { ({ showId, takeBack } = await request.json()) } catch {
+  try { ({ showId } = await request.json()) } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
   if (!showId) return NextResponse.json({ error: 'Missing showId.' }, { status: 400 })
@@ -40,14 +44,6 @@ export async function POST(request: Request) {
   if (show.archived) return NextResponse.json({ error: 'This show has been archived.' }, { status: 400 })
 
   const now = new Date().toISOString()
-
-  if (takeBack) {
-    if (!show.sent_to_scheduling_at) return NextResponse.json({ error: 'This show is not with scheduling.' }, { status: 400 })
-    const { data: back } = await supabase.from('shows')
-      .update({ sent_to_scheduling_at: null, sent_to_scheduling_by: null }).eq('id', show.id).select('id')
-    if (!back?.length) return NextResponse.json({ error: 'You do not have permission to change this show.' }, { status: 403 })
-    return NextResponse.json({ ok: true, sentTo: 0 })
-  }
 
   if (show.sent_to_scheduling_at) return NextResponse.json({ error: 'This show is already with scheduling.' }, { status: 400 })
 

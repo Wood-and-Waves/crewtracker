@@ -29,7 +29,7 @@ separate from the tracker."* And, repeatedly: *"the tracker should be simple."*
 | Where | One screen per show: `/dashboard/shows/[id]/schedule`, reached from the show's header beside Edit Show and View Report, and from every Needs-scheduling row (a scheduler never has to open a tracker). Desktop-first; usable on an iPad; not optimised for a phone. |
 | Shape | **A grid, rooms down the side, days across the top** — the same shape as New Show's positions grid. Built 2026-09-08 as ruled POSITION LINES: a room is a strip, and under it one row per position running the width of the show, so a person sits in the same row every day and nothing shifts when a role runs on only some days. |
 | A cell | Tap **Open** → the Fill picker (with its days checklist, its "Already scheduled on / pending on" lines, "Declined this show"). Tap a **chip** → Confirmed / Declined (the same in-place menu as the tracker's chip). A **flag** (a booked day that no longer fits its definition) shows in place with Move / Keep / Release. |
-| Above the grid | The show's state and its actions in one strip: "12 of 20 confirmed · 3 waiting · 2 open"; Send to scheduler / With scheduling since … / Take back; **Ask everyone pencilled**; the PM's name and a chip that records their answer (added 2026-09-08: the same pill actions as a crew member, because a PM says yes on the phone too); the day-activities row (it explains which cells exist). |
+| Above the grid | The show's state and its actions in one strip: "12 of 20 confirmed · 3 waiting · 2 open"; Send to scheduler / With scheduling since … (Take back was cut 2026-09-08); **Ask everyone pencilled**; the PM's name and a chip that records their answer (added 2026-09-08: the same pill actions as a crew member, because a PM says yes on the phone too); the day-activities row (it explains which cells exist). |
 | Positions themselves | The definitions editor (role × count × kind of day) lives here too, under the grid — Edit Show keeps it as well until nobody misses it there. |
 | What leaves the tracker | The ⋮ → Positions panel, the Fill picker, and the open-position rows. The tracker keeps ONE scheduling thing: the status chip, shown **only while an answer is owed** (pencilled / asked), with Confirmed / Declined behind it. A confirmed person's row is just name and role. |
 | Tap-to-decline a confirmed person | Not on the tracker (nothing to tap). On the Scheduling screen, a confirmed chip is tappable → Declined. |
@@ -51,6 +51,6 @@ slots for a show with their live timecard and status), no migration expected.
 
 `schedule.mts` for the grid model (cells from slots + timecards; flags placed; counts in the
 strip). Dan tries it on the preview with an 8-day, two-room show: fill, approve, decline, retag
-a day and sort the flag, Ask everyone pencilled, Take back — all without opening the tracker.
+a day and sort the flag, Ask everyone pencilled — all without opening the tracker.
 Then the tracker's ⋮ Positions / Fill / open rows are removed in the same piece, once the
 screen does everything they did.

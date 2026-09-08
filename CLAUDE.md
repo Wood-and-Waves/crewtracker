@@ -931,7 +931,10 @@ schedule." `SendToSchedulingButton` (replaced `HandoffToSchedulerButton`) just s
 `shows.sent_to_scheduling_at` and emails every live member holding `can_manage_scheduling`
 via `lib/callHandoffEmail.ts` (reworded "needs scheduling," not "call"). **Nobody owns a sent
 show** — first scheduler to open it works it, same as the tracker never assigning a room to
-one PM. Taking it back (`takeBack: true` on the same route) clears the stamp. The `shows`
+one PM. **There is no taking it back** — that control existed until 2026-09-08, when Dan cut it
+("I don't think we need take back. That is just confusing."): sent is a state a show reaches, not
+a switch, a show sent by mistake is archived, and one with nothing left to do drops off the
+Needs-scheduling queue by itself. Do not reintroduce it without asking. The `shows`
 UPDATE policy deliberately has NO scheduler arm: sending and taking back are the show
 builder's acts, not the scheduler's.
 
@@ -1054,7 +1057,7 @@ like a table — a room is a strip, and under it one ROW per position, read acro
 the cell). Tap a **chip** and the answer menu opens in place. A booking whose day no longer fits
 its definition says **Day no longer fits** and opens Move / Keep / Release right there. Above the
 grid, one strip: the counts, the PM chip, **Ask everyone pencilled**, and Send to scheduler /
-With scheduling since … / Take back. **The PM's chip is a control too**, for the same reason a
+With scheduling since …. **The PM's chip is a control too**, for the same reason a
 crew member's is (Dan, 2026-09-08: *"Why would the PM say not accepted yet? Instead of the same
 pill actions as the crew?"*): a PM says yes on the phone as often as crew do. Tapping it records
 the acceptance — which grants the show, so the confirm says exactly that — resends the

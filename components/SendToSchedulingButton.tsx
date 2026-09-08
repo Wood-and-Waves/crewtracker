@@ -64,42 +64,17 @@ export default function SendToSchedulingButton({
     router.refresh()
   }
 
-  async function takeBack() {
-    if (busy) return
-    if (!confirm('Take this show back from scheduling? Schedulers lose sight of it until it is sent again.')) return
-    setBusy(true)
-    setError('')
-    setNotice('')
-
-    const res = await fetch('/api/shows/send-to-scheduling', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ showId, takeBack: true }),
-    })
-    const body = await res.json().catch(() => ({}))
-    setBusy(false)
-
-    if (!res.ok) {
-      setError(body.error || 'Could not take this show back.')
-      return
-    }
-    router.refresh()
-  }
-
   const nothingToSend = positionCount === 0
 
+  // Sent is a STATE, not a switch. "Take back" sat here until 2026-09-08 and
+  // Dan cut it: "I don't think we need take back. That is just confusing." A
+  // show that has reached scheduling has reached it; a show that should not
+  // have been sent is archived, and one with nothing left to do drops off the
+  // Needs-scheduling queue on its own.
   const stateBlock = sentAt ? (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
       <Chip tone="good">With scheduling</Chip>
       <span>since {fmt(sentAt)}</span>
-      <button
-        type="button"
-        className="font-semibold text-accent hover:underline disabled:opacity-40"
-        disabled={busy}
-        onClick={takeBack}
-      >
-        Take back
-      </button>
     </div>
   ) : (
     <div>

@@ -125,7 +125,8 @@ on the tracker/timecard). Unticking a day leaves that slot open for someone else
 ## C. The scheduling queue, the ready email, the digest, flags, crew change notices
 
 **Send to scheduler.** `shows.sent_to_scheduling_at timestamptz null` (set by the button on
-New Show or Edit Show; cleared by "Take back from scheduling"). Sends **one email to every
+New Show or Edit Show. It was cleared by "Take back from scheduling" until 2026-09-08, when Dan
+cut that control — sent is a state a show reaches, not a switch). Sends **one email to every
 member with `can_manage_scheduling`** (`lib/callHandoffEmail.ts` adapted: "Northwind needs
 scheduling — 14 positions, Sep 4–9"). `shows.scheduler_id` stops being written; it stays for
 history until a later migration drops it, once nothing reads it.
