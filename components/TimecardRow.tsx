@@ -308,7 +308,7 @@ export default function TimecardRow({
           {/* Booking status, and the chip is the control (see BookingStatusChip). */}
           {schedulingEnabled && showId && timecard.crew_member_id && (
             <div className="mt-1">
-              <BookingStatusChip showId={showId} crewMemberId={timecard.crew_member_id} crewName={timecard.crew_member_name} status={timecard.booking_status} locked={locked} timecardId={timecard.id} role={timecard.role} dayLabel={dayDate} />
+              <BookingStatusChip showId={showId} crewMemberId={timecard.crew_member_id} crewName={timecard.crew_member_name} status={timecard.booking_status} locked={locked} />
             </div>
           )}
         </div>
