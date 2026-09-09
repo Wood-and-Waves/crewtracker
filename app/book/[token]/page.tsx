@@ -94,8 +94,13 @@ export default async function BookingPage({
     <Shell>
       <p className="text-center text-sm text-muted">{invite.organizationName} would like to book you for</p>
       <h1 className="mb-1 mt-1 text-center text-2xl font-extrabold text-ink">{invite.showName}</h1>
+      {/* Venue AND city, matching the email that sent them here (Dan,
+          2026-09-09): the building says where to go, the city says whether it
+          is a drive or a flight. */}
       {(invite.venue || invite.cityState) && (
-        <p className="mb-5 text-center text-sm text-muted">{invite.venue || invite.cityState}</p>
+        <p className="mb-5 text-center text-sm text-muted">
+          {[invite.venue, invite.cityState].filter(Boolean).join(', ')}
+        </p>
       )}
 
       <div className="mb-5 rounded-field border border-line bg-surface-2 px-4 py-3">

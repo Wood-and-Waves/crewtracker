@@ -298,7 +298,10 @@ export function buildBookingRequestText(
   input: Omit<BookingRequestInput, 'to' | 'link' | 'confirmUrl' | 'declineUrl'>,
 ): string {
   const { range, qualifiers } = describeDateParts(input.days)
-  const where = input.venue || input.cityState
+  // Venue AND city, as in the email (Dan, 2026-09-09) — the building says
+  // where to go, the city says whether it is a drive or a flight, and that is
+  // most of what somebody is deciding. Worth the characters.
+  const where = [input.venue, input.cityState].filter(Boolean).join(', ')
   // Company names very often already end in a period ("Northwind Staging Co."),
   // and "Co.." is the kind of detail that makes a message look automated.
   const org = input.organizationName.replace(/\.$/, '')

@@ -256,7 +256,7 @@ check('unsorted input still reads in date order',
 console.log('\nbuildBookingRequestText')
 const sms = buildBookingRequestText({
   crewName: 'Alex Reyes', showName: 'Beacon Field Summit', venue: 'Moscone West',
-  cityState: null, organizationName: 'Northwind Staging Co.', role: 'A1',
+  cityState: 'San Francisco, CA', organizationName: 'Northwind Staging Co.', role: 'A1',
   days: run(['travel', 'work', 'out']),
 })
 // A company name ending in a period must not produce "Co..".
@@ -275,7 +275,16 @@ check('the run is totalled at the end', sms.includes('\n3 days total.\n'), true)
 check('no travel summary sentence on top', sms.includes('First day travel'), false)
 // It is pasted into somebody's own messaging app, so it can have a shape.
 check('it has line breaks at all', sms.split('\n').length > 4, true)
-check('venue sits with the question, not after the dates', sms.includes('as A1 at Moscone West?'), true)
+// Venue AND city, as in the email (Dan, 2026-09-09), sitting with the question
+// rather than trailing after the dates.
+check('venue and city sit with the question',
+  sms.includes('as A1 at Moscone West, San Francisco, CA?'), true)
+check('a venue with no city has no trailing comma',
+  buildBookingRequestText({
+    crewName: 'Alex Reyes', showName: 'Beacon Field Summit', venue: 'Moscone West',
+    cityState: null, organizationName: 'Northwind Staging Co.', role: 'A1',
+    days: run(['travel', 'work', 'out']),
+  }).includes('at Moscone West?'), true)
 // The texted version must never carry a link — an action-link by SMS is
 // indistinguishable from phishing, and Dan asked for no action links.
 check('no link in the text message', /https?:\/\//.test(sms), false)
