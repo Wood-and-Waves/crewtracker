@@ -7,8 +7,8 @@
 // both environments (browser: pdf(doc).toBlob(); server: renderToBuffer(doc)).
 //
 // Closes the iOS PDF gaps from sweep 2: client/job/city in the header, page
-// numbers, a per-crew total pay line, and the per-day ST Penalty / travel /
-// half-day markers iOS draws.
+// numbers, a per-crew total pay line, and the per-day short-turnaround /
+// travel / half-day markers iOS draws.
 
 import {
   straightTimeHours, overtimeHours, doubleTimeHours,
@@ -177,7 +177,11 @@ export function buildReportPdf(parts: PdfParts, input: PdfInput) {
   // PDF needs no icon font.
   function markersFor(rawTc: any, shortTurn: boolean): string {
     const m: string[] = []
-    if (shortTurn) m.push('ST Penalty')
+    // Spelled out (Dan, 2026-09-09). "ST Penalty" is shop shorthand, and this
+    // document goes to whoever runs payroll: it is the one marker that explains
+    // why a whole day was paid at double time. The CSV's column has always been
+    // called "Short Turnaround", so this also stops the two disagreeing.
+    if (shortTurn) m.push('Short Turnaround')
     if (rawTc.travel_in_day) m.push('Travel In')
     if (rawTc.travel_out_day) m.push('Travel Out')
     if (rawTc.pay_as_half_day) m.push('Half Day')

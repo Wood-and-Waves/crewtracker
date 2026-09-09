@@ -567,7 +567,7 @@ export default function EditShowClient({
           {scheduling.sentAt && (
             <div className="mt-3">
               <AskPencilledButton showId={show.id} />
-              <p className="mt-1 text-xs text-muted">One booking request email per person still pencilled, covering all their days. People already asked or answered are left alone.</p>
+              <p className="mt-1 text-xs text-muted">One booking request email per person who has not been asked yet, covering all their days. People already asked or answered are left alone.</p>
             </div>
           )}
         </section>

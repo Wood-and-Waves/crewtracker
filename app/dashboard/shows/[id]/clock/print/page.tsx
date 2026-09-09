@@ -14,7 +14,7 @@ export default async function ClockPrintPage({ params }: { params: Promise<{ id:
 
   const [user, { data: show }] = await Promise.all([
     getCurrentUser(),
-    supabase.from('shows').select('name, venue, city_state').eq('id', id).single(),
+    supabase.from('shows').select('name, venue, city_state, start_date, end_date').eq('id', id).single(),
   ])
   if (!user) redirect('/login')
   // Same permission that mints the link. A read-only member has no business
@@ -46,6 +46,8 @@ export default async function ClockPrintPage({ params }: { params: Promise<{ id:
       token={link.token}
       showName={show.name}
       venue={show.venue || show.city_state || null}
+      startDate={show.start_date}
+      endDate={show.end_date}
     />
   )
 }

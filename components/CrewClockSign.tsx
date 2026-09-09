@@ -16,21 +16,38 @@ import { clockUrl } from '@/lib/clockLinks'
  * The SVG string is injected because @svg-in-react has no better option here;
  * the input is a UUID of our own minting, never user text.
  */
+/** "10/1/2026 -- 10/7/2026", or one date when the show is a single day. */
+function signDates(start: string, end: string) {
+  const fmt = (d: string) => {
+    // Bare 'YYYY-MM-DD' + T00:00:00 is LOCAL midnight. Parsing the date alone
+    // gives UTC midnight, which prints as the day before west of Greenwich —
+    // the trap every other date in this app guards against.
+    const x = new Date(d + 'T00:00:00')
+    return `${x.getMonth() + 1}/${x.getDate()}/${x.getFullYear()}`
+  }
+  return start === end ? fmt(start) : `${fmt(start)} -- ${fmt(end)}`
+}
+
 export default function CrewClockSign({
   token,
   showName,
   venue,
+  startDate,
+  endDate,
 }: {
   token: string
   showName: string
   venue: string | null
+  /** The run, printed under the venue so a sign left on a wall from last month
+   *  is obviously not this month's (Dan, 2026-09-09). Plain numeric dates:
+   *  this is read across a loading dock, not in a document. */
+  startDate: string
+  endDate: string
 }) {
   const [svg, setSvg] = useState('')
-  const [url, setUrl] = useState('')
 
   useEffect(() => {
     const u = clockUrl(window.location.origin, token)
-    setUrl(u)
     // High correction: this gets printed, taped to a road case, and scanned in
     // bad light by fifty different phones.
     QRCode.toString(u, { type: 'svg', margin: 1, errorCorrectionLevel: 'H' })
@@ -52,6 +69,7 @@ export default function CrewClockSign({
       </p>
       <h1 className="mt-1 font-display text-4xl font-bold uppercase tracking-tight text-ink">{showName}</h1>
       {venue && <p className="mt-1 text-sm text-muted">{venue}</p>}
+      <p className="mt-1 text-sm text-muted">{signDates(startDate, endDate)}</p>
 
       <div className="mx-auto my-8 w-64 border-2 border-ink bg-white p-4">
         {svg
@@ -60,11 +78,8 @@ export default function CrewClockSign({
       </div>
 
       <p className="text-sm font-semibold text-ink">Scan this, then pick your room and your name.</p>
-      <p className="mt-2 text-xs text-muted">No login needed. Bookmark the page it opens — it&apos;s yours for the whole show.</p>
+      <p className="mt-2 text-xs text-muted">No login needed.</p>
 
-      {url && (
-        <p className="mt-6 break-all font-mono text-[11px] text-muted">{url}</p>
-      )}
     </div>
   )
 }

@@ -28,7 +28,12 @@ import { cn } from '@/lib/cn'
 
 type Status = 'pencilled' | 'invited' | 'confirmed' | 'declined'
 
-const LABEL: Record<Status, string> = { pencilled: 'Pencilled', invited: 'Asked', confirmed: 'Confirmed', declined: 'Declined' }
+// "Not Asked", not "Pencilled" (Dan, 2026-09-09). The database value stays
+// `pencilled` — renaming a column value is a migration for no visible gain,
+// the same call crew_call_positions already got — but the word on screen says
+// what is actually true of that person: they are holding a slot and nobody has
+// contacted them.
+const LABEL: Record<Status, string> = { pencilled: 'Not Asked', invited: 'Asked', confirmed: 'Confirmed', declined: 'Declined' }
 
 export default function BookingStatusChip({
   showId, crewMemberId, crewName, status: initial, locked = false, context = 'tracker',

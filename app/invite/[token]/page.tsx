@@ -15,7 +15,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl text-center">
-          <h1 className="text-2xl font-bold text-ink mb-2">Invalid Invite</h1>
+          <h1 className="text-2xl font-bold text-ink mb-2">Invalid invite</h1>
           <p className="text-muted text-sm">This invite link doesn&apos;t exist.</p>
         </div>
       </div>
@@ -26,7 +26,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl text-center">
-          <h1 className="text-2xl font-bold text-ink mb-2">Invite Already Used</h1>
+          <h1 className="text-2xl font-bold text-ink mb-2">Invite already used</h1>
           <p className="text-muted text-sm">This invite link has already been accepted.</p>
         </div>
       </div>
@@ -37,7 +37,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <div className="w-full max-w-sm rounded-card bg-surface border border-line p-8 shadow-xl text-center">
-          <h1 className="text-2xl font-bold text-ink mb-2">Invite Expired</h1>
+          <h1 className="text-2xl font-bold text-ink mb-2">Invite expired</h1>
           <p className="text-muted text-sm">This invite link has expired. Ask for a new one.</p>
         </div>
       </div>

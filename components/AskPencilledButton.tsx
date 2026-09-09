@@ -34,8 +34,8 @@ export default function AskPencilledButton({ showId, size = 'sm' }: { showId: st
       byPerson.set(t.crew_member_id, p)
     }
     const people = [...byPerson.entries()].filter(([, p]) => p.allPencilled)
-    if (people.length === 0) { setBusy(false); setNote('Nobody is pencilled — everyone has been asked or has answered.'); return }
-    if (!confirm(`Email a booking request to the ${people.length} ${people.length === 1 ? 'person' : 'people'} still pencilled on this show?`)) { setBusy(false); return }
+    if (people.length === 0) { setBusy(false); setNote('Everyone has been asked or has answered.'); return }
+    if (!confirm(`Email a booking request to the ${people.length} ${people.length === 1 ? 'person' : 'people'} who have not been asked yet?`)) { setBusy(false); return }
 
     let sent = 0
     const failed: string[] = []
@@ -55,7 +55,7 @@ export default function AskPencilledButton({ showId, size = 'sm' }: { showId: st
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <Button size={size} variant="ghost" disabled={busy} onClick={askAll}>
-        {busy ? 'Asking…' : 'Ask everyone pencilled'}
+        {busy ? 'Sending…' : 'Send email invites'}
       </Button>
       {note && <span className="text-xs text-muted">{note}</span>}
     </span>
