@@ -432,7 +432,8 @@ scripts/
                        sync then ignored, so a removed position kept counting). No rows.
                        ALL applied to BOTH databases (0018–0020 shipped
                        2026-09-05, 0021–0027 2026-09-06, 0028–0037 2026-09-07,
-                       0038–0039 2026-09-08). Nothing is dev-only.
+                       0038–0039 2026-09-08, 0040 2026-09-09). Nothing is
+                       dev-only.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -1468,7 +1469,17 @@ like everything else.
 
 ## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
 
-**Latest run: 2026-09-08, 0038 + 0039.** Backup (`backups/crewtracker-2026-09-08T17-18-02.sql`)
+**Latest run: 2026-09-09, 0040 (crew_told_at).** Backup
+(`backups/crewtracker-2026-09-09T20-05-07.sql`) → `db:migrate --prod` →
+`db:grants` (header-only diff: the column needs no grant, `staffing_events` is
+table-granted) → `db:schema` → commit both → merge `scheduling` → `main`.
+Verified read-only either side: 6 shows, 211 timecards, 467 punches, 8
+profiles, unchanged. The backfill wrote nothing because production had no
+staffing events yet — the scheduling flow has not been used on it — so the
+"everything so far counts as told" clause was a no-op there and matters only on
+dev and in future.
+
+**Previous run: 2026-09-08, 0038 + 0039.** Backup (`backups/crewtracker-2026-09-08T17-18-02.sql`)
 → `db:migrate --prod` → `db:grants` → `db:schema` → commit both generated files → merge
 `scheduling` → `main` @ 16fe900 → live check. Verified read-only either side: 6 shows, 261
 timecards, 475 punches, 4 profiles, 2 assignments, unchanged; `shares_my_organization` present

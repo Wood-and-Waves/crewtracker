@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ywxvPyzh6tZRrjeBuEcRP4BkBDYj4nj2WMzl4jyTDt8MtgJ863aCXt8Q4hAxKR9
+\restrict vRiZr0JdlcLsTQ7XCIWUcw1RH5aG9LGVKvDNloDodCTvGWzsau3S6kNKYiKYxbE
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -1709,10 +1709,18 @@ CREATE TABLE "public"."staffing_events" (
     "days" "text",
     "actor" "uuid",
     "sent_at" timestamp with time zone,
+    "crew_told_at" timestamp with time zone,
     CONSTRAINT "staffing_events_kind_check" CHECK (("kind" = ANY (ARRAY['booked'::"text", 'accepted'::"text", 'declined'::"text", 'released'::"text", 'days_changed'::"text", 'moved'::"text", 'extended'::"text"])))
 );
 
 ALTER TABLE ONLY "public"."staffing_events" FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN "staffing_events"."crew_told_at"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."staffing_events"."crew_told_at" IS 'The crew member was told their days changed. Null = nobody has told them. NOT sent_at, which is the PM''s evening digest.';
 
 
 --
@@ -2277,6 +2285,13 @@ CREATE INDEX "shows_sent_to_scheduling_idx" ON "public"."shows" USING "btree" ("
 --
 
 CREATE INDEX "staffing_events_unsent_idx" ON "public"."staffing_events" USING "btree" ("show_id") WHERE ("sent_at" IS NULL);
+
+
+--
+-- Name: staffing_events_untold_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "staffing_events_untold_idx" ON "public"."staffing_events" USING "btree" ("show_id") WHERE ("crew_told_at" IS NULL);
 
 
 --
@@ -4527,5 +4542,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ywxvPyzh6tZRrjeBuEcRP4BkBDYj4nj2WMzl4jyTDt8MtgJ863aCXt8Q4hAxKR9
+\unrestrict vRiZr0JdlcLsTQ7XCIWUcw1RH5aG9LGVKvDNloDodCTvGWzsau3S6kNKYiKYxbE
 
