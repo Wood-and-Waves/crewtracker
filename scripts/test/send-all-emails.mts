@@ -97,7 +97,7 @@ const EMAILS: { name: string; send: () => Promise<{ error?: string }> }[] = [
     name: '5. Booking request — are you available?',
     send: () => sendBookingRequestEmail({
       to: 'alex@example.test', crewName: 'Alex Reyes', showName: SHOW, venue: 'Moscone West',
-      cityState: null, organizationName: ORG, role: 'A1', days,
+      cityState: 'San Francisco, CA', organizationName: ORG, role: 'A1', days,
       link: 'https://crewtracker.app/book/33333333-3333-3333-3333-333333333333',
       confirmUrl: 'https://crewtracker.app/book/33333333-3333-3333-3333-333333333333?a=confirm',
       declineUrl: 'https://crewtracker.app/book/33333333-3333-3333-3333-333333333333?a=decline',
@@ -171,14 +171,21 @@ const EMAILS: { name: string; send: () => Promise<{ error?: string }> }[] = [
   },
 ]
 
-console.log(`\nSending ${EMAILS.length} emails. Every one lands in ${process.env.DEV_EMAIL_TO}.\n`)
+// `npm run email:all -- 5 7` sends only those, for when one has been reworded
+// and the other ten do not need saying again.
+const wanted = process.argv.slice(2).map(Number).filter(n => Number.isInteger(n) && n > 0)
+const chosen = wanted.length
+  ? EMAILS.filter((_, i) => wanted.includes(i + 1))
+  : EMAILS
+
+console.log(`\nSending ${chosen.length} of ${EMAILS.length} emails. Every one lands in ${process.env.DEV_EMAIL_TO}.\n`)
 let sent = 0
-for (const e of EMAILS) {
+for (const e of chosen) {
   const { error } = await e.send()
   if (error) console.log(`  ✗ ${e.name}\n      ${error}`)
   else { console.log(`  ✓ ${e.name}`); sent++ }
   // Resend's default allowance is two a second; one at a time, unhurried.
   await new Promise(r => setTimeout(r, 600))
 }
-console.log(`\n${sent} of ${EMAILS.length} sent to ${process.env.DEV_EMAIL_TO}.`)
+console.log(`\n${sent} of ${chosen.length} sent to ${process.env.DEV_EMAIL_TO}.`)
 console.log('Subjects read "[dev → whoever] …" — that prefix is the guard, not part of the email.\n')

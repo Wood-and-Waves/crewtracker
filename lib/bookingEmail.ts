@@ -213,7 +213,11 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   // lost.
   const { range: when } = describeDateParts(input.days)
   const first = input.crewName.split(' ')[0]
-  const where = input.venue || input.cityState || null
+  // BOTH, not one or the other (Dan, 2026-09-09). The venue names the building
+  // and the city says whether this is a drive or a flight — a crew member
+  // deciding cannot answer without the second. `where` used to be
+  // `venue || cityState`, so a show with both printed only the venue.
+  const where = [input.venue, input.cityState].filter(Boolean).join(', ') || null
   const subject = `${input.organizationName}: are you available for ${input.showName}?`
 
   // The day-by-day schedule sits UNDER the Dates summary rather than replacing

@@ -856,6 +856,35 @@ console.log('\n--- the crew booking request email ---')
     [html.includes('>\n      Accept\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
   check('accept is green and decline is red',
     [html.includes('background:#1A7F37'), html.includes('background:#C0392B')], [true, true])
+  // Venue AND city (Dan, 2026-09-09): the building names where, the city says
+  // whether this is a drive or a flight. It printed only the venue before.
+  const bothPlaces = buildBookingRequestEmail({
+    to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West',
+    cityState: 'San Francisco, CA', organizationName: 'Wood & Waves', role: 'A1',
+    days: [{ date: '2026-10-01', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }],
+    link: 'https://crewtracker.app/book/abc',
+    confirmUrl: 'https://crewtracker.app/book/abc?a=confirm',
+    declineUrl: 'https://crewtracker.app/book/abc?a=decline',
+  })
+  check('the where line carries the venue and the city',
+    bothPlaces.text.includes('Where:  Moscone West, San Francisco, CA'), true)
+  check('and the HTML does too', bothPlaces.html.includes('Moscone West, San Francisco, CA'), true)
+  // Either one alone still reads as a place, with no stray comma.
+  const venueOnly = buildBookingRequestEmail({
+    to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West',
+    cityState: null, organizationName: 'Wood & Waves', role: 'A1',
+    days: [{ date: '2026-10-01', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }],
+    link: 'x', confirmUrl: 'x', declineUrl: 'x',
+  })
+  check('a venue with no city has no trailing comma', venueOnly.text.includes('Where:  Moscone West\n'), true)
+  const cityOnly = buildBookingRequestEmail({
+    to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', venue: null,
+    cityState: 'San Francisco, CA', organizationName: 'Wood & Waves', role: 'A1',
+    days: [{ date: '2026-10-01', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }],
+    link: 'x', confirmUrl: 'x', declineUrl: 'x',
+  })
+  check('a city with no venue stands alone', cityOnly.text.includes('Where:  San Francisco, CA'), true)
+
   check('the old single "confirm or decline" link is gone', text.includes('Confirm or decline'), false)
   check('the SMS still carries no link at all',
     buildBookingRequestText({ crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West', cityState: null,
