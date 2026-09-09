@@ -74,7 +74,7 @@ export default async function PmInvitePage({
       <Shell>
         <h1 className="mb-2 text-center text-xl font-bold text-ink">This link isn&apos;t valid</h1>
         <p className="text-center text-sm text-muted">
-          It may have been declined, or replaced by a newer invitation. Check with whoever named you.
+          It may have been declined, or replaced by a newer invitation. Check with whoever invited you.
         </p>
       </Shell>
     )
@@ -90,7 +90,13 @@ export default async function PmInvitePage({
   }
 
   const where = invite.venue || invite.cityState
-  const namedBy = invite.inviterName ? `${invite.inviterName} at ${invite.organizationName}` : invite.organizationName
+  // INVITED, never "named" (Dan, 2026-09-08/09) — the same word the email now
+  // uses, and the honest one: being named grants nothing until this page is
+  // used to accept.
+  // The COMPANY does the inviting. The individual who pressed the button was
+  // named here until 2026-09-09 ("Dan Smith at Wood & Waves Productions has
+  // invited you") — Dan cut it: a PM works for the company, and a personal name
+  // dates the page the moment that person leaves.
 
   // What the show IS: the run, day by day. A PM deciding whether they can do a
   // show asks "which days, and what are they" before anything else.
@@ -118,9 +124,6 @@ export default async function PmInvitePage({
         <p className="mb-5 text-center text-sm text-muted">
           {describeShowDates(invite.startDate, invite.endDate)}{where ? ` · ${where}` : ''}
         </p>
-        <p className="mb-5 text-center text-sm text-ink">
-          {namedBy} has been told, and the show is theirs to give to somebody else.
-        </p>
         <AcceptPmForm token={invite.token} declined note={invite.declinedNote} />
       </Shell>
     )
@@ -135,32 +138,25 @@ export default async function PmInvitePage({
           {describeShowDates(invite.startDate, invite.endDate)}{where ? ` · ${where}` : ''}
         </p>
         {runDetail}
-        <p className="mb-5 text-center text-sm text-ink">
-          It&rsquo;s in your CrewTracker now. {namedBy} named you.
-        </p>
         <Link href={`/dashboard/shows/${invite.showId}`} className="block">
           <span className="block w-full rounded-field bg-accent px-4 py-3 text-center text-sm font-semibold uppercase tracking-wide text-accent-ink">
             Open the show
           </span>
         </Link>
-        <div className="mt-4">
-          <AcceptPmForm token={invite.token} accepted />
-        </div>
       </Shell>
     )
   }
 
   return (
     <Shell>
-      <p className="text-center text-sm text-muted">{namedBy} named you production manager on</p>
+      <p className="text-center text-sm text-muted">
+        {invite.organizationName} has invited you to be the production manager on
+      </p>
       <h1 className="mb-1 mt-1 text-center text-2xl font-extrabold text-ink">{invite.showName}</h1>
       <p className="mb-5 text-center text-sm text-muted">
         {describeShowDates(invite.startDate, invite.endDate)}{where ? ` · ${where}` : ''}
       </p>
       {runDetail}
-      <p className="mb-5 text-center text-sm text-ink">
-        Accept to get the show in your CrewTracker. Until you do, nothing changes on your side.
-      </p>
       <AcceptPmForm token={invite.token} />
     </Shell>
   )

@@ -67,9 +67,20 @@ export type DigestLine = {
   time: string
   /** describeEvent()'s sentence. */
   text: string
-  /** The CURRENT state, computed against today's live timecards — null only
-   *  when the caller genuinely has nothing to say (should not normally happen). */
-  status: 'accepted' | 'waiting on reply' | 'declined' | 'released' | null
+  /**
+   * NO LONGER PRINTED (Dan, 2026-09-09). It was the person's state at SEND
+   * time, printed after the event's own sentence, which produced lines like
+   * "Bo Ellery declined Stagehand — accepted": two different moments, both
+   * true, reading as the email contradicting itself. The digest is a record of
+   * what happened today; where somebody stands now is on the show's own screen,
+   * one click away.
+   *
+   * The field stays because app/api/digest still computes it and because it is
+   * the honest way to bring the line back if it is ever wanted — but nothing
+   * renders it, and reintroducing it means solving the two-moments problem
+   * first.
+   */
+  status?: 'accepted' | 'waiting on reply' | 'declined' | 'released' | null
 }
 
 export type DigestEmailInput = {
@@ -86,7 +97,7 @@ export function buildDigestEmail(input: DigestEmailInput): { subject: string; te
   const subject = `${input.showName}: today's crew changes (${input.date})`
   const greeting = input.pmName ? `Hi ${input.pmName.split(' ')[0]},` : 'Hi,'
 
-  const textLines = input.lines.map(l => `${l.time}  ${l.text}${l.status ? ` — ${l.status}` : ''}`)
+  const textLines = input.lines.map(l => `${l.time}  ${l.text}`)
 
   const text = [
     greeting,
@@ -97,7 +108,7 @@ export function buildDigestEmail(input: DigestEmailInput): { subject: string; te
     '',
     input.link,
     '',
-    '— CrewTracker',
+    'Sent by CrewTracker.app',
   ].join('\n')
 
   const rowsHtml = input.lines
@@ -105,9 +116,7 @@ export function buildDigestEmail(input: DigestEmailInput): { subject: string; te
       l => `
     <tr>
       <td style="padding:6px 12px 6px 0;font-size:13px;color:#71717a;white-space:nowrap;vertical-align:top">${escapeHtml(l.time)}</td>
-      <td style="padding:6px 0;font-size:14px;color:#18181b;vertical-align:top">${escapeHtml(l.text)}${
-        l.status ? ` <span style="color:#71717a">— ${escapeHtml(l.status)}</span>` : ''
-      }</td>
+      <td style="padding:6px 0;font-size:14px;color:#18181b;vertical-align:top">${escapeHtml(l.text)}</td>
     </tr>`,
     )
     .join('')
@@ -123,7 +132,7 @@ export function buildDigestEmail(input: DigestEmailInput): { subject: string; te
       Open the show
     </a>
   </p>
-  <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">Sent by CrewTracker.app</p>
 </div>`.trim()
 
   return { subject, text, html }

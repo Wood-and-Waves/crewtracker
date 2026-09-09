@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { buildReportCsv } from '@/lib/reportCsv'
 import { buildReportPdf } from '@/lib/reportPdf'
 import { fetchLiveTimecards } from '@/lib/timecardFields'
+import { describeShowDates } from '@/lib/pmInviteEmail'
 
 // The Final Report: a PM signs off that times are locked and the complete
 // payroll report — INCLUDING financials — goes to the addresses an admin
@@ -180,6 +181,31 @@ export async function POST(request: Request) {
 
   // --- Send ----------------------------------------------------------------
   const safeName = show.name.replace(/[^\w.-]+/g, '_')
+
+  // This is the email most likely to be forwarded to a client, and until
+  // 2026-09-09 it was the only one in the app with no HTML version at all —
+  // so the message carrying the payroll numbers arrived as unstyled text while
+  // every booking request looked designed. Same 520px shape as the rest.
+  //
+  // The dates go through describeShowDates for the same reason: this was the
+  // one place in the app that showed a human a raw database date
+  // ("2026-09-15 to 2026-09-20").
+  const when = describeShowDates(show.start_date, show.end_date)
+  const esc = (v: string) =>
+    v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const subtitle = [show.client_company, show.job_number].filter(Boolean).join(' — ')
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
+  <p style="font-size:19px;font-weight:700;margin:0 0 4px">${esc(show.name)}</p>
+  ${subtitle ? `<p style="font-size:14px;color:#52525b;margin:0 0 2px">${esc(subtitle)}</p>` : ''}
+  <p style="font-size:14px;color:#52525b;margin:0 0 20px">${esc(when)}${show.city_state ? ` · ${esc(show.city_state)}` : ''}</p>
+  <p style="font-size:15px;line-height:1.5;margin:0 0 16px">
+    This show is closed out and its times are final. Attached are the payroll timesheets (PDF) and
+    the payroll data (CSV).
+  </p>
+  <p style="font-size:14px;color:#52525b;margin:0 0 24px">${esc(finalizedNote)}.</p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">Sent from CrewTracker.app</p>
+</div>`.trim()
   try {
     const { error: sendError } = await sendEmail({
       from: FROM,
@@ -189,14 +215,16 @@ export async function POST(request: Request) {
       text: [
         `${show.name}`,
         [show.client_company, show.job_number].filter(Boolean).join(' — '),
-        `${show.start_date} to ${show.end_date}${show.city_state ? ` · ${show.city_state}` : ''}`,
+        `${when}${show.city_state ? ` · ${show.city_state}` : ''}`,
         '',
-        'Times are locked. Attached are the payroll timesheets (PDF) and the payroll data (CSV).',
+        'This show is closed out and its times are final. Attached are the payroll',
+        'timesheets (PDF) and the payroll data (CSV).',
         '',
-        finalizedNote,
+        `${finalizedNote}.`,
         '',
-        'Created with the CrewTracker app',
+        'Sent from CrewTracker.app',
       ].filter(l => l !== undefined).join('\n'),
+      html,
       attachments: [
         { filename: `${safeName}_Report.pdf`, content: pdfBuffer.toString('base64') },
         { filename: `${safeName}_Payroll.csv`, content: Buffer.from(csv, 'utf8').toString('base64') },

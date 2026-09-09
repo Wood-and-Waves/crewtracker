@@ -110,11 +110,7 @@ export default async function BookingPage({
           {describeDayLines(invite.days).map(l => (
             <li key={l.date} className="flex items-baseline justify-between gap-3 text-sm">
               <span className="text-ink">{l.date}</span>
-              {(l.production || l.you) && (
-                <span className="shrink-0 text-xs text-muted">
-                  {[l.production, l.you].filter(Boolean).join(' · ')}
-                </span>
-              )}
+              {l.text && <span className="shrink-0 text-xs text-muted">{l.text}</span>}
             </li>
           ))}
         </ul>

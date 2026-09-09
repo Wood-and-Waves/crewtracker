@@ -10,6 +10,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { maybeSendReadyEmail, isExpectedReadyReason } from '@/lib/showReadiness'
 import { sendPmDeclinedEmail } from '@/lib/pmInviteEmail'
+import { siteOrigin } from '@/lib/siteOrigin'
 
 export type PmInviteView = {
   token: string
@@ -205,6 +206,7 @@ export async function declinePmInvite(token: string, note?: string | null): Prom
           showName: show.name,
           orgName: org?.name ?? 'Your company',
           note: text,
+          link: `${siteOrigin()}/dashboard/shows/${show.id}`,
         })
         if (mailError) console.error('pm decline note: it did not send:', mailError)
         else toldLate = inviter.email
@@ -239,6 +241,7 @@ export async function declinePmInvite(token: string, note?: string | null): Prom
         showName: show.name,
         orgName: org?.name ?? 'Your company',
         note: (note ?? '').trim() || null,
+        link: `${siteOrigin()}/dashboard/shows/${show.id}`,
       })
       if (mailError) console.error('pm decline: the notice did not send:', mailError)
       else told = inviter.email

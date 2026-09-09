@@ -65,13 +65,26 @@ export type ReadyEmailInput = {
   venue: string | null
   orgName: string
   link: string
-  days: {
-    date: string
-    label: string
-    rooms: { name: string; people: { name: string; role: string | null; phone: string | null }[] }[]
+  /**
+   * BY ROOM, NOT BY DATE (Dan, 2026-09-09). It used to print a block per day,
+   * each listing its rooms and who was in them — the same nine names three
+   * times on a three-day show, and a second per-person list under that. A PM
+   * reads this room by room, because a room is the thing they hand to
+   * somebody, so a room is the block and the dates ride on the person.
+   *
+   * A PERSON IN TWO ROOMS APPEARS IN BOTH, with their dates in each room, even
+   * where those overlap: that is not a duplicate, it is two assignments, and
+   * collapsing it would hide the double-booking the PM most needs to see.
+   */
+  rooms: {
+    name: string
+    people: {
+      name: string
+      role: string | null
+      /** Their days IN THIS ROOM, already compressed — use compressDays(). */
+      days: string
+    }[]
   }[]
-  perPerson: { name: string; role: string | null; days: string }[]
-  waiting: number
 }
 
 export function buildReadyEmail(input: ReadyEmailInput): { subject: string; text: string; html: string } {
@@ -79,71 +92,47 @@ export function buildReadyEmail(input: ReadyEmailInput): { subject: string; text
   const where = [input.showName, input.dates, input.venue].filter(Boolean).join(' · ')
   const greeting = input.pmName ? `Hi ${input.pmName.split(' ')[0]},` : 'Hi,'
 
-  const textDayBlocks: string[] = []
-  const htmlDayBlocks: string[] = []
-  for (const day of input.days) {
-    const heading = day.label ? `${fmtDate(day.date)} · ${day.label}` : fmtDate(day.date)
-    const lines = [`── ${heading}`]
-    const roomsHtml: string[] = []
-    for (const room of day.rooms) {
-      lines.push(room.name)
-      for (const p of room.people) {
-        lines.push(`  ${p.name} · ${p.role || 'Crew'} · ${p.phone ?? 'no phone on file'}`)
-      }
-      roomsHtml.push(
-        `<p style="font-size:14px;font-weight:600;margin:12px 0 4px">${escapeHtml(room.name)}</p>` +
-          `<ul style="margin:0 0 8px;padding-left:20px;font-size:14px;line-height:1.6">` +
-          room.people
-            .map(
-              p =>
-                `<li>${escapeHtml(p.name)} · ${escapeHtml(p.role || 'Crew')} · ${escapeHtml(
-                  p.phone ?? 'no phone on file',
-                )}</li>`,
-            )
-            .join('') +
-          `</ul>`,
-      )
-    }
-    textDayBlocks.push(lines.join('\n'))
-    htmlDayBlocks.push(`<h3 style="font-size:15px;margin:20px 0 4px">${escapeHtml(heading)}</h3>` + roomsHtml.join(''))
+  const textRoomBlocks: string[] = []
+  const htmlRoomBlocks: string[] = []
+  for (const room of input.rooms) {
+    textRoomBlocks.push([
+      room.name,
+      ...room.people.map(p => `- ${p.name} · ${p.role || 'Crew'} · ${p.days}`),
+      '',
+    ].join('\n'))
+    htmlRoomBlocks.push(
+      `<p style="font-size:14px;font-weight:700;margin:20px 0 4px">${escapeHtml(room.name)}</p>` +
+        `<ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.6">` +
+        room.people
+          .map(p => `<li>${escapeHtml(p.name)} · ${escapeHtml(p.role || 'Crew')} · ${escapeHtml(p.days)}</li>`)
+          .join('') +
+        `</ul>`,
+    )
   }
-
-  const perPersonText = input.perPerson.map(p => `${p.name} · ${p.role || 'Crew'} · ${p.days}`)
-  const perPersonHtml = input.perPerson
-    .map(p => `<li>${escapeHtml(p.name)} · ${escapeHtml(p.role || 'Crew')} · ${escapeHtml(p.days)}</li>`)
-    .join('')
 
   const text = [
     greeting,
     '',
     `${where} is fully staffed.`,
-    `${input.waiting} waiting on a reply`,
     '',
-    ...textDayBlocks,
-    '',
-    "Everyone's days:",
-    ...perPersonText,
-    '',
+    ...textRoomBlocks,
     input.link,
     '',
-    '— CrewTracker',
+    'Sent by CrewTracker.app',
   ].join('\n')
 
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181b">
   <p style="font-size:15px;margin:0 0 16px">${escapeHtml(greeting)}</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 8px"><strong>${escapeHtml(where)}</strong> is fully staffed.</p>
-  <p style="font-size:13px;color:#71717a;margin:0 0 16px">${input.waiting} waiting on a reply</p>
-  ${htmlDayBlocks.join('')}
-  <p style="font-size:14px;font-weight:600;margin:20px 0 4px">Everyone's days:</p>
-  <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;line-height:1.6">${perPersonHtml}</ul>
-  <p style="margin:0 0 24px">
+  ${htmlRoomBlocks.join('')}
+  <p style="margin:24px 0 24px">
     <a href="${escapeHtml(input.link)}"
        style="display:inline-block;background:#3366CC;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">
       Open the show
     </a>
   </p>
-  <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">Sent by CrewTracker.app</p>
 </div>`.trim()
 
   return { subject, text, html }

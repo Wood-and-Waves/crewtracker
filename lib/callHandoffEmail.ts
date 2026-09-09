@@ -39,9 +39,14 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
 
   // Company and show name in the subject: a scheduler working several
   // organizations needs to know whose show this is from the inbox list alone.
-  const subject = `${input.organizationName}: ${input.showName} needs scheduling — ${input.callSize}, ${dates}`
+  // JUST THE SHOW AND WHAT IS WANTED (Dan, 2026-09-09). It used to carry the
+  // company, the crew count and the dates as well — 95 characters, of which an
+  // inbox shows 40 to 60, so everything useful was cut off. All of it is in the
+  // first two lines of the body.
+  const subject = `${input.showName} is ready for staffing`
 
-  const greeting = input.recipientName ? `Hi ${input.recipientName},` : 'Hi,'
+  // First name, as every other email in the app does.
+  const greeting = input.recipientName ? `Hi ${input.recipientName.split(' ')[0]},` : 'Hi,'
   const sentBy = input.sentByName ? ` by ${input.sentByName}` : ''
   // NOT the position-row count. Positions are stored per room per day, so a
   // five-day show needing twelve people has sixty rows — and an email saying
@@ -51,16 +56,15 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
   const text = [
     greeting,
     '',
-    `${input.showName} has been sent to scheduling${sentBy}. Any scheduler can fill its positions; it's first come, first served.`,
+    `${input.showName} has been sent to scheduling${sentBy}.`,
     '',
-    `Show:       ${input.showName}`,
     input.venue ? `Venue:      ${input.venue}` : null,
     `Dates:      ${dates}`,
     `Positions:  ${positions}`,
     '',
     `Open it here: ${input.link}`,
     '',
-    '— CrewTracker',
+    'Sent from CrewTracker.app',
   ].filter(Boolean).join('\n')
 
   const html = `
@@ -68,11 +72,9 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
   <p style="font-size:15px;margin:0 0 16px">${escapeHtml(greeting)}</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">
     <strong>${escapeHtml(input.showName)}</strong> has been sent to scheduling${escapeHtml(sentBy)}.
-    Any scheduler can fill its positions; it&rsquo;s first come, first served.
   </p>
   <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 24px">
-    <tr><td style="padding:6px 0;color:#71717a;width:80px">Show</td><td style="padding:6px 0">${escapeHtml(input.showName)}</td></tr>
-    ${input.venue ? `<tr><td style="padding:6px 0;color:#71717a">Venue</td><td style="padding:6px 0">${escapeHtml(input.venue)}</td></tr>` : ''}
+    ${input.venue ? `<tr><td style="padding:6px 0;color:#71717a;width:80px">Venue</td><td style="padding:6px 0">${escapeHtml(input.venue)}</td></tr>` : ''}
     <tr><td style="padding:6px 0;color:#71717a">Dates</td><td style="padding:6px 0">${escapeHtml(dates)}</td></tr>
     <tr><td style="padding:6px 0;color:#71717a">Positions</td><td style="padding:6px 0">${escapeHtml(positions)}</td></tr>
   </table>
@@ -82,7 +84,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
       Open the show
     </a>
   </p>
-  <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">Sent from CrewTracker.app</p>
 </div>`.trim()
 
   return { subject, text, html }

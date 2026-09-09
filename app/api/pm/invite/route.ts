@@ -161,9 +161,13 @@ async function send(
   profileId: string,
   token: string,
 ) {
-  const [{ data: pm }, { data: org }] = await Promise.all([
+  // The RUN, day by day, because that is what a PM is deciding on (Dan,
+  // 2026-09-09: "It is all about the dates at this point"). A range cannot say
+  // whether the last day is a show or a load-out.
+  const [{ data: pm }, { data: org }, { data: days }] = await Promise.all([
     admin.from('profiles').select('email, full_name').eq('id', profileId).maybeSingle(),
     admin.from('organizations').select('name').eq('id', show.organization_id).maybeSingle(),
+    admin.from('work_days').select('date, activities').eq('show_id', show.id).order('date'),
   ])
   if (!pm?.email) return NextResponse.json({ ok: true, sentTo: null, warning: 'They have no email address on file, so no invitation was sent.' })
 
@@ -172,9 +176,9 @@ async function send(
     pmName: pm.full_name ?? null,
     showName: show.name,
     dates: describeShowDates(show.start_date, show.end_date),
+    days: (days ?? []).map(d => ({ date: d.date, activities: d.activities ?? [] })),
     venue: show.venue || show.city_state || null,
     orgName: org?.name ?? 'Your company',
-    inviterName: user.fullName,
     // Two buttons, two links (2026-09-08). ?accept=1 IS the acceptance — the
     // page it opens confirms it. ?decline=1 opens the same page on its note
     // step, because a decline carries a message back. Never the Host header —
@@ -184,6 +188,6 @@ async function send(
   })
   // The naming happened either way; only the email did not. Say so rather
   // than pretend, and let Resend on Edit Show try again.
-  if (error) return NextResponse.json({ ok: true, sentTo: pm.email, warning: `They are named, but the email did not send: ${error}` })
+  if (error) return NextResponse.json({ ok: true, sentTo: pm.email, warning: `They are invited, but the email did not send: ${error}` })
   return NextResponse.json({ ok: true, sentTo: pm.email })
 }

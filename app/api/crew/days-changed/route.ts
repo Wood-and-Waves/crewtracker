@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { liveBookings } from '@/lib/timecardFields'
 import { sendDaysChangedEmail } from '@/lib/daysChangedEmail'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { siteOrigin } from '@/lib/siteOrigin'
 import type { EngagementDay } from '@/lib/bookingEmail'
 
 // Telling crew whose days on a show changed. Offered, never forced — see
@@ -11,8 +13,15 @@ import type { EngagementDay } from '@/lib/bookingEmail'
 //
 // AUTHORIZATION IS THE RLS POLICY. The show and the crew members are read
 // through the CALLER's session, so if either comes back they are entitled to
-// it — same shape as app/api/bookings/send. No write happens here; this only
-// reads and emails, so there is nothing for the service role to do.
+// it — same shape as app/api/bookings/send.
+//
+// IT MINTS A BOOKING TOKEN, because since 2026-09-09 the notice carries the
+// same two answer buttons as the original ask (Dan: a changed schedule is a
+// new question). That is one write, on `booking_invites`, through the service
+// role for the same reason app/api/bookings/send uses it — and the token is
+// FRESH each time, so the link in an older notice stops working the moment the
+// schedule changes again. Everything that decides WHO may do this has already
+// happened above, under the caller's own session.
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -40,7 +49,7 @@ export async function POST(request: Request) {
   }
 
   const [{ data: show }, { data: crew }] = await Promise.all([
-    supabase.from('shows').select('id, name, venue, organization_id').eq('id', showId).maybeSingle(),
+    supabase.from('shows').select('id, name, venue, organization_id, end_date').eq('id', showId).maybeSingle(),
     supabase.from('crew_members').select('id, full_name, email').in('id', crewMemberIds),
   ])
   if (!show || !crew?.length) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
@@ -85,9 +94,49 @@ export async function POST(request: Request) {
   for (const id of crewMemberIds) {
     if (!foundIds.has(id)) skipped.push(id)
   }
+  // Same expiry rule as the original ask: 30 days, and never past the show —
+  // a link that still works afterwards is only a way to confuse somebody.
+  const admin = createAdminClient()
+  const thirtyDays = new Date(Date.now() + 30 * 86_400_000)
+  const dayAfterShow = new Date((show.end_date ?? '') + 'T00:00:00')
+  dayAfterShow.setDate(dayAfterShow.getDate() + 1)
+  const expiresAt = new Date(
+    isNaN(dayAfterShow.getTime()) ? thirtyDays.getTime() : Math.min(thirtyDays.getTime(), dayAfterShow.getTime()),
+  ).toISOString()
+
   for (const c of crew) {
     if (!c.email) { skipped.push(c.full_name); continue }
     const days = [...(byPerson.get(c.id)?.values() ?? [])].sort((a, b) => a.date.localeCompare(b.date))
+
+    // Nobody with no days left is being ASKED anything — that notice says they
+    // are off the show, and there is nothing to accept.
+    let confirmUrl: string | null = null
+    let declineUrl: string | null = null
+    if (days.length) {
+      const { data: invite } = await admin
+        .from('booking_invites')
+        .upsert({
+          show_id: showId,
+          crew_member_id: c.id,
+          email: c.email,
+          sent_by: user.id,
+          sent_at: new Date().toISOString(),
+          expires_at: expiresAt,
+          token: crypto.randomUUID(),
+          // A new question, so an older answer is not an answer to it.
+          responded_at: null,
+          response: null,
+          note: null,
+        }, { onConflict: 'show_id,crew_member_id' })
+        .select('token')
+        .single()
+      if (invite) {
+        const origin = siteOrigin()  // never the Host header — see lib/siteOrigin.ts
+        confirmUrl = `${origin}/book/${invite.token}?a=confirm`
+        declineUrl = `${origin}/book/${invite.token}?a=decline`
+      }
+    }
+
     const result = await sendDaysChangedEmail({
       to: c.email,
       crewName: c.full_name,
@@ -95,6 +144,8 @@ export async function POST(request: Request) {
       orgName: org?.name ?? 'Your company',
       venue: show.venue ?? null,
       days,
+      confirmUrl,
+      declineUrl,
     })
     if (result.error) { skipped.push(c.full_name); continue }
     sent++

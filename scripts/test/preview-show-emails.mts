@@ -43,52 +43,26 @@ console.log('\n\n=== Ready email (show fully staffed) ===\n')
 
 // 3 days, 2 rooms: Alex works all three days, Casey only load-in/show,
 // Jordan skips the show day and comes back for load-out.
-const readyDays = [
-  {
-    date: '2026-09-08', label: 'Load-in',
-    rooms: [
-      { name: 'Ballroom', people: [
-        { name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' },
-        { name: 'Jordan Blake', role: 'Stagehand', phone: null },
-      ] },
-      { name: 'Breakout A', people: [
-        { name: 'Casey Nguyen', role: 'A2', phone: '(312) 555-0142' },
-      ] },
-    ],
-  },
-  {
-    date: '2026-09-09', label: 'Show',
-    rooms: [
-      { name: 'Ballroom', people: [
-        { name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' },
-      ] },
-      { name: 'Breakout A', people: [
-        { name: 'Casey Nguyen', role: 'A2', phone: '(312) 555-0142' },
-      ] },
-    ],
-  },
-  {
-    date: '2026-09-10', label: 'Show · Load-out',
-    rooms: [
-      { name: 'Ballroom', people: [
-        { name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' },
-        { name: 'Jordan Blake', role: 'Stagehand', phone: null },
-      ] },
-    ],
-  },
-]
-
-const readyPerPerson = [
-  { name: 'Alex Reyes', role: 'A1', days: compressDays(['2026-09-08', '2026-09-09', '2026-09-10']) },
-  { name: 'Casey Nguyen', role: 'A2', days: compressDays(['2026-09-08', '2026-09-09']) },
-  { name: 'Jordan Blake', role: 'Stagehand', days: compressDays(['2026-09-08', '2026-09-10']) },
+// By room, with each person's dates IN THAT ROOM. Casey is deliberately in
+// BOTH rooms with overlapping dates — Dan, 2026-09-09: "If the same person is
+// in 2 rooms, it should show them in both and the dates in each room, even if
+// they overlap."
+const readyRooms = [
+  { name: 'Ballroom', people: [
+    { name: 'Alex Reyes', role: 'A1', days: compressDays(['2026-09-08', '2026-09-09', '2026-09-10']) },
+    { name: 'Casey Nguyen', role: 'A2', days: compressDays(['2026-09-10']) },
+    { name: 'Jordan Blake', role: 'Stagehand', days: compressDays(['2026-09-08', '2026-09-10']) },
+  ] },
+  { name: 'Breakout A', people: [
+    { name: 'Casey Nguyen', role: 'A2', days: compressDays(['2026-09-08', '2026-09-09', '2026-09-10']) },
+  ] },
 ]
 
 const ready = buildReadyEmail({
   to: 'sam@example.test', pmName: 'Sam Okafor', showName: 'Northwind User Conference',
   dates: 'Sep 8–10', venue: 'Moscone West', orgName: 'Wood & Waves Productions',
   link: 'https://crewtracker.app/dashboard/shows/abc123',
-  days: readyDays, perPerson: readyPerPerson, waiting: 0,
+  rooms: readyRooms,
 })
 
 console.log(`Subject: ${ready.subject}\n`)
@@ -127,6 +101,8 @@ const daysChanged = buildDaysChangedEmail({
     { date: '2026-09-09', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] },
     { date: '2026-09-10', isTravelDay: false, travelIn: false, travelOut: true, activities: ['show', 'load_out'] },
   ],
+  confirmUrl: 'https://crewtracker.app/book/abc123?a=confirm',
+  declineUrl: 'https://crewtracker.app/book/abc123?a=decline',
 })
 
 console.log(`Subject: ${daysChanged.subject}\n`)

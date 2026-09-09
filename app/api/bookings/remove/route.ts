@@ -107,6 +107,10 @@ export async function POST(request: Request) {
     venue: show.venue ?? null,
     days: [],
     removed: true,
+    // The dates they were holding, read BEFORE the delete. This is the only
+    // path that can name them: everywhere else the rows are gone by the time
+    // the notice is offered.
+    heldDates: dates.length ? compressDays(dates) : null,
   })
   if (mailError) {
     return NextResponse.json({ ok: true, removed: gone.length, emailed: false, warning: `They were removed, but the email did not send: ${mailError}` })

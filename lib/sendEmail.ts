@@ -28,6 +28,21 @@
 // top-level `new Resend(...)` throws during `next build` when the key is
 // absent, which broke every Preview deployment on 2026-07-27.
 
+// THE SIGN-OFF SAYS WHO CAUSED THE SEND (Dan, 2026-09-09):
+//
+//   "Sent by CrewTracker.app"   — the app decided. Nobody pressed anything:
+//                                 the evening digest and the fully-staffed
+//                                 email, which fires when the last
+//                                 confirmation lands.
+//   "Sent from CrewTracker.app" — a person pressed something and this went out
+//                                 as a result: every invitation, request,
+//                                 change notice, decline notice, handoff and
+//                                 the Final Report.
+//
+// A new sender picks one of the two. The distinction is worth keeping because
+// it tells the reader whether a human is behind the message, which decides
+// whether it is worth replying to anybody about.
+
 import { Resend } from 'resend'
 
 const PRODUCTION_REF = 'nfrvxkwemtittrqboebl'

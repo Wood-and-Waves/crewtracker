@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn"
 
-type Variant = "primary" | "ghost" | "danger"
+type Variant = "primary" | "ghost" | "danger" | "good"
 type Size = "sm" | "md"
 
 // Showbill controls: squared, uppercase, decisive. The 2px ink border on ghost
@@ -13,6 +13,10 @@ const variants: Record<Variant, string> = {
   primary: "bg-accent text-accent-ink hover:opacity-90",
   ghost: "bg-surface border-2 border-ink text-ink hover:bg-surface-2",
   danger: "bg-danger text-white hover:opacity-90",
+  // Accept, beside a red Decline (Dan, 2026-09-09). --good is the existing
+  // semantic green; the pair is deliberately NOT the brand accent, because
+  // these two are an answer, not the page's main action.
+  good: "bg-good text-white hover:opacity-90",
 }
 
 const sizes: Record<Size, string> = {

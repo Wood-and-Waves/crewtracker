@@ -12,9 +12,16 @@ const { subject, text } = buildPmInviteEmail({
   pmName: 'Sam Okafor',
   showName: 'Northwind User Conference',
   dates: describeShowDates('2026-09-04', '2026-09-09'),
+  days: [
+    { date: '2026-09-04', activities: ['travel'] },
+    { date: '2026-09-05', activities: ['load_in'] },
+    { date: '2026-09-06', activities: ['rehearsal'] },
+    { date: '2026-09-07', activities: ['show'] },
+    { date: '2026-09-08', activities: ['show'] },
+    { date: '2026-09-09', activities: ['show', 'load_out', 'travel'] },
+  ],
   venue: 'Moscone West',
   orgName: 'Wood & Waves Productions',
-  inviterName: 'Dan Smith',
   acceptUrl: 'https://crewtracker.app/pm/abc123?accept=1',
   declineUrl: 'https://crewtracker.app/pm/abc123?decline=1',
 })

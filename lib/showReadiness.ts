@@ -21,7 +21,7 @@ export async function maybeSendReadyEmail(admin: SupabaseClient, showId: string)
     const [{ data: slots }, { data: cards }] = await Promise.all([
       admin.from('crew_call_positions').select('id, rooms!inner(show_id), timecards(booking_status)').eq('rooms.show_id', showId),
       admin.from('timecards')
-        .select('id, crew_member_name, role, booking_status, crew_member_id, crew_members(phone), rooms!inner(name, work_days!inner(date, activities))')
+        .select('id, crew_member_name, role, booking_status, crew_member_id, rooms!inner(name, work_days!inner(date, activities))')
         .eq('show_id', showId).neq('booking_status', 'declined'),
     ])
     // No positions and no live timecards is not "fully staffed" — it's nothing to staff.
@@ -36,35 +36,41 @@ export async function maybeSendReadyEmail(admin: SupabaseClient, showId: string)
     ])
     if (!pm?.email) return { sent: false, reason: 'PM has no email' }
 
-    // Roster by day and room; each person's days across the show.
-    const byDate = new Map<string, { label: string; rooms: Map<string, { name: string; role: string | null; phone: string | null }[]> }>()
-    const daysByPerson = new Map<string, { name: string; role: string | null; dates: Set<string> }>()
+    // ROSTER BY ROOM (Dan, 2026-09-09), each person carrying their own dates
+    // in that room. A room is what a PM hands to somebody, so a room is the
+    // block; a person in two rooms is two entries, with the dates they are in
+    // each — overlapping dates included, because that is a double-booking the
+    // PM needs to see rather than a duplicate to tidy away.
+    //
+    // Rooms are per work-day rows, so a room across the run is matched by NAME.
+    // Keyed by (room, person, role): one person legitimately holds two roles.
+    // NO PHONE NUMBERS (Dan, 2026-09-09). They were on every line; the roster
+    // is who is in which room and when, and the numbers are in the directory.
+    const byRoom = new Map<string, Map<string, { name: string; role: string | null; dates: Set<string> }>>()
     for (const t of (cards ?? []) as any[]) {
       const room = Array.isArray(t.rooms) ? t.rooms[0] : t.rooms
       const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-      const cm = Array.isArray(t.crew_members) ? t.crew_members[0] : t.crew_members
-      if (!wd?.date) continue
-      // dayLabel returns null for "nothing set" — coerced to '' here since
-      // ReadyEmailInput's label is a plain string (buildReadyEmail already
-      // treats a falsy label as "nothing to say" and omits it from the line).
-      const day = byDate.get(wd.date) ?? { label: dayLabel(wd.activities ?? []) ?? '', rooms: new Map() }
-      const people = day.rooms.get(room.name) ?? []
-      people.push({ name: t.crew_member_name, role: t.role ?? null, phone: cm?.phone ?? null })
-      day.rooms.set(room.name, people); byDate.set(wd.date, day)
+      if (!wd?.date || !room?.name) continue
+      const people = byRoom.get(room.name) ?? new Map()
       const key = `${t.crew_member_name}|${t.role ?? ''}`
-      const p = daysByPerson.get(key) ?? { name: t.crew_member_name, role: t.role ?? null, dates: new Set<string>() }
-      p.dates.add(wd.date); daysByPerson.set(key, p)
+      const p = people.get(key) ?? {
+        name: t.crew_member_name, role: t.role ?? null, dates: new Set<string>(),
+      }
+      p.dates.add(wd.date)
+      people.set(key, p); byRoom.set(room.name, people)
     }
     const input = {
       to: pm.email, pmName: pm.full_name ?? null, showName: show.name,
       dates: describeShowDates(show.start_date, show.end_date), venue: show.venue || show.city_state || null,
       orgName: org?.name ?? 'Your company', link: `${siteOrigin()}/dashboard/shows/${show.id}`,
-      days: [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, d]) => ({
-        date, label: d.label,
-        rooms: [...d.rooms.entries()].map(([name, people]) => ({ name, people: people.sort((x, y) => x.name.localeCompare(y.name)) })),
-      })),
-      perPerson: [...daysByPerson.values()].sort((a, b) => a.name.localeCompare(b.name)).map(p => ({ name: p.name, role: p.role, days: compressDays([...p.dates]) })),
-      waiting: 0, // the open/waiting gate above already returned unless both are zero
+      rooms: [...byRoom.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, people]) => ({
+          name,
+          people: [...people.values()]
+            .sort((x, y) => x.name.localeCompare(y.name))
+            .map(p => ({ name: p.name, role: p.role, days: compressDays([...p.dates]) })),
+        })),
     }
 
     // Claim the row BEFORE sending, then send. Two confirmations landing

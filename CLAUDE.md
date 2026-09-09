@@ -679,6 +679,22 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
   time, not a grid.
 - ~~A DEMO COMPANY on production.~~ **DONE 2026-09-08** — see "The demo company" below.
+- **The Google sign-in screen shows a Supabase project ref, not CrewTracker** (Dan, 2026-09-09,
+  screenshotting it: "the crewtracker oauth login looks sketchy with that non-descript address").
+  It reads *"Sign in to continue to nfrvxkwemtittrqboebl.supabase.co"*, which is the truth — the
+  OAuth callback really is hosted there — and it looks exactly like a phishing page to anybody
+  who does not know what Supabase is. This is the first screen a new customer sees, so it matters
+  more than its size suggests, and it belongs with the legal-groundwork item: both are about
+  being trustworthy at the moment somebody is asked to hand something over.
+  **The fix is Supabase's Custom Domains add-on**, which moves auth to `auth.crewtracker.app` so
+  that is what Google prints. It is a paid add-on per project (about $10/month when last looked
+  at — check the dashboard, don't quote this). Setting the Google consent screen's app name alone
+  does NOT fix it: the host Google shows comes from the redirect URI, which is the Supabase
+  project until the custom domain exists. The change touches three places that must move
+  together — the Supabase custom domain, the Authorized redirect URI in Google Cloud Console, and
+  Supabase Auth's Site URL / redirect allowlist — and getting one wrong breaks sign-in for
+  everybody, so do it deliberately and test Google sign-in immediately afterwards. Nothing in the
+  app's code changes: every auth redirect already derives from `window.location.origin`.
 - **A crew member's own week: one screen with their hours** (Dan, 2026-09-08: "For the crew
   links. Would it be possible to have an overview type screen they can click on and see the
   week's hours?"). Both crew-facing screens — the no-login clock link (`/clock/[token]`) and the

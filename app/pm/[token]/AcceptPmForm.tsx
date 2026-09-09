@@ -5,23 +5,26 @@ import Button from '@/components/ui/Button'
 
 // What a production manager can do on the invitation page.
 //
-// BOTH BUTTONS IN THE EMAIL ARE THE ANSWER (Dan, 2026-09-08: "A click from the
-// email is definitive. There can be a reversal, but a decline click in the
-// email should not bring up another decline button"). The page performs the
-// answer before it renders and tells this component which state it is in, so
-// what is left here is the way back — and, after a decline, the note.
+// AN ANSWER IS FINAL (Dan, 2026-09-09: "An email button press is final"). The
+// page performs the answer before it renders and tells this component which
+// state it is in; there is no way back from either answer. Somebody whose
+// situation changes rings whoever invited them, and that person re-invites or
+// replaces them from Edit Show.
 //
-// THE NOTE COMES AFTER, NOT BEFORE. A decline is recorded the moment they press
-// it and whoever named them is emailed straight away, because that is the news
-// they act on. The reason is worth having but must not stand between somebody
-// and saying no, so it is offered on the page afterwards and sent on its own.
+// This replaced a design that offered "Actually, I can do this show" and
+// "Actually, I can't do this show". The crew booking page lost the same thing
+// on the same day, for the same reason.
+//
+// THE NOTE SURVIVES, and comes AFTER the decline rather than before it. A
+// decline is recorded the moment they press it and whoever invited them is
+// emailed straight away, because that is the news they act on. The reason is
+// worth having but must not stand between somebody and saying no — and it
+// undoes nothing, so it is not a reversal.
 
 export default function AcceptPmForm({
-  token, accepted = false, declined = false, note: sentNote = null,
+  token, declined = false, note: sentNote = null,
 }: {
   token: string
-  /** They hold the show — the link accepted it, or they pressed Accept. */
-  accepted?: boolean
   /** They said no. The invitation stays open, so this is reversible. */
   declined?: boolean
   /** A note already sent with the decline; shown back rather than asked twice. */
@@ -67,13 +70,10 @@ export default function AcceptPmForm({
     setNoteSent(true)
   }
 
-  // They said no. One button back, and a place to say why if they want to.
+  // They said no. A place to say why, and nothing else.
   if (declined) {
     return (
       <div>
-        <Button className="w-full" disabled={busy} onClick={accept}>
-          {busy ? 'Opening…' : 'Actually, I can do this show'}
-        </Button>
         {noteSent ? (
           <p className="mt-3 text-center text-xs text-muted">
             {sentNote ? `You told them: “${sentNote}”` : 'Your note has been sent.'}
@@ -107,21 +107,18 @@ export default function AcceptPmForm({
     )
   }
 
+  // Opened cold, without using either button in the email. Accept and Decline,
+  // green and red, the same pair as everywhere else.
   return (
     <div>
-      {!accepted && (
-        <Button className="w-full" disabled={busy} onClick={accept}>
-          {busy ? 'Opening…' : 'Accept and open the show'}
+      <div className="flex gap-2">
+        <Button variant="good" className="flex-1" disabled={busy} onClick={accept}>
+          {busy ? 'Opening…' : 'Accept'}
         </Button>
-      )}
-      <button
-        type="button"
-        className="mt-3 block w-full text-center text-sm font-semibold text-danger hover:underline"
-        disabled={busy}
-        onClick={decline}
-      >
-        {accepted ? 'Actually, I can’t do this show' : 'Decline'}
-      </button>
+        <Button variant="danger" className="flex-1" disabled={busy} onClick={decline}>
+          Decline
+        </Button>
+      </div>
       {error && <p className="mt-3 text-center text-xs text-danger">{error}</p>}
     </div>
   )

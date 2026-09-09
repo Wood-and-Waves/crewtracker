@@ -31,18 +31,6 @@ function fmtDate(d: string) {
   })
 }
 
-/**
- * "Thu 10" — for the SMS, where every character is a character.
- *
- * Assembled from two calls rather than one with { weekday, day }: that option
- * pair renders "10 Thu" in en-US, because the locale's day-and-weekday pattern
- * leads with the number when there is no month to anchor it.
- */
-function fmtDateShort(d: string) {
-  const date = new Date(d + 'T00:00:00')
-  const weekday = date.toLocaleDateString('en-US', { weekday: 'short' })
-  return `${weekday} ${date.getDate()}`
-}
 
 /**
  * One day of an engagement, as the crew member needs to understand it.
@@ -143,32 +131,55 @@ export function describeDates(days: EngagementDay[]): string {
 }
 
 /**
- * One line per day: the date, what the production is doing, and what this
- * person is doing.
+ * One line per day, WRITTEN FROM THE CREW MEMBER'S SIDE: "Travel in, then
+ * work", "Rehearsal", "Show, then travel home".
  *
- * The two columns answer different questions and neither substitutes for the
- * other. `production` is the show's day type — everybody on that day shares it.
- * `you` is this person's own travel commitment, which is why two people on the
- * same Travel/Load-in day can legitimately have different answers.
+ * It used to print two facts side by side — what the PRODUCTION was doing and
+ * what THIS PERSON was doing — which on a travel day produced
+ * "Travel · Load-in · Travel and work": the word travel twice on one line, both
+ * halves true and the whole thing gibberish. Dan, 2026-09-09, chose their side
+ * only: it is their day they are checking, and the production's label is worth
+ * printing only where it IS their day (Rehearsal, Show).
  *
- * This is the single builder behind the email, the SMS and the /book page, so
- * what a crew member reads on the page always matches what they were sent.
- * describeDates() is deliberately untouched and still carries the summary —
- * see its header for why collapsing a run is the feature there.
+ * So a travel-in day says what they do and drops the show's label; a travel-out
+ * day keeps it, because they work that day and then go home; and an ordinary
+ * day is simply the show's label. Null when nobody set a day type and there is
+ * no travel either — there is nothing to say, and a column of blanks is worse
+ * than no column.
+ *
+ * This is the single builder behind the email, the SMS, the /book page and the
+ * change notice, so what a crew member reads on the page always matches what
+ * they were sent.
  */
 export function describeDayLines(
   days: EngagementDay[],
-): { date: string; production: string | null; you: string | null }[] {
+): { iso: string; date: string; text: string }[] {
   return [...days]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(d => {
-      const k = kindOf(d)
-      return {
-        date: fmtDate(d.date),
-        production: dayLabel(d.activities),
-        // 'work' adds nothing a crew member doesn't already assume.
-        you: k === 'work' ? null : KIND_TEXT[k].replace(/^./, c => c.toUpperCase()),
-      }
+      // THE SHOP'S OWN SHORTHAND (Dan, 2026-09-09: "Work + Travel. That is
+      // more standard"). A day is what they do, joined with +; travel reads on
+      // the side of the day it happens, so travelling in comes first and
+      // travelling home comes last.
+      //
+      // When the person's OWN travel is stated, the production's travel is the
+      // same trip and must not be printed as well — a load-out day tagged
+      // travel gave "Load-out + Travel + Travel". Strip it, and what is left is
+      // the work they are there to do; where nobody typed a day at all, that is
+      // plain "Work", which is true of anybody booked and not travelling.
+      // dayLabel joins with " · " for the app's own screens; on a crew-facing
+      // line the whole day is written in the + shorthand, so the separator
+      // matches rather than reading as two different notations in one line
+      // ("Show, Load-out + Travel").
+      const plus = (label: string | null) => label?.replace(/ · /g, ' + ') ?? null
+      const work = plus(dayLabel((d.activities ?? []).filter(a => a !== 'travel'))) ?? 'Work'
+      let text: string
+      if (d.isTravelDay) text = 'Travel'
+      else if (d.travelIn && d.travelOut) text = `Travel + ${work} + Travel`
+      else if (d.travelIn) text = `Travel + ${work}`
+      else if (d.travelOut) text = `${work} + Travel`
+      else text = plus(dayLabel(d.activities)) ?? 'Work'
+      return { iso: d.date, date: fmtDate(d.date), text }
     })
 }
 
@@ -195,7 +206,13 @@ export type BookingRequestInput = {
 }
 
 export function buildBookingRequestEmail(input: BookingRequestInput) {
-  const when = describeDates(input.days)
+  // The RANGE only. The travel note describeDates() appends ("first and last
+  // days travel and work") is said again by every line of the list underneath,
+  // and Dan cut the duplicate (2026-09-09). The SMS still carries the note,
+  // because its compact day list is the one place travel would otherwise be
+  // lost.
+  const { range: when } = describeDateParts(input.days)
+  const first = input.crewName.split(' ')[0]
   const where = input.venue || input.cityState || null
   const subject = `${input.organizationName}: are you available for ${input.showName}?`
 
@@ -204,16 +221,13 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   // list answers "what happens on each day". Only shown when somebody actually
   // set day types — an unset run would otherwise print a column of blanks.
   const lines = describeDayLines(input.days)
-  const showSchedule = hasAnyDayActivity(input.days)
+  const showSchedule = lines.some(l => l.text)
   const scheduleText = showSchedule
-    ? lines.map(l => {
-        const right = [l.production, l.you].filter(Boolean).join(' · ')
-        return `        ${l.date}${right ? `  ${right}` : ''}`
-      })
+    ? lines.map(l => `        ${l.date} - ${l.text}`)
     : []
 
   const text = [
-    `Hi ${input.crewName},`,
+    `Hi ${first},`,
     '',
     `${input.organizationName} would like to book you for ${input.showName}.`,
     '',
@@ -222,18 +236,18 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
     ...scheduleText,
     where ? `Where:  ${where}` : null,
     '',
-    'Yes, I can do it:',
+    'Accept:',
     input.confirmUrl,
     '',
-    "No, I can't:",
+    'Decline:',
     input.declineUrl,
     '',
-    '— CrewTracker',
+    'Sent from CrewTracker.app',
   ].filter(Boolean).join('\n')
 
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
-  <p style="font-size:15px;margin:0 0 16px">Hi ${escapeHtml(input.crewName)},</p>
+  <p style="font-size:15px;margin:0 0 16px">Hi ${escapeHtml(first)},</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">
     <strong>${escapeHtml(input.organizationName)}</strong> would like to book you for
     <strong>${escapeHtml(input.showName)}</strong>.
@@ -245,7 +259,7 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         ${lines.map(l => `<tr>
           <td style="padding:3px 12px 3px 0;white-space:nowrap">${escapeHtml(l.date)}</td>
-          <td style="padding:3px 0;color:#71717a">${escapeHtml([l.production, l.you].filter(Boolean).join(' · '))}</td>
+          <td style="padding:3px 0;color:#71717a">${escapeHtml(l.text ?? '')}</td>
         </tr>`).join('')}
       </table>
     </td></tr>` : ''}
@@ -253,15 +267,15 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   </table>
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.confirmUrl)}"
-       style="display:inline-block;background:#3366CC;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">
-      Confirm
+       style="display:inline-block;background:#1A7F37;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:15px;font-weight:600">
+      Accept
     </a>
     <a href="${escapeHtml(input.declineUrl)}"
-       style="display:inline-block;margin-left:10px;background:#fff;color:#c63b30;text-decoration:none;padding:10px 19px;border:1px solid #c63b30;border-radius:8px;font-size:15px;font-weight:600">
+       style="display:inline-block;margin-left:10px;background:#C0392B;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:15px;font-weight:600">
       Decline
     </a>
   </p>
-  <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">Sent from CrewTracker.app</p>
 </div>`.trim()
 
   return { subject, text, html }
@@ -285,35 +299,44 @@ export function buildBookingRequestText(
   // and "Co.." is the kind of detail that makes a message look automated.
   const org = input.organizationName.replace(/\.$/, '')
 
-  // The day-by-day schedule, on ONE line rather than one line per day. Dan
-  // asked for the full list here knowing a long run makes a long message; the
-  // compact form is what keeps it pasteable into a text rather than turning it
-  // into a document. Dates are shortened to "Thu 10" — unambiguous inside a run
-  // and half the width of the email's format.
+  // ONE DAY PER LINE, and the day written the crew member's way — the same
+  // wording as the email, so the two cannot disagree (Dan, 2026-09-09).
   //
-  // Production day types only. The personal travel commitment is already its
-  // own sentence above (`qualifiers`), and repeating it per day would say the
-  // same thing twice at double the length.
-  const schedule = hasAnyDayActivity(input.days)
-    ? [...input.days]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map(d => {
-          const label = dayLabel(d.activities)
-          return label ? `${fmtDateShort(d.date)} ${label}` : fmtDateShort(d.date)
-        })
-        .join(', ')
+  // It used to be one long paragraph carrying BOTH a travel sentence ("first
+  // and last days travel and work") and a production-only day list ("Thu 10
+  // Travel · Load-in"), which said travel twice and ran to 420 characters on a
+  // ten-day show with nowhere for the eye to rest. This is pasted into a
+  // person's own messaging app, so it can have a shape; line breaks cost
+  // nothing and are what makes a long run readable.
+  //
+  // Dates are shortened to "Thu 10" — unambiguous inside a run and half the
+  // width of the email's format — and the label's " · " becomes ", " because a
+  // middot in a text message reads as a typo.
+  const lines = describeDayLines(input.days)
+  const schedule = lines.some(l => l.text)
+    // The month is carried (Dan, 2026-09-09). This used to be a bare "Thu 10"
+    // to save characters, which is exactly what misleads on a show booked in
+    // October for January.
+    ? lines.map(l => `${l.date} - ${l.text}`)
     : null
 
-  return [
+  const head = [
     `Hi ${input.crewName.split(' ')[0]}, it's ${org}.`,
+    '',
     `Are you available for ${input.showName}${input.role ? ` as ${input.role}` : ''}${where ? ` at ${where}` : ''}?`,
-    // The travel note is its own sentence rather than trailing after a
-    // separator: it is the part people actually stop and read.
-    `${range}.`,
-    qualifiers ? `${qualifiers.charAt(0).toUpperCase()}${qualifiers.slice(1)}.` : null,
-    schedule ? `${schedule}.` : null,
-    "Let me know either way and I'll get you on the books.",
-  ].filter(Boolean).join(' ')
+    '',
+  ]
+
+  // Nobody set any day types: fall back to the range and the travel note,
+  // which is all there is to say. A column of bare dates would be worse.
+  // The count goes AFTER the list (Dan, 2026-09-09), where it reads as a
+  // total rather than as a claim to check the lines against.
+  const dayCount = input.days.length
+  const body = schedule
+    ? [...schedule, '', `${dayCount} ${dayCount === 1 ? 'day' : 'days'} total.`]
+    : [`${range}.${qualifiers ? ` ${qualifiers.charAt(0).toUpperCase()}${qualifiers.slice(1)}.` : ''}`]
+
+  return [...head, ...body, '', "Let me know either way and I'll get you on the books."].join('\n')
 }
 
 export async function sendBookingRequestEmail(
@@ -348,12 +371,16 @@ export async function sendDeclineNoticeEmail(input: DeclineNoticeInput): Promise
   const text = [
     input.recipientName ? `Hi ${input.recipientName},` : 'Hi,',
     '',
-    `${input.crewName} has declined ${input.showName}, so their position is open again.`,
-    input.note ? `\nThey said: "${input.note}"` : null,
+    `${input.crewName} has declined ${input.showName}.`,
+    // Their words, signed with their first name (Dan, 2026-09-09) — a quote
+    // with nobody's name on it reads as the app talking. "so their position is
+    // open again" came out: the scheduler is opening the show anyway, and the
+    // sentence explained the mechanics rather than the news.
+    input.note ? `\n"${input.note}" - ${input.crewName.split(' ')[0]}` : null,
     '',
     input.link,
     '',
-    '— CrewTracker',
+    'Sent from CrewTracker.app',
   ].filter(Boolean).join('\n')
 
   const html = `
@@ -361,16 +388,16 @@ export async function sendDeclineNoticeEmail(input: DeclineNoticeInput): Promise
   <p style="font-size:15px;margin:0 0 16px">${escapeHtml(input.recipientName ? `Hi ${input.recipientName},` : 'Hi,')}</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 16px">
     <strong>${escapeHtml(input.crewName)}</strong> has declined
-    <strong>${escapeHtml(input.showName)}</strong>, so their position is open again.
+    <strong>${escapeHtml(input.showName)}</strong>.
   </p>
-  ${input.note ? `<p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#f4f4f5;border-radius:8px">&ldquo;${escapeHtml(input.note)}&rdquo;</p>` : ''}
+  ${input.note ? `<p style="font-size:14px;line-height:1.5;margin:0 0 20px;padding:12px;background:#f4f4f5;border-radius:8px">&ldquo;${escapeHtml(input.note)}&rdquo; - ${escapeHtml(input.crewName.split(' ')[0])}</p>` : ''}
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.link)}"
        style="display:inline-block;background:#3366CC;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">
       Open the show
     </a>
   </p>
-  <p style="font-size:12px;color:#a1a1aa;margin:0">CrewTracker</p>
+  <p style="font-size:12px;color:#a1a1aa;margin:0">Sent from CrewTracker.app</p>
 </div>`.trim()
 
   try {

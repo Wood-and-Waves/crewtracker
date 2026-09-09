@@ -188,6 +188,8 @@ export function buildCrewMessage(crewName: string, showName: string, timesheet: 
     `Here are the hours I have recorded for you for ${showName}:\n\n` +
     `${timesheet}\n` +
     `Please let me know if this does not match your records.\n\n` +
-    `Created with the CrewTracker app`
+    // "Sent FROM" — a person pressed Send Hours. The rule and the other half
+    // of it ("Sent by", for what the app decides to send) are in lib/sendEmail.ts.
+    `Sent from CrewTracker.app`
   )
 }

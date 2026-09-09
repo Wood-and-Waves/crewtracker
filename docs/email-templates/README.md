@@ -10,6 +10,19 @@ its mail, and pointing dev at the same SMTP would send real email from test runs
 
 ---
 
+## The one-hour claim in two of these templates
+
+The magic-link and password-reset templates now SAY how long the link lasts —
+"expires one hour after this email was sent" (Dan, 2026-09-09). People sit on
+these emails and then cannot work out why the link failed.
+
+One hour is Supabase's default OTP expiry, not something this repo controls.
+**If that setting is ever changed, these two templates become a lie** — the
+number lives in the dashboard under Authentication → Emails (Email OTP
+Expiration, in seconds; 3600 is one hour). Change one, change the other.
+
+---
+
 ## Step 1 — Custom SMTP (do this first)
 
 This matters more than the branding.

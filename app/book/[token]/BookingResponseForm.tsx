@@ -7,8 +7,14 @@ import Button from '@/components/ui/Button'
 // Outlook Safe Links and Gmail prefetch URLs in email, so a GET carrying the
 // answer would be recorded by a scanner before the person read the message.
 //
-// An existing answer can be changed. People genuinely do confirm and then have
-// something come up, and the alternative is a phone call to the scheduler.
+// AN ANSWER IS FINAL (Dan, 2026-09-09: "An email button press is final").
+// There is no way back on this page, either from a yes or from a no. Somebody
+// whose situation changes rings whoever booked them, and the scheduler records
+// it — which is what happens in this industry anyway, and the scheduler can
+// re-book a decliner from the Scheduling screen (FillPositionPicker revives
+// their own row rather than inserting a second).
+//
+// This replaces an earlier design that offered "Actually, I can make it".
 
 export default function BookingResponseForm({
   token,
@@ -23,7 +29,6 @@ export default function BookingResponseForm({
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [changing, setChanging] = useState(false)
 
   async function respond(response: 'confirmed' | 'declined') {
     setBusy(true)
@@ -40,10 +45,9 @@ export default function BookingResponseForm({
       return
     }
     setAnswer(response)
-    setChanging(false)
   }
 
-  if (answer && !changing) {
+  if (answer) {
     return (
       <div className="text-center">
         <p className="text-lg font-bold text-ink">
@@ -55,15 +59,6 @@ export default function BookingResponseForm({
             : 'Thanks for letting them know.'}
           {respondedAt && !busy ? '' : ''}
         </p>
-        {/* The reversal. A decline that arrived from the email was one tap, so
-            the way back has to be one too, and it says what it does rather
-            than making somebody work out that "change my answer" is it. */}
-        <button
-          onClick={() => setChanging(true)}
-          className="mt-4 text-xs text-muted underline hover:text-ink"
-        >
-          {answer === 'declined' ? 'Actually, I can make it' : 'Change my answer'}
-        </button>
       </div>
     )
   }
@@ -81,32 +76,24 @@ export default function BookingResponseForm({
 
       <div className="flex gap-2">
         <Button
-          variant="ghost"
-          className="flex-1"
-          disabled={busy}
-          onClick={() => respond('declined')}
-        >
-          Can&apos;t make it
-        </Button>
-        <Button
+          variant="good"
           className="flex-1"
           disabled={busy}
           onClick={() => respond('confirmed')}
         >
-          {busy ? 'Sending…' : "I'm in"}
+          {busy ? 'Sending…' : 'Accept'}
+        </Button>
+        <Button
+          variant="danger"
+          className="flex-1"
+          disabled={busy}
+          onClick={() => respond('declined')}
+        >
+          Decline
         </Button>
       </div>
 
       {error && <p className="mt-3 text-center text-xs text-danger">{error}</p>}
-
-      {changing && (
-        <button
-          onClick={() => setChanging(false)}
-          className="mt-3 w-full text-center text-xs text-muted underline hover:text-ink"
-        >
-          Never mind, keep my answer
-        </button>
-      )}
     </div>
   )
 }

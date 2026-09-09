@@ -196,38 +196,60 @@ console.log('\nvalidateRooms — rooms that would lose their positions')
     { blank: [], duplicate: [] })
 }
 
-console.log('\ndescribeDayLines — day types beside travel')
-// The two columns answer different questions and must stay independent: what
-// the PRODUCTION is doing, and what THIS PERSON is doing.
+console.log('\ndescribeDayLines — the day as the crew member lives it')
+// ONE sentence per day, from their side (Dan, 2026-09-09). The old two-column
+// version printed the production's day type beside the person's travel flag,
+// which on a travel day read "Travel · Load-in · Travel and work" — the word
+// travel twice, both halves true, the whole line useless.
 const typed = (date: string, dayType: string | null, kind: 'work' | 'travel' | 'in' | 'out' = 'work') =>
   ({ ...day(date, kind), activities: dayType === 'wrap_party' ? ['wrap_party'] : fromLegacy(dayType) })
 
-check('a run with no day types set reports none, and says so',
-  describeDayLines(run(['work', 'work'])).map(l => l.production), [null, null])
+// A booked day nobody typed is Work — true of anybody booked and not
+// travelling, and better than a bare date with nothing after it.
+check('a booked day nobody typed is Work',
+  describeDayLines(run(['work', 'work'])).map(l => l.text), ['Work', 'Work'])
 check('hasAnyDayActivity is false when nothing is set',
   hasAnyDayActivity(run(['work', 'work'])), false)
-check('production and personal travel are independent',
-  describeDayLines([typed('2026-07-28', 'travel_load_in', 'travel')]),
-  [{ date: 'Tue, Jul 28', production: 'Travel · Load-in', you: 'Travel' }])
-check('a plain work day on a show day says nothing personal',
-  describeDayLines([typed('2026-07-28', 'show')]),
-  [{ date: 'Tue, Jul 28', production: 'Show', you: null }])
-check('travel-and-work reads as its own thing, not plain travel',
-  describeDayLines([typed('2026-07-28', 'load_out_travel', 'out')]),
-  [{ date: 'Tue, Jul 28', production: 'Load-out · Travel', you: 'Travel and work' }])
+// The line that started this: the show is travelling AND loading in, and so is
+// the person. Their side wins and the duplicate disappears.
+check('a travel day says travel once',
+  describeDayLines([typed('2026-07-28', 'travel_load_in', 'travel')]).map(l => [l.date, l.text]),
+  [['Tue, Jul 28', 'Travel']])
+// The shop's shorthand: a day is what you do, joined with +, travel on the
+// side of the day it happens (Dan, 2026-09-09: "Work + Travel. That is more
+// standard").
+check('travelling in reads travel first',
+  describeDayLines([typed('2026-07-28', 'travel_load_in', 'in')]).map(l => l.text),
+  ['Travel + Load-in'])
+// Travelling OUT keeps the label: they work that day and then go home, and
+// which day it is (a show, a load-out) is the part they are checking.
+// The show's own travel is the same trip they are making, so it is not
+// printed twice: "Load-out · Travel, then travel home" was the bug.
+check('travelling out keeps the work, and says travel once',
+  describeDayLines([typed('2026-07-28', 'load_out_travel', 'out')]).map(l => l.text),
+  ['Load-out + Travel'])
+check('travelling out of a day nobody typed still reads',
+  describeDayLines([{ ...day('2026-07-28', 'out'), activities: [] }]).map(l => l.text),
+  ['Work + Travel'])
+check('a plain work day is just what the show is doing',
+  describeDayLines([typed('2026-07-28', 'show')]).map(l => [l.iso, l.date, l.text]),
+  [['2026-07-28', 'Tue, Jul 28', 'Show']])
+check('in and out on the same day says both',
+  describeDayLines([{ date: '2026-07-28', isTravelDay: false, travelIn: true, travelOut: true, activities: ['show'] }]).map(l => l.text),
+  ['Travel + Show + Travel'])
 // A value written by a future build must render as blank, never as a raw slug
 // in an email to a crew member.
-check('an unknown stored day type renders as null, not the raw value',
-  describeDayLines([typed('2026-07-28', 'wrap_party')]).map(l => l.production), [null])
+check('an unknown stored day type never leaks the raw value',
+  describeDayLines([typed('2026-07-28', 'wrap_party')]).map(l => l.text), ['Work'])
 check('hasAnyDayActivity ignores unknown values too',
   hasAnyDayActivity([typed('2026-07-28', 'wrap_party')]), false)
-check('the eighth day type is recognised',
-  describeDayLines([typed('2026-07-28', 'show_load_out')]).map(l => l.production),
-  ['Show · Load-out'])
+check('the eighth day type is recognised, in the + shorthand',
+  describeDayLines([typed('2026-07-28', 'show_load_out')]).map(l => l.text),
+  ['Show + Load-out'])
 // Query order is not guaranteed anywhere else; it must not be here either.
 check('unsorted input still reads in date order',
   describeDayLines([typed('2026-07-30', 'show'), typed('2026-07-28', 'load_in')])
-    .map(l => l.production), ['Load-in', 'Show'])
+    .map(l => l.text), ['Load-in', 'Show'])
 
 console.log('\nbuildBookingRequestText')
 const sms = buildBookingRequestText({
@@ -237,7 +259,20 @@ const sms = buildBookingRequestText({
 })
 // A company name ending in a period must not produce "Co..".
 check('no doubled period after a company name', /Co\.\./.test(sms), false)
-check('the travel note is its own sentence', sms.includes('First day travel, last day travel and work.'), true)
+// ONE DAY PER LINE, in the crew member's own terms (Dan, 2026-09-09). The
+// travel summary sentence is gone: every line that involves travel now says so
+// itself, and printing both said it twice.
+check('one line per day, their side of it', [
+  sms.includes('\nTue, Jul 28 - Travel\n'),
+  sms.includes('\nThu, Jul 30 - Work + Travel\n'),
+], [true, true])
+// The month is carried: "Thu 28" alone misleads on a show booked months out.
+check('the date carries its month', sms.includes('Jul'), true)
+// The count sits after the list, as a total rather than a claim to check.
+check('the run is totalled at the end', sms.includes('\n3 days total.\n'), true)
+check('no travel summary sentence on top', sms.includes('First day travel'), false)
+// It is pasted into somebody's own messaging app, so it can have a shape.
+check('it has line breaks at all', sms.split('\n').length > 4, true)
 check('venue sits with the question, not after the dates', sms.includes('as A1 at Moscone West?'), true)
 // The texted version must never carry a link — an action-link by SMS is
 // indistinguishable from phishing, and Dan asked for no action links.
@@ -681,16 +716,37 @@ console.log('\n--- ready email: day compression ---')
   check('gap → list', compressDays(['2026-09-08','2026-09-10']), 'Tue 8, Thu 10')
   check('one day', compressDays(['2026-09-08']), 'Tue 8')
   check('unsorted input is sorted', compressDays(['2026-09-10','2026-09-08','2026-09-09']), 'Tue 8 – Thu 10')
+  // BY ROOM, each person carrying their dates in that room (Dan, 2026-09-09).
   const { subject, text } = buildReadyEmail({
     to: 'pm@x.test', pmName: 'Sam Okafor', showName: 'Northwind', dates: 'Sep 8–10', venue: 'Moscone West',
     orgName: 'Wood & Waves', link: 'https://crewtracker.app/dashboard/shows/1',
-    days: [{ date: '2026-09-08', label: 'Load-in', rooms: [{ name: 'Ballroom', people: [{ name: 'Alex Reyes', role: 'A1', phone: '(312) 555-0100' }] }] }],
-    perPerson: [{ name: 'Alex Reyes', role: 'A1', days: 'Tue 8 – Thu 10' }], waiting: 0,
+    rooms: [
+      { name: 'Ballroom', people: [
+        { name: 'Alex Reyes', role: 'A1', days: 'Tue 8 – Thu 10' },
+        { name: 'Casey Nguyen', role: 'A2', days: 'Thu 10' },
+      ] },
+      { name: 'Breakout A', people: [
+        { name: 'Casey Nguyen', role: 'A2', days: 'Tue 8 – Thu 10' },
+      ] },
+    ],
   })
   check('subject names the show and says it is staffed', subject, 'Wood & Waves: Northwind is fully staffed')
-  check('roster line carries name, role, phone', text.includes('Alex Reyes · A1 · (312) 555-0100'), true)
-  check('per-person line', text.includes('Alex Reyes · A1 · Tue 8 – Thu 10'), true)
-  check('waiting count', text.includes('0 waiting on a reply'), true)
+  check('the room is the block', [text.includes('\nBallroom\n'), text.includes('\nBreakout A\n')], [true, true])
+  check('a person carries name, role and their dates in that room',
+    text.includes('- Alex Reyes · A1 · Tue 8 – Thu 10'), true)
+  // No phone numbers (Dan, 2026-09-09): the roster answers who and when; the
+  // numbers live in the directory.
+  check('and no phone number', text.includes('555-0100'), false)
+  // The same person in two rooms is TWO entries with different dates. Not a
+  // duplicate to collapse — it is the double-booking a PM most needs to see.
+  check('somebody in two rooms appears in both, with each room\'s dates', [
+    text.includes('- Casey Nguyen · A2 · Thu 10\n'),
+    text.includes('- Casey Nguyen · A2 · Tue 8 – Thu 10\n'),
+  ], [true, true])
+  // Gone with the by-date layout: it only ever said zero, because the email
+  // does not send until nobody is waiting.
+  check('no "0 waiting on a reply" line', text.includes('waiting on a reply'), false)
+  check('and no second list of the same people', text.includes("Everyone's days"), false)
 
   // A blank role (role: '') is a documented real state, not "no role given" —
   // only null/undefined should fall back to 'Crew'. `role ?? 'Crew'` would
@@ -698,15 +754,17 @@ console.log('\n--- ready email: day compression ---')
   const { text: blankRoleText } = buildReadyEmail({
     to: 'pm@x.test', pmName: 'Sam Okafor', showName: 'Northwind', dates: 'Sep 8–10', venue: 'Moscone West',
     orgName: 'Wood & Waves', link: 'https://crewtracker.app/dashboard/shows/1',
-    days: [{ date: '2026-09-08', label: 'Load-in', rooms: [{ name: 'Ballroom', people: [{ name: 'Jamie Lee', role: '', phone: '(555) 123-4567' }] }] }],
-    perPerson: [{ name: 'Jamie Lee', role: '', days: 'Tue 8 – Thu 10' }], waiting: 0,
+    rooms: [{ name: 'Ballroom', people: [{ name: 'Jamie Lee', role: '', days: 'Tue 8 – Thu 10' }] }],
   })
   check('blank role reads Crew', blankRoleText.includes('Jamie Lee · Crew · Tue 8 – Thu 10'), true)
-  check('blank role reads Crew on the roster line too', blankRoleText.includes('Jamie Lee · Crew · (555) 123-4567'), true)
 }
 
 console.log('\n--- evening digest ---')
 {
+  // The two footers, pinned: the digest is the app's own decision.
+  check('the digest signs off as automated',
+    buildDigestEmail({ to: 'p@x.test', pmName: 'Sam', showName: 'N', date: 'Sep 7', link: 'https://x',
+      lines: [{ time: '9:02 am', text: 'Alex Reyes booked as A1' }] }).text.includes('Sent by CrewTracker.app'), true)
   check('booked line', describeEvent({ kind: 'booked', crewMemberName: 'Alex Reyes', role: 'A1', days: 'Tue 8 – Thu 10' }), 'Alex Reyes booked as A1, Tue 8 – Thu 10')
   check('declined line', describeEvent({ kind: 'declined', crewMemberName: 'Bo Ellery', role: 'Stagehand', days: null }), 'Bo Ellery declined Stagehand')
   check('moved line', describeEvent({ kind: 'moved', crewMemberName: 'Bo Ellery', role: 'Stagehand', days: 'Mon 9' }), 'Bo Ellery moved to Mon 9 (Stagehand)')
@@ -714,7 +772,13 @@ console.log('\n--- evening digest ---')
   const { subject, text } = buildDigestEmail({ to: 'pm@x.test', pmName: 'Sam', showName: 'Northwind', date: 'Sep 7', link: 'https://crewtracker.app/dashboard/shows/1',
     lines: [{ time: '2:14 pm', text: 'Alex Reyes booked as A1, Tue 8 – Thu 10', status: 'waiting on reply' }] })
   check('digest subject', subject, 'Northwind: today\'s crew changes (Sep 7)')
-  check('line carries current status', text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10 — waiting on reply'), true)
+  // The line is WHAT HAPPENED, and nothing else (Dan, 2026-09-09). It used to
+  // carry the person's state at send time as well, which read as a
+  // contradiction whenever the two disagreed: "Bo Ellery declined Stagehand —
+  // accepted". Passing a status must now change nothing.
+  check('a line is the event, at the time it happened',
+    text.includes('2:14 pm  Alex Reyes booked as A1, Tue 8 – Thu 10'), true)
+  check('and carries no second, later status', text.includes('waiting on reply'), false)
 }
 
 console.log('\n--- the crew booking request email ---')
@@ -729,8 +793,13 @@ console.log('\n--- the crew booking request email ---')
   })
   check('both answers are in the email', 
     [text.includes('https://crewtracker.app/book/abc?a=confirm'), text.includes('https://crewtracker.app/book/abc?a=decline')], [true, true])
+  // ACCEPT and DECLINE, those words and no others, green and red (Dan,
+  // 2026-09-09). It used to say Confirm here and something else again in the
+  // PM invitation; one pair of words, everywhere, is the rule now.
   check('and both are buttons in the HTML',
-    [html.includes('>\n      Confirm\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
+    [html.includes('>\n      Accept\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
+  check('accept is green and decline is red',
+    [html.includes('background:#1A7F37'), html.includes('background:#C0392B')], [true, true])
   check('the old single "confirm or decline" link is gone', text.includes('Confirm or decline'), false)
   check('the SMS still carries no link at all',
     buildBookingRequestText({ crewName: 'Alex Reyes', showName: 'Northwind', venue: 'Moscone West', cityState: null,
@@ -742,30 +811,80 @@ console.log('\n--- the PM invitation email ---')
 {
   const { subject, text, html } = buildPmInviteEmail({
     to: 'jordan@x.test', pmName: 'Jordan Vega', showName: 'Northwind', dates: 'Sep 21–29',
-    venue: 'Moscone West', orgName: 'Wood & Waves', inviterName: 'Dan Smith',
+    venue: 'Moscone West', orgName: 'Wood & Waves',
+    days: [
+      { date: '2026-09-21', activities: ['travel'] },
+      { date: '2026-09-22', activities: ['load_in'] },
+      { date: '2026-09-23', activities: ['show', 'load_out'] },
+    ],
     acceptUrl: 'https://crewtracker.app/pm/abc?accept=1',
     declineUrl: 'https://crewtracker.app/pm/abc?decline=1',
   })
-  check('subject', subject, "Wood & Waves: you're named PM on Northwind")
-  check('BOTH answers are in the email, as links', 
+  // INVITED, not "named" (Dan, 2026-09-09). The company name leads the subject
+  // for a freelancer who works for several of them.
+  check('subject', subject, "Wood & Waves: you're invited to PM Northwind")
+  // The COMPANY invites, not a named person (Dan, 2026-09-09).
+  check('the ask reads as an invitation from the company',
+    text.includes('Wood & Waves has invited you to be the production manager on'), true)
+  check('and names no individual', text.includes('Dan Smith'), false)
+  check('the show reads as a sentence, not a header',
+    text.includes('on Northwind, Sep 21–29 at Moscone West.'), true)
+  check('BOTH answers are in the email, as links',
     [text.includes('https://crewtracker.app/pm/abc?accept=1'), text.includes('https://crewtracker.app/pm/abc?decline=1')], [true, true])
-  check('and both are buttons in the HTML', [html.includes('>\n      Accept\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
-  check('the accept link is the one that accepts', text.includes('Accept and it lands in your CrewTracker straight away:'), true)
-  check('the decline link says a note can come with it', text.includes('Or decline, and tell them why if you like:'), true)
+  // ACCEPT and DECLINE, those words and no others, green and red (Dan,
+  // 2026-09-09). Every email in the app uses the same pair.
+  check('and both are buttons in the HTML',
+    [html.includes('>\n      Accept\n    </a>'), html.includes('>\n      Decline\n    </a>')], [true, true])
+  check('accept is green and decline is red',
+    [html.includes('background:#1A7F37'), html.includes('background:#C0392B')], [true, true])
+  check('the plain-text version labels them the same way',
+    [text.includes('Accept:'), text.includes('Decline:')], [true, true])
+
+  // THE RUN, DAY BY DAY. Dan, 2026-09-09: "It is all about the dates at this
+  // point. They should receive the days and type of days that they are." A PM
+  // is checking this against their own month, and "Sep 21-29" cannot say
+  // whether the last day is a show or a load-out.
+  check('every day of the run is listed, with what it is', [
+    text.includes('Mon, Sep 21 — Travel'),
+    text.includes('Tue, Sep 22 — Load-in'),
+    text.includes('Wed, Sep 23 — Show · Load-out'),
+  ], [true, true, true])
+  check('the run is in the HTML too', html.includes('Load-in'), true)
+  check('the day labels are the ones the app shows', text.includes('Show · Load-out'), true)
+
+  // A show with no activities recorded still sends: the dates are the point,
+  // and a day with nothing on it prints as a date rather than a dangling dash.
+  const bareRun = buildPmInviteEmail({
+    to: 'jordan@x.test', pmName: null, showName: 'Northwind', dates: 'Sep 21',
+    venue: null, orgName: 'Wood & Waves',
+    days: [{ date: '2026-09-21', activities: [] }],
+    acceptUrl: 'https://crewtracker.app/pm/abc?accept=1',
+    declineUrl: 'https://crewtracker.app/pm/abc?decline=1',
+  })
+  check('a day with nothing on it is just the date', bareRun.text.includes('Mon, Sep 21\n'), true)
+  check('and it does not print an empty dash', bareRun.text.includes('Sep 21 — '), false)
 }
 
 console.log('\n--- a PM saying no ---')
 {
   const withNote = buildPmDeclinedEmail({ to: 'dan@x.test', inviterName: 'Dan Smith', pmName: 'Jordan Vega',
-    showName: 'Northwind', orgName: 'Wood & Waves', note: "I'm on the Kestrel load-out that week." })
+    showName: 'Northwind', orgName: 'Wood & Waves', note: "I'm on the Kestrel load-out that week.",
+    link: 'https://crewtracker.app/dashboard/shows/1' })
   check('subject names who and which show', withNote.subject, 'Jordan Vega declined PM on Northwind')
-  check('body says what happened', withNote.text.includes('Jordan Vega declined the production manager role on Northwind.'), true)
-  check('their note is carried through unedited', withNote.text.includes('They said: "I\'m on the Kestrel load-out that week."'), true)
-  check('and it says where that leaves the show', withNote.text.includes('has no production manager now'), true)
+  check('body says what happened', withNote.text.includes('Jordan Vega declined the production manager role for Northwind.'), true)
+  // Their words, signed with their first name — the same shape Dan chose for
+  // the crew decline notice (2026-09-09).
+  check('their note is carried through unedited and signed',
+    withNote.text.includes('"I\'m on the Kestrel load-out that week." - Jordan'), true)
+  check('and it carries the way to the show', withNote.text.includes('https://crewtracker.app/dashboard/shows/1'), true)
+  // The line explaining the show now has no PM came out: it described the
+  // mechanics, and it used "name", the word that was replaced by "invite".
+  check('no mechanics lecture', withNote.text.includes('has no production manager now'), false)
 
   const bare = buildPmDeclinedEmail({ to: 'dan@x.test', inviterName: null, pmName: 'Jordan Vega',
-    showName: 'Northwind', orgName: 'Wood & Waves', note: null })
-  check('no note, no empty quote', bare.text.includes('They said'), false)
+    showName: 'Northwind', orgName: 'Wood & Waves', note: null,
+    link: 'https://crewtracker.app/dashboard/shows/1' })
+  check('no note, no empty quote', bare.text.includes('" - Jordan'), false)
   check('no inviter name still greets somebody', bare.text.startsWith('Hi,'), true)
 }
 
@@ -804,15 +923,65 @@ console.log('\n--- days changed email ---')
   const { subject, text } = buildDaysChangedEmail({ to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', orgName: 'Wood & Waves', venue: 'Moscone West',
     days: [{ date: '2026-09-08', isTravelDay: false, travelIn: true, travelOut: false, activities: ['load_in'] }, { date: '2026-09-09', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }] })
   check('subject', subject, 'Wood & Waves: your days on Northwind changed')
-  check('lists the new days with what each is', text.includes('Tue, Sep 8') && text.includes('Load-in') && text.includes('Wed, Sep 9'), true)
+  // The change notice reads from their side too — it shares describeDayLines
+  // with the booking request, so a travel-in day says what THEY do, not what
+  // the production is doing.
+  // A CHANGED SCHEDULE IS A NEW QUESTION (Dan, 2026-09-09), so the notice
+  // carries the same two answers the original ask did.
+  const answerable = buildDaysChangedEmail({ to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind',
+    orgName: 'Wood & Waves', venue: 'Moscone West',
+    days: [{ date: '2026-09-09', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }],
+    confirmUrl: 'https://crewtracker.app/book/abc?a=confirm',
+    declineUrl: 'https://crewtracker.app/book/abc?a=decline' })
+  check('both answers are in the email', [
+    answerable.text.includes('https://crewtracker.app/book/abc?a=confirm'),
+    answerable.text.includes('https://crewtracker.app/book/abc?a=decline'),
+  ], [true, true])
+  check('and both are buttons in the HTML', [
+    answerable.html.includes('>\n      Accept\n    </a>'),
+    answerable.html.includes('>\n      Decline\n    </a>'),
+    answerable.html.includes('background:#1A7F37'),
+    answerable.html.includes('background:#C0392B'),
+  ], [true, true, true, true])
+  check('declining says what it costs them', answerable.html.includes('Declining takes you off the show'), true)
+  // Without a token there is nothing to press, and a dead button is worse than
+  // none: the notice stays readable and says nothing it cannot do.
+  check('no token, no buttons', text.includes('?a=confirm'), false)
+
+  check('lists the new days with what each is', [
+    text.includes('Tue, Sep 8 - Travel + Load-in'),
+    text.includes('Wed, Sep 9 - Show'),
+  ], [true, true])
 
   // Off the show entirely: no schedule to print, so it says what happened.
   const gone = buildDaysChangedEmail({ to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', orgName: 'Wood & Waves',
     venue: 'Moscone West', days: [], removed: true })
-  check('removal subject says they are off it', gone.subject, 'Wood & Waves: you are no longer on Northwind')
-  check('removal body says so in words', gone.text.includes('You have been taken off Northwind (Moscone West).'), true)
+  check('removal subject asks for the dates back', gone.subject, 'Wood & Waves: please release your dates for Northwind')
+  // Dan's own wording (2026-09-09): the SHOW changed, not the person, and the
+  // one actionable thing is that their dates are free.
+  check('removal body says the staffing needs changed',
+    gone.text.includes('The staffing needs have changed for Northwind.'), true)
+  check('and asks them to release the dates', gone.text.includes('Please release the dates you were holding.'), true)
+  check('the dates are named when the caller knows them',
+    buildDaysChangedEmail({ to: 'a@x.test', crewName: 'Alex Reyes', showName: 'Northwind', orgName: 'Wood & Waves',
+      venue: 'Moscone West', days: [], removed: true, heldDates: 'Sep 8 – Sep 10' })
+      .text.includes('Please release the held dates of Sep 8 – Sep 10.'), true)
+  // No days left is the same news as Remove, however they got there: a release
+  // that takes the last day must not send "your schedule is now: No days".
+  const releasedToNothing = buildDaysChangedEmail({ to: 'a@x.test', crewName: 'Jordan Vega', showName: 'Northwind',
+    orgName: 'Wood & Waves', venue: 'Moscone West', days: [] })
+  check('an empty schedule is never printed as "No days"', releasedToNothing.text.includes('No days'), false)
+  check('it takes the off-the-show wording instead',
+    releasedToNothing.text.includes('The staffing needs have changed for Northwind.'), true)
   check('removal body never prints an empty schedule', gone.text.includes('No days'), false)
-  check('removal body still points them at a human', gone.text.includes('Reply to whoever booked you.'), true)
+  // "Reply to whoever booked you" was an instruction that did not work: the
+  // sender is noreply@, so pressing reply reached nobody.
+  check('removal body points them at the company by name',
+    gone.text.includes('Questions? Get in touch with Wood & Waves.'), true)
+  // "Sent FROM" — a scheduler pressed Remove, so a person caused this. The
+  // digest and the fully-staffed email say "Sent BY" instead, because nobody
+  // pressed anything (Dan, 2026-09-09).
+  check('signs off as person-triggered', gone.text.includes('Sent from CrewTracker.app'), true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
