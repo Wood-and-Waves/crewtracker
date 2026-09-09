@@ -9,6 +9,8 @@ import ScheduleBoard from '@/components/ScheduleBoard'
 import PositionDefsSection from '@/components/PositionDefsSection'
 import SendToSchedulingButton from '@/components/SendToSchedulingButton'
 import AskPencilledButton from '@/components/AskPencilledButton'
+import CrewNoticesBar from '@/components/CrewNoticesBar'
+import { fetchUntold } from '@/lib/crewNotices'
 import PmStatusChip from '@/components/PmStatusChip'
 import { buildBoard, describeBoard, type BoardBooking, type SlotFlag } from '@/lib/scheduleBoard'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
@@ -56,6 +58,7 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
   // on another's result.
   const [
     { data: slotRows }, { data: bookingRows }, { data: flagRows }, { data: defRows }, { data: roleRows }, { data: pmProfile },
+    untold,
   ] = await Promise.all([
     roomIds.length
       ? supabase.from('crew_call_positions').select('id, room_id, role, sort_order').in('room_id', roomIds).order('sort_order')
@@ -74,6 +77,10 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
     show.pm_profile_id
       ? supabase.from('profiles').select('full_name, email').eq('id', show.pm_profile_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    // Whose days changed with nobody telling them (0040). Returns the finished
+    // list, not a Supabase response — note the bare `untold` above, and that it
+    // must stay LAST here: this array is destructured positionally.
+    fetchUntold(supabase, id),
   ])
 
   const board = buildBoard({
@@ -149,6 +156,15 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
           />
         </div>
       </div>
+
+      {/* Whose days changed with nobody telling them. Sits under the strip and
+          above the grid: it is the screen's standing to-do, and Dan expects
+          more of these to gather here over time. */}
+      {untold.length > 0 && (
+        <div className="mt-3">
+          <CrewNoticesBar showId={id} people={untold} />
+        </div>
+      )}
 
       {locked && (
         <div className="mt-3 border-l-[3px] border-danger py-1 pl-3">
