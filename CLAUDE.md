@@ -699,6 +699,21 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   app's code changes: every auth redirect already derives from `window.location.origin`.
 - ~~A crew member's own week: one screen with their hours.~~ **DONE 2026-09-09** — see "Their
   own hours" below.
+- **A "book and confirm" button for the scheduler** (Dan, 2026-09-09, in his words: "book and
+  confirm button for the scheduler"). Today filling a position is two acts: `FillPositionPicker`
+  books somebody as **Not Asked**, and confirming them is a second trip — the chip's menu, or the
+  emailed request coming back. But a scheduler very often books somebody they have JUST spoken
+  to: the phone call IS the confirmation, and making them record it twice is the kind of
+  double-entry that ends with a show that reads as unconfirmed when everybody has actually said
+  yes. Build: a second action on each candidate row of the fill picker — the row still books on a
+  tap, with **Book + confirm** beside it — writing `booking_status = 'confirmed'` and
+  `booking_responded_at` in the same insert, logging the `accepted` staffing event and running
+  `maybeSendReadyEmail`, exactly as `/api/bookings/record` does when an answer is recorded by
+  phone. Nothing new underneath: this is the existing record-an-answer path moved to the moment
+  of booking. **Check with Dan before building**: the reading above is "the scheduler already has
+  their yes". It could instead mean "book them and send the request in one press", which is a
+  different button (book + email, leaving them Asked) and worth having too — possibly both, as a
+  small menu on the row rather than one more button.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
