@@ -52,7 +52,12 @@ export default async function CrewShowScreen({
       <div className="p-6 md:p-10">
         <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
         <h1 className="mt-4 font-display text-2xl font-bold uppercase tracking-wide text-ink">{view.showName}</h1>
-        <p className="mt-2 text-sm text-muted">This show has been closed out, so times can no longer be changed.</p>
+        {/* Same language as the link path (Dan, 2026-09-09): what happened is
+            that their hours were signed off, not that something lapsed. */}
+        <p className="mt-2 text-sm text-muted">
+          Your hours are final. This show has been closed out and signed off — if something does
+          not look right, talk to your PM.
+        </p>
       </div>
     )
   }

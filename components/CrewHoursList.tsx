@@ -112,12 +112,6 @@ export default function CrewHoursList({
             </p>
           )}
 
-          {/* No money, ever, on a crew-facing screen — and these are hours as
-              recorded, which is not the same as hours as paid: overtime and
-              travel are the company's rules, applied later. */}
-          <p className="mt-6 text-center text-[11px] leading-relaxed text-muted">
-            Hours as recorded, rounded the way your company rounds. Questions go to your PM.
-          </p>
         </>
       )}
     </div>

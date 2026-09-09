@@ -132,18 +132,26 @@ export default async function ClockPage({
     }
   }
 
-  if (view.expired) {
-    return <Message
-      title="This link has expired"
-      body={`${view.showName} has finished. Ask your PM if you still need to change something.`}
-      hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined} />
-  }
-  // Pre-empts the punches_blocked_when_finalized trigger, which the service
-  // role does NOT bypass and which would otherwise surface as a raw 500.
+  // FINALIZED BEFORE EXPIRED (Dan, 2026-09-09: "The link isn't expired. We need
+  // new language. This shows hours have been finalized"). Both are true of a
+  // show that has finished AND been signed off, and expiry was winning — so
+  // crew were told a token had lapsed, which is the app's business, when what
+  // had actually happened was their hours being made final, which is theirs.
+  //
+  // This also pre-empts the punches_blocked_when_finalized trigger, which the
+  // service role does NOT bypass and which would otherwise surface as a raw 500.
   if (view.finalized) {
     return <Message
-      title={view.showName}
-      body="This show has been closed out, so times can no longer be changed. Talk to your PM."
+      title="Your hours are final"
+      body={`${view.showName} has been closed out and signed off. If something does not look right, talk to your PM.`}
+      hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined} />
+  }
+  // Finished, but nobody has signed the hours off yet — so they are not final,
+  // and saying so would be a lie. All that has ended is the punching.
+  if (view.expired) {
+    return <Message
+      title={`${view.showName} has finished`}
+      body="Clocking in and out is closed. Talk to your PM if something still needs changing."
       hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined} />
   }
 
