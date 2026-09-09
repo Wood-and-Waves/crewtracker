@@ -23,6 +23,8 @@ import {
 import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDay } from '../../lib/positionDefs.ts'
 import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
+import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
+import { summarizeUntold, type UntoldRow } from '../../lib/crewNotices.ts'
 import { buildBoard, describeBoard } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
@@ -708,6 +710,60 @@ console.log('\n--- scheduling board ---')
   })
   check('the same person on two days is 2 positions, 1 person waiting',
     [wide.summary.total, wide.summary.waitingPeople], [2, 1])
+}
+
+console.log('\n--- a move un-asks the person ---')
+{
+  // They answered about the day they were on. Nobody has asked about this one,
+  // so leaving the answer alone is how a show reads as fully staffed with
+  // somebody confirmed for a date they have never heard of (Dan, 2026-09-09).
+  check('moving to another day un-asks them', moveResetsAnswer('2026-09-08', '2026-09-10'), true)
+  check('moving backwards counts too', moveResetsAnswer('2026-09-10', '2026-09-08'), true)
+  // Same day, another room: same commitment. A scheduler shuffling rooms on the
+  // morning of a load-in must not blow away a week of confirmations.
+  check('a room change on the same day keeps the answer', moveResetsAnswer('2026-09-08', '2026-09-08'), false)
+}
+
+console.log('\n--- who has not been told ---')
+{
+  const row = (kind: string, id: string | null, name: string): UntoldRow =>
+    ({ id: `${kind}-${id ?? name}`, kind, crew_member_id: id, crew_member_name: name, days: null })
+
+  // Any DATE change needs telling, added or subtracted (Dan, 2026-09-09).
+  check('a move, a release, an extension and a day change all count',
+    summarizeUntold([
+      row('moved', 'a', 'Alex Reyes'),
+      row('released', 'b', 'Bo Ellery'),
+      row('extended', 'c', 'Casey Nguyen'),
+      row('days_changed', 'd', 'Dana Okafor'),
+    ]).length, 4)
+
+  // Being booked is told by the booking request itself; an accept or a decline
+  // is the crew member's own answer, so they already know.
+  check('being booked is not something to tell them about',
+    summarizeUntold([row('booked', 'a', 'Alex Reyes')]).length, 0)
+  check('their own answers are not either',
+    summarizeUntold([row('accepted', 'a', 'Alex Reyes'), row('declined', 'b', 'Bo Ellery')]).length, 0)
+
+  // One person, three changes, is one person to tell — with the whole picture
+  // in one email, not three.
+  const many = summarizeUntold([
+    row('moved', 'a', 'Alex Reyes'),
+    row('released', 'a', 'Alex Reyes'),
+    row('extended', 'a', 'Alex Reyes'),
+  ])
+  check('several changes to one person is one person', many.length, 1)
+  check('and it says how many changes', many[0].count, 3)
+
+  // A hand-typed name has no directory entry and therefore no email. Counting
+  // them would show a number that no button can ever clear.
+  check('somebody with no directory entry is not counted',
+    summarizeUntold([row('moved', null, 'Somebody Typed In')]).length, 0)
+
+  // Stable order, so the bar does not reshuffle between loads.
+  check('people come back in name order',
+    summarizeUntold([row('moved', 'c', 'Casey Nguyen'), row('moved', 'a', 'Alex Reyes')])
+      .map(p => p.name), ['Alex Reyes', 'Casey Nguyen'])
 }
 
 console.log('\n--- ready email: day compression ---')
