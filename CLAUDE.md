@@ -294,6 +294,7 @@ components/
   SlotFlagActions.tsx            — Move / Keep / Release for one flagged booking, shared by the grid's cells and Edit Show's list
   BookingStatusChip.tsx          — the answer chip: hidden once confirmed on the tracker, always shown and tappable on the Scheduling screen
   CrewChangeNotice.tsx           — the offered-never-forced "tell the crew whose days changed" bar, posted from PositionDefsSection, RoomActionsMenu and AddDayButton
+  CrewNoticesBar.tsx             — the standing version of the same thing on the Scheduling screen: whose days changed and nobody told them, with Tell them / Already told them
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
@@ -331,6 +332,8 @@ lib/
   scheduleBoard.ts — the Scheduling screen's model: buildBoard turns rooms x days x slots x bookings x flags into POSITION LINES (a row per position, running the width of the show), plus describeBoard's counting rules. Pure, unit-tested.
   readyEmail.ts / showReadiness.ts — the "fully staffed" email to the PM (compressDays/buildReadyEmail/sendReadyEmail) and the ONE gate that decides whether to send it (maybeSendReadyEmail)
   staffingEvents.ts — logStaffingEvent(): best-effort, never throws, the digest's diary
+  finalReportEmail.ts — the Final Report's words, extracted from its route so it can be
+                  read and previewed like every other message
   crewNotices.ts — who has not been told their days changed: the notifiable kinds,
                   summarizeUntold (pure) and fetchUntold, behind CrewNoticesBar
   digestEmail.ts  — the evening digest's copy (describeEvent, sendDigestEmail)
@@ -346,7 +349,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 538 assertions as of 2026-09-09.
+                  helper, no framework. 543 assertions as of 2026-09-09
+                  (payroll 42 + schedule 298 + clock 72 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -358,6 +362,9 @@ scripts/
                     every fixture either saw all shows or was in another company, so the
                     show_assignments branch of the shows policy was never exercised.
     alias-loader.mjs — resolves `@/` imports so the .mts files can import from lib/
+    send-all-emails.mts — SENDS all eleven to DEV_EMAIL_TO (`npm run email:all`, or
+                    `-- 5 7` for just those). Refuses against production. The only way
+                    to see the HTML as it arrives on a phone.
     preview-show-emails.mts — prints every show-flow email (`npm run preview:emails`) —
                     the handoff, the ready email, the digest, and the crew days-changed
                     notice — without sending one, for reading the copy over
@@ -629,48 +636,33 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   automatically, registration is optional. Build side: an `accepted_terms_at` on profiles and a
   click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
   consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
-- **"Pencilled" is on the wording list too** (Dan, 2026-09-08, screenshotting the group-ask
-  confirm: "Email a booking request to the 4 people still pencilled on this show?"). It is the
-  app's word for a booking nobody has been asked about yet, and it is on screen in six places
-  that must all change together: the chip's own label and the status word behind it
-  (`components/BookingStatusChip.tsx`), the button "Ask everyone pencilled" plus its confirm
-  sentence and its "Nobody is pencilled — everyone has been asked or has answered" note
-  (`components/AskPencilledButton.tsx`), and the explainer under it on Edit Show, "One booking
-  request email per person still pencilled…" (`components/EditShowClient.tsx`). The database
-  value `booking_status = 'pencilled'` can stay as it is — renaming a column value is a
-  migration for no visible gain, the same call the `crew_call_positions` table already got.
-- **"Named you" has to go** (Dan, 2026-09-08: "I don't like the verbiage 'named you'"). It is
-  the app's own word for assigning a production manager and it has spread through every
-  PM-facing string. The replacement is Dan's to choose — "assigned", "put you on", "asked you to
-  PM", something else — and once he does it is a find-and-replace across seven user-facing
-  places, all of which should end up saying the same thing:
-  `lib/pmInviteEmail.ts` (the subject "you're named PM on X" and the body "you've been named
-  production manager by Y", in both the text and HTML versions), `app/pm/[token]/page.tsx`
-  (the invitation line "X named you production manager on", the confirmation "It's in your
-  CrewTracker now. X named you.", and the dead-link line "Check with whoever named you"),
-  `app/pm/[token]/AcceptPmForm.tsx` ("Whoever named you has been told"), `lib/pmInvite.ts` (the
-  replaced-invitation error), and `components/NewShowClient.tsx` (the couldn't-be-named-PM
-  error). Do the whole set in one go, with [[the email copy review]] if that happens first —
-  the invitation is on that list anyway.
-- **Review every email's wording with Dan** (Dan, 2026-09-07: "I'll want to change them").
-  All of it was written by Claude and none of it has been read by the person whose name goes on
-  it. One sitting, one file at a time: `lib/inviteEmail.ts` (team invite), `lib/pmInviteEmail.ts`
-  (PM invitation), `lib/callHandoffEmail.ts` (needs scheduling), `lib/bookingEmail.ts` (crew
-  request + decline notice + the SMS text), `lib/readyEmail.ts` (fully staffed),
-  `lib/digestEmail.ts` (evening digest), `lib/daysChangedEmail.ts` (crew change notice), plus
-  the Final Report email in `app/api/reports/final/route.ts` and the four Supabase Auth
-  templates in `docs/email-templates/`. `npm run preview:emails`, `preview:pm` and
-  `preview:booking` print most of them without sending — and since 2026-09-08 you can also send
-  them to yourself from the dev site, because every dev email lands in `DEV_EMAIL_TO`. Change subject lines, greetings and
-  sign-offs freely; the facts each email carries (no money, no other crew, the accept/confirm
-  link) are rules, not copy.
+- ~~"Pencilled" is on the wording list.~~ **DONE 2026-09-09** — "Not Asked". See
+  "The copy pass" below.
+- ~~"Named you" has to go.~~ **DONE 2026-09-09** — a PM is INVITED. See "The copy pass".
+- ~~Review every email's wording with Dan.~~ **DONE 2026-09-09**, all eleven, one at a time,
+  with Dan rewriting several himself. See "The copy pass". Two follow-ups are still open and are
+  listed there: the four Supabase Auth templates need pasting into the dashboard, and the
+  marketing page has never been read.
+- **Paste the two reworded Supabase Auth templates into the dashboard** (2026-09-09).
+  `docs/email-templates/magic-link.html` and `reset-password.html` now say the link "expires one
+  hour after this email was sent", which Dan asked for — but these four templates are configured
+  in the Supabase dashboard, not from this repo, so the change is NOT live until somebody pastes
+  it. Two minutes of work, and it comes with a standing trap recorded in that folder's README:
+  one hour is Supabase's DEFAULT (Email OTP Expiration, 3600 seconds), so moving that setting
+  turns both templates into a lie. Check it reads 3600 while you are in there.
+- **Read the marketing page and the Join the Beta form** (2026-09-09, the one part of the copy
+  pass that was never done). `app/page.tsx` and `app/join-beta/page.tsx` are the only copy a
+  stranger meets, and unlike everything else they make CLAIMS about the product. Do it with the
+  legal-groundwork item above rather than separately: the terms of service have to stand behind
+  whatever the landing page promises, so writing them in the other order means writing the
+  claims twice.
 - **Scheduler digest for accepts** (Dan, 2026-09-07: "declines are instant, accepts are a
   digest"). Declines already email every scheduler the moment they land
   (`/api/bookings/respond`). Accepts tell nobody but the PM's nightly digest. Build: in the
   existing `/api/digest` cron run, one email per SCHEDULER per evening covering every sent
   show they can see — "Northwind: 3 accepted, 1 declined, 2 still waiting · Kestrel: 1
-  accepted" — nothing on a quiet day. Needs a second stamp on `staffing_events`
-  (`scheduler_sent_at`, one migration) so the PM digest and the scheduler digest each mark
+  accepted" — nothing on a quiet day. Needs a third stamp on `staffing_events`
+  (`scheduler_sent_at`, one migration — 0040's `crew_told_at` is the pattern to copy) so the PM digest and the scheduler digest each mark
   their own sends; recipients = live `memberships` with `can_manage_scheduling`, shows = the
   org's sent, unfinalized, unarchived shows; group by show; reuse `lib/digestEmail.ts`'s
   shape. Never per-accept emails (three schedulers × thirty crew = ninety emails per show)
@@ -1046,9 +1038,9 @@ carries DECLINE**, so an accidental acceptance is undone in a tap, and whoever n
 Accepting is idempotent, so a scanner's fetch and a refresh both change nothing the second time.
 This is the ONLY GET in the app that writes anything.
 
-**BOTH BUTTONS ANSWER ON THE CLICK, and the page carries the reversal** (Dan, 2026-09-08: "A
-click from the email is definitive. There can be a reversal, but a decline click in the email
-should not bring up another decline button"). Declining removes the pointer, both stamps and any
+**BOTH BUTTONS ANSWER ON THE CLICK, AND THE ANSWER IS FINAL** (Dan, 2026-09-08: "A click from
+the email is definitive"; 2026-09-09, removing the reversal that first shipped alongside it: "An
+email button press is final" — see "The copy pass"). Declining removes the pointer, both stamps and any
 access the acceptance granted, so the show honestly has no PM again, and emails whoever named
 them at once. **The invitation itself SURVIVES** (0039: `pm_invites.declined_at` /
 `declined_note`) — deleting it, as the first cut did, left the token dead, so there was no way
@@ -1228,8 +1220,8 @@ named, twice.
 
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
-existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 253 +
-clock 72 + rls 131 = 498 assertions (schedule lost 35 with the cross-show chart on 2026-09-08).
+existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 298 +
+clock 72 + rls 131 = 543 assertions as of 2026-09-09.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
@@ -1395,6 +1387,75 @@ This list drifted badly once and sent a session off to re-implement finished wor
 - **Per-crew timesheet Text/Share/Copy** — `SendHoursButton.tsx`.
 - **Named payroll presets, Continuous Time, Pay As Half Day UI, room rename/delete, per-crew removal, show archiving, batch travel-day toggle, reset punches, Copy Crew, Add Day from the tracker** — all shipped.
 - The whole Settings page: 24-hour time, Shoulder Surfer Mode, org-wide timecard rounding, AV Roles editor, payroll presets, Final Report recipients.
+
+## The copy pass (2026-09-09)
+
+Every message this app sends was written by Claude, and none of it had been read by the person
+whose name goes on it. Dan read all eleven, one at a time, and wrote several of them himself.
+What follows is the set of RULES that came out of it — the individual wordings live in the files.
+
+**ACCEPT AND DECLINE. Those two words, nowhere else, green `#1A7F37` and red `#C0392B`.** Three
+emails had three different pairs ("Yes, I'll do it", "Confirm", "Yes, that works") and the two
+public pages had two more. Dan, having asked more than once: *"I need an accept and decline. I do
+not know how many times I have to say this. No other wordings. Green accept, red decline."* The
+pages use a `good` Button variant off the existing `--good` token, so they follow the theme.
+Pinned by tests on both the words and the hexes.
+
+**AN ANSWER FROM AN EMAIL IS FINAL** (*"An email button press is final"*). Both reversals are
+gone — no "Change my answer" on `/book`, no "Actually, I can do this show" on `/pm` — and the
+state behind them was deleted rather than hidden. Somebody whose situation changes rings whoever
+booked them; a decliner is re-booked from the Scheduling screen, where `FillPositionPicker`
+revives their own row. This REPLACES the earlier "there can be a reversal" design. The note after
+a PM's decline survives: it undoes nothing.
+
+**THE SIGN-OFF SAYS WHO CAUSED THE SEND.** "Sent by CrewTracker.app" when the app decided — the
+evening digest, and the fully-staffed email that fires when the last confirmation lands. "Sent
+from CrewTracker.app" when a person pressed something — every invitation, request, notice,
+decline notice, handoff, the Final Report and the texted timesheet. The rule is written into
+`lib/sendEmail.ts`, the one door, so a tenth sender has to choose.
+
+**A CREW DAY IS WRITTEN FROM THE CREW MEMBER'S SIDE, in the shop's shorthand**: "Travel +
+Load-in", "Show + Load-out + Travel", "Work" where nobody typed the day. `describeDayLines` in
+`lib/bookingEmail.ts` is the single builder behind the email, the text, the `/book` page and the
+change notice, so they cannot disagree. It used to print the production's day beside the person's
+travel flag, which on a travel day read "Travel · Load-in · Travel and work" — the word travel
+twice, both halves true, the line useless. When the person's own travel is stated the show's
+travel is dropped, because it is the same trip.
+
+**"NOT ASKED", never "pencilled"** — the chip on every crew row, the confirm sentences, and the
+Edit Show explainer. The button that emails them all is "Send email invites". The database value
+`booking_status = 'pencilled'` stays: renaming a column value is a migration for no visible gain,
+the same call `crew_call_positions` already got.
+
+**THE COMPANY INVITES, not a named person.** "Dan Smith at Wood & Waves Productions has invited
+you" became "Wood & Waves Productions has invited you", in the email and on the page: a PM works
+for the company, and a personal name dates the page the moment that person leaves.
+
+**WHERE means the venue AND the city.** It was `venue || cityState`, so a show with both printed
+only the building — and the city is the half that says whether this is a drive or a flight, which
+is most of what a crew member is deciding. Email, text and `/book` page all carry both.
+
+**The PM invitation carries the run day by day** (*"It is all about the dates at this point"*),
+using `dayLabel`'s own words so the email and the day header cannot describe a day differently.
+
+**The Final Report email lives in `lib/finalReportEmail.ts`**, extracted from its route on
+2026-09-09 — being written inline is exactly why it went until that day with no HTML version
+while every booking request looked designed. The route still owns the attachments, the recipients
+and the lock.
+
+**`npm run email:all` sends all eleven to `DEV_EMAIL_TO`** (`scripts/test/send-all-emails.mts`),
+which is the only way to see the HTML as it arrives on a phone; `-- 5 7` sends just those. It
+refuses to run against production, where the redirect does not apply and these would be real
+emails to real crew.
+
+**Still open from this pass:**
+- **The four Supabase Auth templates are edited in the dashboard, not here.** `docs/email-templates/`
+  now says the magic-link and password-reset links "expire one hour after this email was sent" —
+  that text is NOT live until somebody pastes it in, and it is a lie if the Email OTP Expiration
+  setting is ever moved off 3600 seconds. Both facts are in that folder's README.
+- **The marketing page and the Join the Beta form have never been read.** They are the only copy
+  a stranger meets, and the claims on them are what the terms of service will have to stand
+  behind — do it with the legal groundwork item.
 
 ## The demo company (2026-09-08)
 
