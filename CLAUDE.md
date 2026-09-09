@@ -643,13 +643,12 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   with Dan rewriting several himself. See "The copy pass". Two follow-ups are still open and are
   listed there: the four Supabase Auth templates need pasting into the dashboard, and the
   marketing page has never been read.
-- **Paste the two reworded Supabase Auth templates into the dashboard** (2026-09-09).
-  `docs/email-templates/magic-link.html` and `reset-password.html` now say the link "expires one
-  hour after this email was sent", which Dan asked for — but these four templates are configured
-  in the Supabase dashboard, not from this repo, so the change is NOT live until somebody pastes
-  it. Two minutes of work, and it comes with a standing trap recorded in that folder's README:
-  one hour is Supabase's DEFAULT (Email OTP Expiration, 3600 seconds), so moving that setting
-  turns both templates into a lie. Check it reads 3600 while you are in there.
+- ~~Paste the two reworded Supabase Auth templates into the dashboard.~~ **DONE 2026-09-09.**
+  The magic-link and password-reset emails now say the link "expires one hour after this email
+  was sent", and the Email OTP Expiration setting was read on production the same day: 3600.
+  Those two facts have to move together — see `docs/email-templates/README.md`, which now also
+  records that the setting is under Authentication → Sign In / Providers → Email, not on the
+  template screen, and that Supabase offers no placeholder for it.
 - **Read the marketing page and the Join the Beta form** (2026-09-09, the one part of the copy
   pass that was never done). `app/page.tsx` and `app/join-beta/page.tsx` are the only copy a
   stranger meets, and unlike everything else they make CLAIMS about the product. Do it with the
