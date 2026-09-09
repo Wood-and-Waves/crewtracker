@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { loadClockViewForProfile } from '@/lib/clockSession'
 import ClockPunch from '@/app/clock/[token]/ClockPunch'
+import CrewHoursList from '@/components/CrewHoursList'
+import { loadCrewHours } from '@/lib/crewHours'
 
 // What a CREW-SIDE login sees when they open a show: the crew clock, for one
 // person, reached from a login instead of a link (Section 3, 2026-09-06).
@@ -8,12 +10,14 @@ import ClockPunch from '@/app/clock/[token]/ClockPunch'
 // posts to (/api/clock/punch-me, session-authorised) and that there is no
 // expiry or revocation — you are staffed or you are not.
 export default async function CrewShowScreen({
-  showId, profileId, day,
+  showId, profileId, day, view: mode,
 }: {
   showId: string
   profileId: string
   /** ?d=YYYY-MM-DD, validated against the show's days by the loader. */
   day?: string
+  /** ?v=hours — their whole run with hours instead of one day's punch grid. */
+  view?: string
 }) {
   const view = await loadClockViewForProfile(showId, profileId, day)
 
@@ -24,6 +28,23 @@ export default async function CrewShowScreen({
         <p className="mt-4 text-sm text-muted">You aren’t staffed on this show.</p>
       </div>
     )
+  }
+
+  // Their own hours outlive the show (Dan, 2026-09-09) — see the same branch
+  // in app/clock/[token]/page.tsx. Above the finalize gate, because reading is
+  // not changing, and the week after is when somebody checks their pay.
+  if (mode === 'hours') {
+    const hours = await loadCrewHours(showId, view.me.crewMemberId)
+    if (hours) {
+      return (
+        <CrewHoursList
+          showName={hours.showName}
+          hours={hours.hours}
+          dayHref={view.finalized ? null : (date => `/dashboard/shows/${showId}?d=${date}`)}
+          todayHref={view.finalized ? null : `/dashboard/shows/${showId}`}
+        />
+      )
+    }
   }
 
   if (view.finalized) {
@@ -51,6 +72,7 @@ export default async function CrewShowScreen({
       today={view.today}
       days={view.days}
       assignments={view.me.assignments}
+      hoursHref={`/dashboard/shows/${showId}?v=hours`}
     />
   )
 }

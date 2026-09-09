@@ -18,6 +18,7 @@
 import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow, pickShowDay, stepDays } from '../../lib/clockLinks.ts'
 import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, type Punch } from '../../lib/punches.ts'
 import { punchRefusal } from '../../lib/clockPunch.ts'
+import { summarizeCrewHours, type CrewHoursInput } from '../../lib/crewHours.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -277,6 +278,66 @@ console.log('\n--- which day a crew screen opens on ---')
   check('inside the run, both sides', stepDays(run, '2026-09-11'), { prev: '2026-09-10', next: '2026-09-12' })
   check('the first day has nothing before it', stepDays(run, '2026-09-10'), { prev: null, next: '2026-09-11' })
   check('the last day has nothing after it', stepDays(run, '2026-09-12'), { prev: '2026-09-11', next: null })
+}
+
+console.log('\n--- a crew member\'s own hours across the show ---')
+{
+  // Hours, never money, and never a look at who entered the punch.
+  const RULES = {
+    overtime_after_hours: 10, double_time_enabled: false, double_time_after_hours: 12,
+    travel_rate: 'halfDay', meal_penalty_enabled: false, meal_penalty_grace_period: 6,
+    meal_penalty_amount: 0, minimum_meal_break_enabled: true, minimum_meal_break_minutes: 60,
+    meal_break_deduction_cap: 60, short_turn_penalty_enabled: false, short_turn_rest_hours: 10,
+    continuous_time_enabled: false,
+  } as any
+
+  const card = (over: Record<string, unknown> = {}, punches: any[] = []) => ({
+    id: 't', crew_member_id: 'c', day_rate: 0, is_travel_day: false, travel_in_day: false,
+    travel_out_day: false, pay_as_half_day: false, absence: null, punches, ...over,
+  }) as any
+
+  const at = (h: number, m = 0) => `2026-10-01T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00.000Z`
+  const worked = [
+    { punch_type: 'start', punched_at: at(14) },   // 9am Central
+    { punch_type: 'end', punched_at: at(23, 30) }, // 6:30pm Central
+  ]
+  const fmt = (iso: string) => iso.slice(11, 16)
+
+  const rows: CrewHoursInput[] = [
+    { date: '2026-10-01', room: 'Ballroom', role: 'A1', timecard: card({}, worked) },
+    { date: '2026-10-02', room: 'Ballroom', role: 'A1', timecard: card({ is_travel_day: true }) },
+    { date: '2026-10-03', room: 'Ballroom', role: 'A1', timecard: card({}, [worked[0]]) },
+    { date: '2026-10-04', room: 'Ballroom', role: 'A1', timecard: card({ absence: 'cancelled' }) },
+  ]
+  const out = summarizeCrewHours(rows, RULES, 1, fmt)
+
+  check('a worked day carries its times and its hours',
+    [out.days[0].start, out.days[0].end, out.days[0].hours], ['14:00', '23:30', 9.5])
+  // A plain travel day has no punches by design — a word, not a blank.
+  check('a travel day says Travel and counts nothing',
+    [out.days[1].label, out.days[1].hours, out.days[1].start], ['Travel', null, null])
+  // The half of the question this screen exists for: did my punches land?
+  check('a day started but never wrapped is Missing, not zero',
+    [out.days[2].missing, out.days[2].hours], [true, null])
+  check('and the screen knows to say so', out.anyMissing, true)
+  // Absent beats everything, the same precedence lib/payroll.ts applies.
+  check('a cancelled day says so and shows no times',
+    [out.days[3].label, out.days[3].hours, out.days[3].start], ['Cancelled', null, null])
+  check('an absent day with a stray punch is still absent',
+    summarizeCrewHours([{ date: '2026-10-05', room: 'R', role: null, timecard: card({ absence: 'no_show' }, worked) }],
+      RULES, 1, fmt).days[0].label, 'No-show')
+
+  // Only days with hours are worked days; travel and absent are not.
+  check('the total counts worked days only', [out.workedDays, out.totalHours], [1, 9.5])
+  check('unsorted input still reads in date order',
+    summarizeCrewHours([rows[2], rows[0]], RULES, 1, fmt).days.map(d => d.date),
+    ['2026-10-01', '2026-10-03'])
+
+  // The company's rounding is threaded through, exactly as every other total.
+  const odd = [{ punch_type: 'start', punched_at: at(14) }, { punch_type: 'end', punched_at: at(23, 37) }]
+  check('the org rounding is applied, not the raw clock',
+    summarizeCrewHours([{ date: '2026-10-06', room: 'R', role: null, timecard: card({}, odd) }], RULES, 15, fmt)
+      .days[0].hours, 9.75)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

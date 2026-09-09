@@ -4,6 +4,7 @@ import { stepDays } from '@/lib/clockLinks'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   PUNCH_LABELS, formatPunchTime, nextPunchType, visiblePunchTypes,
   isEligibleForBatch, roundWallTime,
@@ -35,7 +36,7 @@ import type { ClockAssignment } from '@/lib/clockSession'
 
 export default function ClockPunch({
   token, showId, endpoint = '/api/clock/punch', showName, venue, crewName, timeZone, roundingMinutes,
-  selectedDate, today, days, assignments,
+  selectedDate, today, days, assignments, hoursHref,
 }: {
   /** The link's token. Absent when reached from a login (Section 3), which
    *  sends `showId` to /api/clock/punch-me instead. */
@@ -57,6 +58,9 @@ export default function ClockPunch({
   /** Every work day of the show, ascending — the arrows walk this. */
   days: string[]
   assignments: ClockAssignment[]
+  /** Their whole run with hours — the screen's second view (Dan, 2026-09-08).
+   *  Absent on the venue-QR path, where nobody has been identified yet. */
+  hoursHref?: string
 }) {
   const router = useRouter()
   const [rows, setRows] = useState(assignments)
@@ -192,6 +196,22 @@ export default function ClockPunch({
         </p>
         <h1 className="font-display text-3xl font-bold uppercase tracking-tight">{crewName}</h1>
       </div>
+
+      {/* The second view. A link, not a tab component: this is a server-rendered
+          page swap, so there is no state to keep and nothing to hydrate. */}
+      {hoursHref && (
+        <div className="flex gap-2 px-4 pt-3">
+          <span className="flex-1 border-2 border-ink bg-ink px-3 py-2 text-center text-[11px] font-bold uppercase tracking-wider text-bg">
+            Today
+          </span>
+          <Link
+            href={hoursHref}
+            className="flex-1 border-2 border-ink px-3 py-2 text-center text-[11px] font-bold uppercase tracking-wider text-ink"
+          >
+            Your hours
+          </Link>
+        </div>
+      )}
 
       {/* Day nav. A light strip under the band, the same weight a data table's
           column header gets — two solid bands stacked is the top-heavy look

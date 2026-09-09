@@ -1,6 +1,8 @@
 import { loadClockView } from '@/lib/clockSession'
 import ClockPicker from './ClockPicker'
 import ClockPunch from './ClockPunch'
+import CrewHoursList from '@/components/CrewHoursList'
+import { loadCrewHours } from '@/lib/crewHours'
 import Card from '@/components/ui/Card'
 import Logo from '@/components/Logo'
 import type { Metadata } from 'next'
@@ -68,10 +70,12 @@ export default async function ClockPage({
   // ?d=YYYY-MM-DD picks the show day. Validated in loadClockView against the
   // show's actual work days, so a hand-edited value falls back to today rather
   // than reaching anything.
-  searchParams: Promise<{ d?: string }>
+  // ?v=hours is the second view: their whole run with hours, instead of one
+  // day's punch grid (Dan, 2026-09-08).
+  searchParams: Promise<{ d?: string; v?: string }>
 }) {
   const { token } = await params
-  const { d } = await searchParams
+  const { d, v } = await searchParams
   const view = await loadClockView(token, d)
 
   if (!view) {
@@ -86,6 +90,32 @@ export default async function ClockPage({
       title="This link has been turned off"
       body="Ask your PM for a new one." />
   }
+  // THEIR OWN HOURS SURVIVE THE SHOW (Dan, 2026-09-09). Reading is not
+  // changing: expiry and the finalize lock exist to stop somebody EDITING
+  // times afterwards, and nobody asks "what did I work?" during the load-in —
+  // they ask the week after, checking their pay. So this sits above both
+  // gates and below `revoked`, which is a PM deliberately killing a link and
+  // still means dead.
+  //
+  // Read-only by construction: the list renders numbers and, once the show is
+  // over, links to nothing.
+  if (v === 'hours' && view.me) {
+    const hours = await loadCrewHours(view.showId, view.me.crewMemberId)
+    if (hours) {
+      const closed = view.expired || view.finalized
+      return (
+        <Working>
+          <CrewHoursList
+            showName={hours.showName}
+            hours={hours.hours}
+            dayHref={closed ? null : (date => `/clock/${view.token}?d=${date}`)}
+            todayHref={closed ? null : `/clock/${view.token}`}
+          />
+        </Working>
+      )
+    }
+  }
+
   if (view.expired) {
     return <Message
       title="This link has expired"
@@ -140,6 +170,8 @@ export default async function ClockPage({
         today={view.today}
         days={view.days}
         assignments={view.me?.assignments ?? []}
+        // Personal links only: a venue QR has not identified anybody yet.
+        hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined}
       />
     </Working>
   )

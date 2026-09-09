@@ -294,6 +294,7 @@ components/
   SlotFlagActions.tsx            — Move / Keep / Release for one flagged booking, shared by the grid's cells and Edit Show's list
   BookingStatusChip.tsx          — the answer chip: hidden once confirmed on the tracker, always shown and tappable on the Scheduling screen
   CrewChangeNotice.tsx           — the offered-never-forced "tell the crew whose days changed" bar, posted from PositionDefsSection, RoomActionsMenu and AddDayButton
+  CrewHoursList.tsx              — a crew member's own days and hours, the second view on both crew screens (?v=hours)
   CrewNoticesBar.tsx             — the standing version of the same thing on the Scheduling screen: whose days changed and nobody told them, with Tell them / Already told them
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
@@ -334,6 +335,8 @@ lib/
   staffingEvents.ts — logStaffingEvent(): best-effort, never throws, the digest's diary
   finalReportEmail.ts — the Final Report's words, extracted from its route so it can be
                   read and previewed like every other message
+  crewHours.ts  — a crew member's own run with hours: summarizeCrewHours (pure) and
+                  loadCrewHours, behind CrewHoursList. Hours only, never money
   crewNotices.ts — who has not been told their days changed: the notifiable kinds,
                   summarizeUntold (pure) and fetchUntold, behind CrewNoticesBar
   digestEmail.ts  — the evening digest's copy (describeEvent, sendDigestEmail)
@@ -349,8 +352,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 543 assertions as of 2026-09-09
-                  (payroll 42 + schedule 298 + clock 72 + rls 131).
+                  helper, no framework. 552 assertions as of 2026-09-09
+                  (payroll 42 + schedule 298 + clock 81 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -694,19 +697,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   Supabase Auth's Site URL / redirect allowlist — and getting one wrong breaks sign-in for
   everybody, so do it deliberately and test Google sign-in immediately afterwards. Nothing in the
   app's code changes: every auth redirect already derives from `window.location.origin`.
-- **A crew member's own week: one screen with their hours** (Dan, 2026-09-08: "For the crew
-  links. Would it be possible to have an overview type screen they can click on and see the
-  week's hours?"). Both crew-facing screens — the no-login clock link (`/clock/[token]`) and the
-  crew-side login (`CrewShowScreen`) — show ONE day at a time behind arrows, so the question crew
-  actually ask ("did all my punches land, and what am I owed hours-wise?") cannot be answered
-  without walking the whole show a day at a time. Build: a summary under the punch grid, or a
-  tab beside it — every day of theirs on this show, each with its in/out times, the day's net
-  hours, and a total at the bottom; tapping a day opens that day, which is the screen that
-  already exists. Rules it must keep: **hours only, never money** (the crew-facing rule the
-  timesheet and the booking email already follow); the org's rounding, threaded through like
-  every other total; travel and absent days carry their label instead of times; and it must never
-  read `punches.source` — a crew-entered hour is worth what a PM-entered one is. Read-only. Half
-  a day, most of it presentation, since `lib/payroll.ts` already computes every number.
+- ~~A crew member's own week: one screen with their hours.~~ **DONE 2026-09-09** — see "Their
+  own hours" below.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
@@ -936,6 +928,38 @@ Other things that are load-bearing and were each verified:
   a lint rule, as `lib/bookingInvite.ts`.
 
 Rate limiting on both routes since 2026-09-06 — see the security backlog entry for the limits.
+
+### Their own hours (2026-09-09)
+
+**Both crew screens have a second view: every day of theirs on the show, with hours.** Dan,
+2026-09-08: *"For the crew links. Would it be possible to have an overview type screen they can
+click on and see the week's hours?"* Until then both screens showed ONE day behind arrows, so
+"did all my punches land, and how many hours am I on for" meant walking the run a day at a time.
+
+`?v=hours` on either path — `/clock/[token]` and the crew-side login's `/dashboard/shows/[id]` —
+swaps the punch grid for `components/CrewHoursList.tsx`. A toggle at the top of each says which
+you are on. It is a page swap, not a tab component: nothing to hydrate, nothing to keep.
+
+**THE WHOLE SHOW, not a calendar week.** For a normal run they are the same, and slicing seven
+days out of a ten-day show would be arbitrary.
+
+**IT OUTLIVES THE SHOW** (Dan, 2026-09-09). The hours render on an EXPIRED link and on a
+FINALIZED show, above both gates — reading is not changing, and nobody asks "what did I work?"
+during the load-in; they ask the week after, checking their pay. Punching stays blocked in both
+cases, and once the show is over the rows stop being links and the toggle disappears, because
+there is nothing left to open. `revoked` still outranks everything: a PM killing a link means
+dead. This was found by building it — the only dev shows with complete punches were a finished
+one and a closed-out one, and neither could reach the screen.
+
+**A day is one of four things, and the order matters**: absent beats travel beats missing beats
+worked, which is the same precedence `lib/payroll.ts` applies — the two must not disagree about
+what a day was. **Missing** (started, never wrapped) is the state the screen exists to surface,
+and it is deliberately not "0". `lib/crewHours.ts` holds the rule (pure, unit-tested in
+`clock.mts`) and the loader; hours come from `calculateNetHours` with the show's ruleset and the
+org's rounding, so they cannot drift from the tracker or the reports.
+
+**Hours, never money** — the loader does not even select `day_rate` — and it never reads
+`punches.source`: a crew-entered hour is worth exactly what a PM-entered one is.
 
 ## Show access: PM-side and crew-side (2026-09-06)
 

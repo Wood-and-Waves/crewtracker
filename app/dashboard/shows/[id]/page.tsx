@@ -28,10 +28,10 @@ export default async function ShowDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ day?: string; d?: string }>
+  searchParams: Promise<{ day?: string; d?: string; v?: string }>
 }) {
   const { id } = await params
-  const { day, d } = await searchParams
+  const { day, d, v } = await searchParams
   const supabase = await createClient()
   // The caller and show/ruleset/workDays are independent of each other (none
   // depend on another's result) so fetch them in one round trip instead
@@ -66,7 +66,7 @@ export default async function ShowDetailPage({
   // own screen — the crew clock — and never the tracker, which would be empty
   // for them anyway: the database hides every row but their own.
   const pmSide = await isPmOnShow(supabase, id)
-  if (!pmSide) return <CrewShowScreen showId={id} profileId={user.id} day={d} />
+  if (!pmSide) return <CrewShowScreen showId={id} profileId={user.id} day={d} view={v} />
   // The scheduling module. Gated on the FLAG, never on "are there any positions"
   // — a switched-off organization may still have positions sitting in the
   // database from before, and those must not reappear as open rows.
