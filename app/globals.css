@@ -266,3 +266,30 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ---------------------------------------------------------------------------
+   PRINT. The only thing in this app designed to be printed is the venue QR
+   sign, and Dan printed one (2026-09-09): it came out as a full page of cream
+   plus a second, nearly empty sheet.
+
+   Both are the same cause. The paper ground is a SCREEN idea — on a printer it
+   is a page of ink carrying no information — and AppShell's shell is
+   `min-h-screen` with that ground painted on it, so on paper it fills one whole
+   page and spills whatever overflows onto another.
+
+   So: white behind everything, and the full-height shell collapses to its
+   content. Ink is for the content.
+   --------------------------------------------------------------------------- */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* AppShell's root. Targeted rather than `body *`, which would also strip the
+     ink mastheads off anything printed later — those ARE content. */
+  body > div {
+    min-height: 0 !important;
+    background: transparent !important;
+  }
+}
