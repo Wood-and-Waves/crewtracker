@@ -17,9 +17,15 @@ The magic-link and password-reset templates now SAY how long the link lasts —
 these emails and then cannot work out why the link failed.
 
 One hour is Supabase's default OTP expiry, not something this repo controls.
-**If that setting is ever changed, these two templates become a lie** — the
-number lives in the dashboard under Authentication → Emails (Email OTP
-Expiration, in seconds; 3600 is one hour). Change one, change the other.
+**If that setting is ever changed, these two templates become a lie.** The
+number is NOT on the template screen and there is no placeholder for it — the
+seven variables Supabase offers (`ConfirmationURL`, `Token`, `TokenHash`,
+`SiteURL`, `Email`, `Data`, `RedirectTo`) do not include expiry, which is why
+the sentence has to be typed by hand.
+
+It lives under **Authentication → Sign In / Providers → Email**, field **Email
+OTP Expiration**, in seconds. **Checked on production 2026-09-09: 3600.**
+Change that setting and change both templates in the same sitting.
 
 ---
 
