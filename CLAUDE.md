@@ -188,6 +188,12 @@ fill picker.
 - **<1024px** (portrait iPad + phone): top nav hides, a **fixed bottom tab-bar** (`position: fixed`, stays pinned while content scrolls) takes over — an app-like phone experience.
 - **Not every screen is phone-first. New Show is a laptop screen** — Dan, 2026-08-03: *"I don't think that the show creation page will be used as much on the phone. Maybe an iPad. But mainly laptops."* This is the screen where somebody sits down and builds a run, so verify it at 1440×900 with a LONG run (20 days) before calling it done. Optimising it for 375px produced a real regression: day types one row per day made the page 1943px tall and pushed the positions grid nearly two screens down. The tracker is the opposite — that one is used on-site, on a phone, in the dark.
 - **Desktop screens restructure, they don't just stretch mobile layouts.** Directory becomes a real data table with search on desktop, collapsing to tappable rows below 1024px. Settings goes two-column (Personal + Org side by side, AV Roles full-width) on desktop. Same principle applies to any future screen that feels sparse when simply widened.
+- **Settings' section list is a sideways-scrolling strip below 1024px, and anything past the
+  fourth tab is off the edge with nothing saying so.** "Companies" — the ONLY company switcher on
+  a phone, since `AccountMenu` is desktop-only — was appended last and therefore invisible on the
+  device where it is the one tab somebody hunts for (Dan, 2026-09-09: "How do I change my
+  organization on my phone?"). It is now inserted SECOND, keeping Personal as the landing
+  section. Anything added to that list needs the same thought: last means hidden on a phone.
 - Any screen with a floating fixed-position action button (e.g. Edit Show's "Save Changes" pill) must clear the bottom tab-bar's position below 1024px — use an offset like `bottom-24 lg:bottom-6`, don't let two fixed-bottom elements collide.
 
 **The tracker console's punch table** (`TimecardRow.tsx` + the room block in `shows/[id]/page.tsx`) is a genuine ruled grid on desktop (`lg:grid-cols-[...]`, shared between the header row and every crew row via `lib/trackerLayout.ts`), collapsing to labeled per-field cards on mobile. This replaced free-floating pill buttons after Dan's first-round feedback that times weren't visually separated.
@@ -958,13 +964,19 @@ you are on. It is a page swap, not a tab component: nothing to hydrate, nothing 
 **THE WHOLE SHOW, not a calendar week.** For a normal run they are the same, and slicing seven
 days out of a ten-day show would be arbitrary.
 
-**IT OUTLIVES THE SHOW** (Dan, 2026-09-09). The hours render on an EXPIRED link and on a
-FINALIZED show, above both gates — reading is not changing, and nobody asks "what did I work?"
+**IT OUTLIVES THE SHOW, AND THE DEAD-END SCREENS ARE THE DOOR** (Dan, 2026-09-09). The hours
+render on an EXPIRED link and on a FINALIZED show, above both gates — reading is not changing, and nobody asks "what did I work?"
 during the load-in; they ask the week after, checking their pay. Punching stays blocked in both
 cases, and once the show is over the rows stop being links and the toggle disappears, because
 there is nothing left to open. `revoked` still outranks everything: a PM killing a link means
 dead. This was found by building it — the only dev shows with complete punches were a finished
 one and a closed-out one, and neither could reach the screen.
+
+**The way IN had the same bug one level up**, and Dan found it the same day on the first show he
+tried: the only door to the hours was the toggle ON the punch screen, which is exactly the screen
+"This link has expired" and "closed out" replace. So both of those messages now carry a **See
+your hours** button. A feature that survives the show is worth nothing if the screen that
+survives with it has no link to it.
 
 **A day is one of four things, and the order matters**: absent beats travel beats missing beats
 worked, which is the same precedence `lib/payroll.ts` applies — the two must not disagree about

@@ -1,5 +1,6 @@
 import { loadClockView } from '@/lib/clockSession'
 import ClockPicker from './ClockPicker'
+import Link from 'next/link'
 import ClockPunch from './ClockPunch'
 import CrewHoursList from '@/components/CrewHoursList'
 import { loadCrewHours } from '@/lib/crewHours'
@@ -53,11 +54,26 @@ function Working({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Message({ title, body }: { title: string; body: string }) {
+function Message({ title, body, hoursHref }: { title: string; body: string; hoursHref?: string }) {
   return (
     <Shell>
       <h1 className="mb-2 text-center text-xl font-bold text-ink">{title}</h1>
       <p className="text-center text-sm text-muted">{body}</p>
+      {/* THE WAY IN, once the punch screen is gone (found by Dan, 2026-09-09,
+          on the first show he tried it on). Their hours outlive the show, but
+          the only door to them was the toggle ON the punch screen — which is
+          exactly the screen these messages replace. So this dead end is where
+          the link has to be, and it is the one thing still worth doing here. */}
+      {hoursHref && (
+        <p className="mt-5 text-center">
+          <Link
+            href={hoursHref}
+            className="inline-block border-2 border-ink px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-ink"
+          >
+            See your hours
+          </Link>
+        </p>
+      )}
     </Shell>
   )
 }
@@ -119,14 +135,16 @@ export default async function ClockPage({
   if (view.expired) {
     return <Message
       title="This link has expired"
-      body={`${view.showName} has finished. Ask your PM if you still need to change something.`} />
+      body={`${view.showName} has finished. Ask your PM if you still need to change something.`}
+      hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined} />
   }
   // Pre-empts the punches_blocked_when_finalized trigger, which the service
   // role does NOT bypass and which would otherwise surface as a raw 500.
   if (view.finalized) {
     return <Message
       title={view.showName}
-      body="This show has been closed out, so times can no longer be changed. Talk to your PM." />
+      body="This show has been closed out, so times can no longer be changed. Talk to your PM."
+      hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined} />
   }
 
   if (view.kind === 'venue') {

@@ -83,8 +83,16 @@ export default async function SettingsPage() {
   // Below two companies there is nothing to switch between. This is also the
   // ONLY switcher on mobile — AppShell's account menu is desktop-only — so it
   // cannot simply move into that menu.
+  //
+  // SECOND, not last (Dan, 2026-09-09: "How do I change my organization on my
+  // phone?"). It was appended after Payroll presets, and on a phone this list
+  // is a strip that scrolls sideways with nothing to say so — the tab was off
+  // the right-hand edge, which for the person who has just joined a second
+  // company is the one tab they are hunting for. Second keeps Personal as the
+  // landing section and still puts this in view without a swipe.
+
   if (organizations.length > 1) {
-    sections.push({
+    sections.splice(1, 0, {
       id: 'companies',
       label: 'Companies',
       description: 'Switch which company you are working in.',
