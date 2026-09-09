@@ -43,6 +43,27 @@ export type SlotFlag = {
   crew_member_id: string | null
 }
 
+/**
+ * Does moving a booking from one slot to another un-ask the person?
+ *
+ * YES when the DATE changes: they answered "can you do Tuesday", and nobody
+ * has asked them about Thursday. Leaving the answer alone is how a show comes
+ * to read as fully staffed with somebody confirmed for a day they have never
+ * heard of (Dan, 2026-09-09).
+ *
+ * NO when only the room changes: same day, same show, same commitment. A
+ * scheduler shuffling rooms on the morning of a load-in must not blow away a
+ * week of confirmations.
+ *
+ * Losing days is deliberately not in here — you do not need somebody's consent
+ * to not need them — and neither is Add Day, which keeps the answer on purpose
+ * (migration 0036: a run growing by a day does not re-ask somebody who
+ * confirmed the whole run).
+ */
+export function moveResetsAnswer(fromDate: string, toDate: string): boolean {
+  return fromDate !== toDate
+}
+
 export type BoardEntry =
   | { kind: 'open'; slotId: string; roomId: string; role: string }
   | { kind: 'booked'; slotId: string | null; roomId: string; booking: BoardBooking; flag: SlotFlag | null }

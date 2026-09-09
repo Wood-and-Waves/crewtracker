@@ -5,6 +5,7 @@ import { liveBookings } from '@/lib/timecardFields'
 import { sendDaysChangedEmail } from '@/lib/daysChangedEmail'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { siteOrigin } from '@/lib/siteOrigin'
+import { NOTIFIABLE_KINDS } from '@/lib/crewNotices'
 import type { EngagementDay } from '@/lib/bookingEmail'
 
 // Telling crew whose days on a show changed. Offered, never forced — see
@@ -39,8 +40,13 @@ export async function POST(request: Request) {
 
   let showId: string | undefined
   let crewMemberIds: string[] | undefined
+  // "Already told them": clear these people from the Scheduling screen's list
+  // without emailing anybody (Dan, 2026-09-09). If the only way to clear the
+  // count were to send an email, people would send unwanted ones or learn to
+  // ignore the number.
+  let markOnly: boolean | undefined
   try {
-    ({ showId, crewMemberIds } = await request.json())
+    ({ showId, crewMemberIds, markOnly } = await request.json())
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
@@ -104,7 +110,29 @@ export async function POST(request: Request) {
     isNaN(dayAfterShow.getTime()) ? thirtyDays.getTime() : Math.min(thirtyDays.getTime(), dayAfterShow.getTime()),
   ).toISOString()
 
+  // The events for one person on this show that nobody has passed on. Stamped
+  // through the service role for the same reason the token upsert above is:
+  // the app never writes staffing_events from a browser, and the only UPDATE
+  // anybody has ever done here is the digest's own sent_at. WHO may do this
+  // was decided at the top of this route, under the caller's own session.
+  let marked = 0
+  async function markTold(crewMemberId: string) {
+    const { data } = await admin
+      .from('staffing_events')
+      .update({ crew_told_at: new Date().toISOString() })
+      .eq('show_id', showId!)
+      .eq('crew_member_id', crewMemberId)
+      .is('crew_told_at', null)
+      .in('kind', NOTIFIABLE_KINDS as unknown as string[])
+      .select('id')
+    marked += data?.length ?? 0
+  }
+
   for (const c of crew) {
+    // BEFORE the email check on purpose: somebody with no address on file must
+    // still be clearable, or they sit in the list forever with no button that
+    // works on them.
+    if (markOnly) { await markTold(c.id); continue }
     if (!c.email) { skipped.push(c.full_name); continue }
     const days = [...(byPerson.get(c.id)?.values() ?? [])].sort((a, b) => a.date.localeCompare(b.date))
 
@@ -148,8 +176,9 @@ export async function POST(request: Request) {
       declineUrl,
     })
     if (result.error) { skipped.push(c.full_name); continue }
+    await markTold(c.id)
     sent++
   }
 
-  return NextResponse.json({ ok: true, sent, skipped })
+  return NextResponse.json({ ok: true, sent, skipped, marked })
 }

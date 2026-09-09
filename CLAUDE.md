@@ -331,6 +331,8 @@ lib/
   scheduleBoard.ts — the Scheduling screen's model: buildBoard turns rooms x days x slots x bookings x flags into POSITION LINES (a row per position, running the width of the show), plus describeBoard's counting rules. Pure, unit-tested.
   readyEmail.ts / showReadiness.ts — the "fully staffed" email to the PM (compressDays/buildReadyEmail/sendReadyEmail) and the ONE gate that decides whether to send it (maybeSendReadyEmail)
   staffingEvents.ts — logStaffingEvent(): best-effort, never throws, the digest's diary
+  crewNotices.ts — who has not been told their days changed: the notifiable kinds,
+                  summarizeUntold (pure) and fetchUntold, behind CrewNoticesBar
   digestEmail.ts  — the evening digest's copy (describeEvent, sendDigestEmail)
   daysChangedEmail.ts — the crew change notice's email (sendDaysChangedEmail)
 proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, /book, /clock + /api/clock, /pm + /api/pm/accept, /api/digest, the keepalive cron, and exactly "/")
@@ -344,7 +346,7 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 498 assertions as of 2026-09-08.
+                  helper, no framework. 538 assertions as of 2026-09-09.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -409,6 +411,11 @@ scripts/
                        · 0036 staffing_events INSERT requires can_edit_timecards (0035 let any
                        viewer of a show — crew-side logins included — write digest lines);
                        extend_all_day_positions() keeps the person's booking_status. No rows.
+                       · 0040 staffing_events.crew_told_at: whose days changed
+                       without the crew being told, read by the Scheduling
+                       screen. WRITES EXISTING ROWS (backfills every existing
+                       event as told, so the screen does not open on a year of
+                       history nobody can act on).
                        · 0039 pm_invites.declined_at / declined_note: a PM's
                        decline is RECORDED rather than deleting the invitation,
                        so the email's Decline button can be definitive and still
@@ -1143,6 +1150,35 @@ not "accepted," even though the event that triggered the line said "booked." A f
 show (bad PM email, a send error, an unexpected exception) is logged and skipped; the run
 still processes every other show, and the unsent rows stay unsent so the next day's run tries
 again rather than losing the event.
+
+**`staffing_events` carries TWO stamps and they are not interchangeable.**
+`sent_at` means the row appeared in the PM's evening digest; `crew_told_at`
+(0040) means somebody passed the change on to the CREW MEMBER. Different
+audience, different day — reusing one for the other would make the digest
+silently mark people as told. The Scheduling screen reads the second: any row
+with a notifiable kind and no `crew_told_at` is somebody nobody has told,
+listed by `components/CrewNoticesBar.tsx` under the strip with **Tell them**
+and **Already told them**. Notifiable is any DATE change, added or subtracted
+(Dan, 2026-09-09) — `moved`, `released`, `extended`, `days_changed`.
+Deliberately not `booked`, because the booking request is how somebody is told
+they are on a show at all, nor `accepted`/`declined`, which are the crew
+member's own answers. **The second button is not a convenience**: if the only
+way to clear the count were to send an email, people would send unwanted ones
+or learn to ignore the number, and a counter everyone ignores is worse than
+none. It runs BEFORE the has-an-email check, so somebody with no address on
+file can still be cleared instead of sitting there forever. The rule is
+`lib/crewNotices.ts` (pure, unit-tested); the stamping is
+`/api/crew/days-changed`, which takes `markOnly` for the no-email path.
+
+**A MOVE TO ANOTHER DAY UN-ASKS THE PERSON** (2026-09-09,
+`moveResetsAnswer` in `lib/scheduleBoard.ts`). They answered about the day they
+were on; nobody has asked about the new one, and leaving the answer alone is
+how a show comes to read as fully staffed with somebody confirmed for a date
+they have never heard of. Only that day resets — their other days are still
+days they agreed to — and only when the DATE changes: shuffling rooms on the
+same day keeps the answer. Losing days deliberately does NOT reset anything
+(you do not need somebody's consent to not need them), and neither does Add
+Day, which keeps the answer on purpose (0036).
 
 **`extend_all_day_positions(show, work_day)`** is Add Day's answer to "positions by kind"
 making plain copy-crew stop making sense: once a show has position DEFINITIONS, adding a day

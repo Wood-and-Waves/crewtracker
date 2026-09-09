@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { logStaffingEvent } from '@/lib/staffingEvents'
 import { compressDays } from '@/lib/readyEmail'
+import { moveResetsAnswer } from '@/lib/scheduleBoard'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import type { SlotFlag } from '@/lib/scheduleBoard'
@@ -78,6 +79,24 @@ export default function SlotFlagActions({
     const { data, error: e } = await supabase.from('timecards')
       .update({ room_id: slot.room_id, call_position_id: slot.id }).eq('id', flag.timecard_id).select('id')
     if (e || !data?.length) { setBusy(false); setError(e?.message ?? 'That did not move.'); return }
+
+    // A MOVE TO ANOTHER DAY UN-ASKS THEM. They answered about the day they
+    // were on; nobody has asked about this one. Without this the grid shows
+    // "Confirmed" against a date the person has never heard of, and the
+    // fully-staffed email counts them.
+    //
+    // Only this day, not the whole show: their other days are still days they
+    // agreed to. The change notice offered next is the re-ask, and answering it
+    // confirms them show-wide the way every other answer does.
+    //
+    // Declined rows are left alone — moving one must not resurrect it — and so
+    // are rows already unasked, which have nothing to reset.
+    if (moveResetsAnswer(flag.date, slot.date)) {
+      await supabase.from('timecards')
+        .update({ booking_status: 'pencilled', booking_invited_at: null, booking_responded_at: null })
+        .eq('id', flag.timecard_id)
+        .in('booking_status', ['confirmed', 'invited'])
+    }
     await logStaffingEvent(supabase, {
       showId, kind: 'moved', crewMemberId: flag.crew_member_id,
       crewMemberName: flag.crew_member_name, role: flag.role, days: compressDays([slot.date]),
