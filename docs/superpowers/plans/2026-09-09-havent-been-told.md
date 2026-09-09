@@ -28,7 +28,7 @@
 
 | File | Responsibility |
 |---|---|
-| `scripts/sql/migrations/0040_crew_told_at.sql` (create) | The column, its comment, the column grant, and the backfill that stops day one showing a year of history. |
+| `scripts/sql/migrations/0040_crew_told_at.sql` (create) | The column, its comment, the partial index, and the backfill that stops day one showing a year of history. No grant: `authenticated` holds a TABLE-level SELECT on `staffing_events`, which covers columns added later — unlike `timecards`, which is column-granted for the day_rate lockdown. |
 | `lib/crewNotices.ts` (create) | The pure rule (which kinds need telling, grouped by person) plus the one query that reads them. No React, no email. |
 | `components/CrewNoticesBar.tsx` (create) | The strip line: the count, "Tell them", "Mark as told". Client component, same confirm-bar shape as `CrewChangeNotice`. |
 | `app/dashboard/shows/[id]/schedule/page.tsx` (modify) | Fetch the untold list alongside everything else and render the bar. |
