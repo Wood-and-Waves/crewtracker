@@ -333,6 +333,44 @@ console.log('\n--- a crew member\'s own hours across the show ---')
     summarizeCrewHours([rows[2], rows[0]], RULES, 1, fmt).days.map(d => d.date),
     ['2026-10-01', '2026-10-03'])
 
+  // THE SAME DETAIL THE TEXTED TIMESHEET CARRIES (Dan, 2026-09-09). Two
+  // surfaces describing one week differently is how somebody ends up asking
+  // which is right — so the numbers come from the same functions.
+  const lunch = [
+    { punch_type: 'start', punched_at: at(13) },       // 8am Central
+    { punch_type: 'meal_out', punched_at: at(18) },
+    { punch_type: 'meal_in', punched_at: at(19) },     // an hour
+    // 7:30pm Central is half past midnight UTC the NEXT day — and `at()` above
+    // is pinned to Oct 1, so this is Oct 2. ("T24:30" would be Invalid Date.)
+    { punch_type: 'end', punched_at: '2026-10-02T00:30:00.000Z' },
+  ]
+  const withLunch = summarizeCrewHours(
+    [{ date: '2026-10-07', room: 'R', role: 'A1', timecard: card({}, lunch) }], RULES, 1, fmt)
+  // 8am to 7:30pm is 11.5 gross; an hour of lunch comes off, leaving 10.5
+  // WORKED. Overtime is computed on PAID hours, which ceiling-round per day —
+  // so 10.5 becomes 11 and the overtime is a full hour, not half of one. That
+  // is the rule the timesheet and Reports use, and pinning it here is the point
+  // of this test: the screen must not invent a friendlier-looking number.
+  check('the day carries its worked hours', withLunch.days[0].hours, 10.5)
+  check('the meal break is named and capped', withLunch.days[0].notes.includes('M1 break 60 min'), true)
+  check('overtime is the PAID hour, not the worked half hour',
+    withLunch.days[0].notes.includes('OT 1'), true)
+  check('and totalled for the run', withLunch.overtime, 1)
+  // A count, never what it is worth: that would be money.
+  check('no dollar sign anywhere in the notes',
+    withLunch.days[0].notes.some(n => n.includes('$')), false)
+
+  // A travel leg is a note, and counts toward travel days without being a
+  // travel DAY — those are additive to hours actually worked.
+  const hybrid = summarizeCrewHours(
+    [{ date: '2026-10-08', room: 'R', role: null, timecard: card({ travel_in_day: true }, worked) }], RULES, 1, fmt)
+  check('a travel-in leg is noted', hybrid.days[0].notes.includes('Travel in'), true)
+  check('and still has its worked hours', hybrid.days[0].hours, 9.5)
+  check('the travel-leg day is counted', hybrid.travelDays, 1)
+
+  // A quiet day says nothing extra rather than printing empty detail.
+  check('an ordinary day has no notes', out.days[0].notes.length, 0)
+
   // The company's rounding is threaded through, exactly as every other total.
   const odd = [{ punch_type: 'start', punched_at: at(14) }, { punch_type: 'end', punched_at: at(23, 37) }]
   check('the org rounding is applied, not the raw clock',

@@ -83,6 +83,11 @@ export default function CrewHoursList({
                     <span className="block truncate text-xs text-muted">
                       {d.label ?? (d.start && d.end ? `${d.start} – ${d.end}` : d.start ? `${d.start} – no wrap yet` : 'Not clocked in')}
                     </span>
+                    {/* The same detail the texted timesheet carries, in the same
+                        words — a day with nothing to add says nothing. */}
+                    {d.notes.length > 0 && (
+                      <span className="mt-0.5 block text-xs text-muted">{d.notes.join(' · ')}</span>
+                    )}
                   </span>
                   <span className="shrink-0 text-right">
                     {d.hours !== null ? (
@@ -102,9 +107,25 @@ export default function CrewHoursList({
           <div className="mt-3 flex items-baseline justify-between">
             <span className="text-sm text-muted">
               {summary.workedDays} {summary.workedDays === 1 ? 'day' : 'days'} worked
+              {summary.travelDays > 0 && ` · ${summary.travelDays} travel`}
             </span>
             <span className="font-mono text-2xl font-bold tabular-nums text-ink">{hours(summary.totalHours)}</span>
           </div>
+
+          {/* Overtime and double time are the run's totals, and they are PAID
+              hours — ceiling-rounded per day, so they will not always equal the
+              worked hours above minus a threshold. That is the rule payroll
+              runs on, and a friendlier-looking number here would disagree with
+              the timesheet and with Reports. */}
+          {(summary.overtime > 0 || summary.doubleTime > 0) && (
+            <div className="mt-1 flex items-baseline justify-between text-sm text-muted">
+              <span>
+                {summary.overtime > 0 && `Overtime ${hours(summary.overtime)}`}
+                {summary.overtime > 0 && summary.doubleTime > 0 && ' · '}
+                {summary.doubleTime > 0 && `Double time ${hours(summary.doubleTime)}`}
+              </span>
+            </div>
+          )}
 
           {summary.anyMissing && (
             <p className="mt-4 border-l-[3px] border-ot py-1 pl-3 text-xs text-muted">

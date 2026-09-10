@@ -358,8 +358,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 552 assertions as of 2026-09-09
-                  (payroll 42 + schedule 298 + clock 81 + rls 131).
+                  helper, no framework. 561 assertions as of 2026-09-09
+                  (payroll 42 + schedule 298 + clock 90 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -984,6 +984,20 @@ what a day was. **Missing** (started, never wrapped) is the state the screen exi
 and it is deliberately not "0". `lib/crewHours.ts` holds the rule (pure, unit-tested in
 `clock.mts`) and the loader; hours come from `calculateNetHours` with the show's ruleset and the
 org's rounding, so they cannot drift from the tracker or the reports.
+
+**IT CARRIES WHAT THE TEXTED TIMESHEET CARRIES, in the same words** (Dan, 2026-09-09: "Can the
+crew hours show more? Like meal breaks and OT?"). Per day, when there is something to say: the
+meal break as DEDUCTED (capped), meal penalties as a COUNT, half day, travel legs, OT and DT —
+short turnaround named as such rather than as bare double time. Totals for the run underneath.
+`lib/timesheet.ts` is what a PM sends from Send Hours, and two surfaces describing one week
+differently is how somebody ends up asking which is right, so the numbers come from the SAME
+functions: `paidOvertimeHours` / `paidDoubleTimeHours`, never recomputed.
+
+**A day's hours are WORKED; its overtime is PAID.** They will not always look consistent: a
+10.5-hour day shows 10.5 and "OT 1", because paid hours ceiling-round per day, so 10.5 becomes 11
+and a full hour is past the threshold. That is the rule payroll runs on and the one Reports and
+the timesheet use — a friendlier-looking number here would simply disagree with the money. Pinned
+by a test that says so out loud.
 
 **Hours, never money** — the loader does not even select `day_rate` — and it never reads
 `punches.source`: a crew-entered hour is worth exactly what a PM-entered one is.
