@@ -1569,8 +1569,27 @@ six crew, 78 punches, closed out and signed off. Northwind is a show being CREWE
 show already PAID, so the tracker, the reports, a texted timesheet and a crew member's own hours
 can all be shown without opening the real company.
 
-Run it AFTER the main seed — that one deletes every show in the org, this one deletes only its
-own by name. Two things in it are load-bearing: punches are written BEFORE `finalized_at` is set,
+**And a THIRD show, which exists only to clash** —
+`seed-crewtracker-demo-clash.sql`, *Cypress Dealer Meeting* (Dan, 2026-09-11: *"what it looks
+like when a crew is already booked for the dates. That is a selling point"*). Three days sitting
+across Northwind's SECOND and THIRD show days, with Theo Lindqvist, Nina Brennan and Chris
+Ferraro confirmed on it — exactly the people a scheduler reaches for on Northwind's open Camera
+Operator, Stagehand and A1 positions. Opening one of those on Northwind's first show day books
+cleanly; the next day says **Already scheduled on Cypress Dealer Meeting** and the button becomes
+**Book anyway**.
+
+Three things in it are load-bearing. **It is SENT to scheduling**: the picker's conflict query
+runs under the caller's own RLS, and a scheduler sees a show only once it has been sent — record
+the demo as Sasha with this show unsent and the warning simply does not appear, the app being
+right while the demo looks broken. **Its dates are derived from Northwind's**, not from
+`current_date`: both seeds date themselves from the day they are run, so a fixed offset drifts
+apart the moment they are run on different days, and the overlap has to land on the show days
+where the open slots are. **Everybody on it is confirmed and it has no position definitions**, so
+it has no open slot, nobody waiting and no flag — which is what keeps it off the
+Needs-scheduling list while the demo is looking at that list.
+
+Run all three with **`npm run demo:reset`**, which is the main seed (it deletes every show in the
+org) followed by the other two, which each delete only their own by name. Order matters. Two things in it are load-bearing: punches are written BEFORE `finalized_at` is set,
 because `punches_blocked_when_finalized` is a trigger and the service role does not bypass
 triggers; and punch instants are built from the day's own date `at time zone` the show's zone,
 never from a UTC literal — Grapevine is CDT in September, and a hand-written "13:00Z" is how a
