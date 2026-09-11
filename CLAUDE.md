@@ -1562,10 +1562,26 @@ crew: four confirmed, two asked and waiting, one declined, one still pencilled, 
 open (three Camera Operator, two the decliner's — a declined booking does not hold its slot). Four
 more people sit in the directory unbooked so the fill picker has somebody to choose between.
 
-Two things it deliberately does NOT have, so nobody goes looking:
-- **No punches, so no tracker or reports demo.** The show is next week; a future show with hours
-  on it would be a lie. Demonstrating the tracker and Reports needs a SECOND show, finished and
-  punched, seeded the same way — worth adding the next time the demo needs to cover payroll.
+**There is a SECOND demo show, and it is the finished one** —
+`scripts/sql/demo/seed-crewtracker-demo-past-show.sql`, added 2026-09-11 while writing the
+overview video. *Meridian Partner Summit*, Gaylord Texan, five days ending a fortnight ago,
+six crew, 78 punches, closed out and signed off. Northwind is a show being CREWED; Meridian is a
+show already PAID, so the tracker, the reports, a texted timesheet and a crew member's own hours
+can all be shown without opening the real company.
+
+Run it AFTER the main seed — that one deletes every show in the org, this one deletes only its
+own by name. Two things in it are load-bearing: punches are written BEFORE `finalized_at` is set,
+because `punches_blocked_when_finalized` is a trigger and the service role does not bypass
+triggers; and punch instants are built from the day's own date `at time zone` the show's zone,
+never from a UTC literal — Grapevine is CDT in September, and a hand-written "13:00Z" is how a
+demo ends up showing 8am as 1pm.
+
+It is built so every state the reports can show appears somewhere: overtime and double time on
+the long days, a plain travel day and a travel-out leg, meal breaks, meal penalties (the 6-hour
+grace means a 12:30 lunch on a 7pm wrap earns one, which is realistic rather than a mistake),
+one **cancelled** day paying 50%, and Alex Reyes's punches marked `source = 'crew'` so the
+tracker's crew-entered treatment is visible. Verified by running the app's own
+`loadCrewHours` against it rather than by reading the SQL back.
 
 **Five logins, one per view of the app** (`npm run demo:team`, `scripts/demo-team.mts`), because
 one login cannot show what this product does — the permissions model's whole point is that these
