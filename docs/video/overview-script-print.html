@@ -1,0 +1,213 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CrewTracker — overview video script</title>
+<style>
+  @page { size: letter; margin: 0.7in 0.75in 0.6in; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 11pt/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #18181b; }
+
+  h1 { font-size: 26pt; letter-spacing: -0.5pt; margin: 0 0 2pt; text-transform: uppercase; }
+  .sub { color: #6b6b6b; font-size: 10.5pt; margin: 0 0 18pt; }
+
+  h2 { font-size: 13pt; text-transform: uppercase; letter-spacing: 0.6pt;
+       margin: 0 0 10pt; padding-bottom: 5pt; border-bottom: 2.5pt solid #18181b; }
+
+  /* A beat: never split across a page — you are holding this while talking. */
+  .beat { page-break-inside: avoid; margin: 0 0 22pt; }
+  .beat h2 { display: flex; justify-content: space-between; align-items: baseline; }
+  .time { font-variant-numeric: tabular-nums; font-weight: 400; color: #6b6b6b;
+          letter-spacing: 0; font-size: 11pt; }
+
+  /* What you DO, quiet. */
+  .screen { font-size: 9.5pt; line-height: 1.45; color: #52525b;
+            border-left: 2pt solid #c9c9c9; padding: 2pt 0 2pt 10pt; margin: 0 0 12pt; }
+  .screen b { color: #18181b; }
+  .screen ol { margin: 5pt 0 0; padding-left: 15pt; }
+  .screen li { margin: 0 0 3pt; }
+
+  /* What you SAY, loud — this is the bit being read aloud. */
+  .say { font-size: 13pt; line-height: 1.65; }
+  .say p { margin: 0 0 9pt; }
+  .say p:last-child { margin-bottom: 0; }
+  .say em { color: #6b6b6b; font-style: italic; font-size: 11pt; }
+
+  .warn { background: #f6f2e2; border-left: 3pt solid #b8892b; padding: 7pt 10pt;
+          font-size: 9.5pt; margin: 10pt 0 0; }
+
+  ul.prep { margin: 0; padding-left: 0; list-style: none; }
+  ul.prep li { position: relative; padding-left: 20pt; margin: 0 0 8pt; font-size: 10.5pt; }
+  ul.prep li::before { content: ""; position: absolute; left: 0; top: 1.5pt;
+                       width: 10pt; height: 10pt; border: 1.2pt solid #18181b; }
+
+  .page { page-break-after: always; }
+  .last { page-break-after: auto; }
+  .note { font-size: 10pt; color: #52525b; }
+  .note li { margin: 0 0 6pt; }
+  .foot { margin-top: 14pt; padding-top: 7pt; border-top: 1pt solid #d8d8d8;
+          font-size: 8.5pt; color: #8a8a8a; }
+</style>
+
+<div class="page">
+  <h1>Overview video</h1>
+  <p class="sub">CrewTracker · about five minutes · for prospects</p>
+
+  <div class="beat">
+    <h2>Before you record</h2>
+    <ul class="prep">
+      <li>Reset the demo: <b>npm&nbsp;run&nbsp;demo:reset</b> — all three shows, in order.</li>
+      <li>Open the Scheduling screen and note <b>which weekdays the show days fall on</b>. §3 says them out loud.</li>
+      <li>Sign in as <b>dan@theaudiosmith.com</b>, in <b>CrewTracker Demo</b> — not CrewTracker Shows.</li>
+      <li><b>Light mode.</b> The paper ground is the identity and reads better compressed.</li>
+      <li>Phone capture ready (see over).</li>
+      <li><b>Do Not Disturb on</b>, Mac and phone.</li>
+    </ul>
+    <div class="warn">
+      §4 and §5 record against <b>Meridian Partner Summit</b>, the finished show — it is closed
+      out, so the punch cells are locked. To film punching live, use <b>Northwind</b>, which is
+      next week and genuinely unpunched.
+    </div>
+  </div>
+
+  <div class="beat">
+    <h2>Recording the phone</h2>
+    <div class="say" style="font-size:11.5pt">
+      <p>Three beats are on a phone. Don't point a camera at it — capture the screen.</p>
+      <p><b>QuickTime and a cable.</b> Plug the iPhone in. QuickTime Player →
+         <b>File → New Movie Recording</b> → click the small arrow beside the record button →
+         choose the iPhone. The phone's screen appears on the Mac, full size and sharp. You tap
+         the real phone; the Mac records it.</p>
+      <p>This is also the only setup that can film <b>the QR scan</b>, because it uses the real
+         camera.</p>
+      <p><b>Or iPhone Mirroring</b>, already on this Mac — drives the phone with the mouse, but
+         has no camera, so the QR moment won't work there.</p>
+      <p><b>Not the iOS Simulator.</b> Xcode has no iOS runtime installed (a 7GB download), and
+         it has no camera either.</p>
+    </div>
+    <div class="warn">
+      Check which company the phone is signed into. <b>dan@theaudiosmith.com belongs to both.</b>
+      Settings → Companies, second tab.
+    </div>
+  </div>
+</div>
+
+<div class="beat">
+  <h2>1 · The problem <span class="time">0:00 – 0:20</span></h2>
+  <div class="screen">The Shows list. Still, then scroll once.</div>
+  <div class="say">
+    <p>If you run corporate AV shows, you already have a system. It's a group text, a
+       spreadsheet, and somebody's handwriting on a call sheet.</p>
+    <p>This is one show in CrewTracker — from the day it's sold to the day everyone gets paid.</p>
+  </div>
+</div>
+
+<div class="beat">
+  <h2>2 · Build the show <span class="time">0:20 – 1:05</span></h2>
+  <div class="screen">
+    New Show. Name, venue, dates. Day activities grid — toggle <b>Travel, Load-in, Rehearsal,
+    Show, Load-out</b> and let the labels appear. Add a position: <b>2 · Stagehand ·
+    Ballroom A · Load days</b>. Then the PM field, choosing <b>Ray Delgado</b>.
+  </div>
+  <div class="say">
+    <p>A show starts with what you already know — the client, the venue, the dates. Then you say
+       what each day actually is. Travel, load-in, rehearsal, show, load-out. Everything else is
+       built on that.</p>
+    <p>Now you say what you need, the way you'd say it out loud: two stagehands in Ballroom A,
+       for the load-in and the load-out. The app works out which days that is.</p>
+    <p>And you name your production manager — which sends them an invitation, not an assignment.
+       Nothing is theirs until they accept it.</p>
+  </div>
+</div>
+
+<div class="beat">
+  <h2>3 · Crew it <span class="time">1:05 – 2:30</span></h2>
+  <div class="screen">
+    Send to scheduling → the queue → open the <b>Scheduling screen</b>. Let the grid sit a beat.
+    <ol>
+      <li><b>Open</b> on the Camera Operator line, <b>first show day</b> → pick <b>Theo
+          Lindqvist</b>. No warning. Books straight in.</li>
+      <li><b>Open</b> on the same line, <b>next day</b> → Theo again, now reading
+          <b>Already scheduled on Cypress Dealer Meeting</b>, button says <b>Book anyway</b>.
+          <b>Do not press it.</b> Close the picker.</li>
+      <li><b>Send email invites.</b></li>
+      <li><b>CUT TO PHONE</b> — the booking request. Scroll the days. Tap <b>Accept</b>.</li>
+      <li><b>CUT BACK</b> — the grid, now green.</li>
+    </ol>
+  </div>
+  <div class="say">
+    <p>When it's ready for crew, you send it to scheduling — and everyone who does scheduling
+       gets it. Nobody has to work out who to hand it to.</p>
+    <p>This is their screen. Rooms down the side, days across the top, every position you need
+       and who's in it.</p>
+    <p>Filling one is a click. Theo's free on the Wednesday, so he goes straight in.</p>
+    <p>Now the same position on Thursday. There he is again — and he's already on the Cypress job
+       that day. It won't stop you; plenty of people work two calls. It just means you find that
+       out now, instead of at seven in the morning when he doesn't turn up.</p>
+    <p>When the sheet is full, one press asks all of them at once. And this is what your crew
+       actually gets.</p>
+    <p><em>(on the phone)</em> Their days, what each day is, and two buttons. No login. No app to
+       install.</p>
+    <p><em>(tap Accept, cut back)</em> The sheet updates. You didn't chase anybody.</p>
+  </div>
+  <div class="warn"><b>Say the real weekdays</b>, not "the first show day" — the dates move every
+    time the demo is reseeded. Check the grid before you start.</div>
+</div>
+
+<div class="beat">
+  <h2>4 · Show day <span class="time">2:30 – 3:40</span></h2>
+  <div class="screen">
+    <b>PHONE.</b> The tracker for one room. Tap <b>Start</b> on a crew member. Then the batch
+    bar — <b>Start All</b>. Fix one time in the editor.<br>
+    <b>CUT</b> — the printed venue sign, then a phone scanning it, picking a name, clocking in.
+    Then tap <b>Your hours</b>.
+  </div>
+  <div class="say">
+    <p>Show day. This is the tracker on a phone, because that's where it gets used — in a dark
+       room, one-handed. Tap to start. A whole room at once when the call is the same. Fix a time
+       somebody missed.</p>
+    <p>And here's the other half. Print this sign, put it on the wall by the dock. Your crew scan
+       it, find their name, and clock themselves in and out.</p>
+    <p>They can see their own hours, too — every day, their breaks, their overtime. Which means
+       nobody is asking you what they worked.</p>
+  </div>
+</div>
+
+<div class="beat">
+  <h2>5 · Payroll <span class="time">3:40 – 4:35</span></h2>
+  <div class="screen">
+    Reports. <b>By Day</b>, then <b>By Crew</b>. The Master Summary strip. Export CSV.
+    <b>Send Hours</b> on one person. Then <b>Send Final Report</b> and the show locking.
+  </div>
+  <div class="say">
+    <p>Then the part you actually dread.</p>
+    <p>Hours, overtime, double time, meal penalties, travel — worked out while the show was
+       happening. By day, or by person.</p>
+    <p>Export it for whoever runs your payroll. Or text somebody their own timesheet — hours
+       only, never rates.</p>
+    <p>And when it's done, one button sends the final report and locks the show, so nothing moves
+       after sign-off.</p>
+  </div>
+</div>
+
+<div class="beat last">
+  <h2>6 · Close <span class="time">4:35 – 5:00</span></h2>
+  <div class="screen">Back to the Shows list.</div>
+  <div class="say">
+    <p>That's one show. From the sale to the payroll, in one place — and everybody who touches
+       it, schedulers, PMs, crew, sees the part that's theirs and nothing else.</p>
+    <p>CrewTracker.app.</p>
+  </div>
+
+  <h2 style="margin-top:26pt">Delivery</h2>
+  <ul class="note">
+    <li><b>About 620 words</b> — roughly four minutes of speech, leaving a minute of silence for
+        the screen to do the work. Don't fill it.</li>
+    <li><b>The double-booking beat needs both halves.</b> A warning on its own reads as nagging;
+        the clean booking first is what makes it read as answering. It's the one moment in five
+        minutes a spreadsheet can't do — let it breathe.</li>
+    <li><b>Three phone cuts</b> — the booking email, the tracker, the crew clock. Half this app
+        happens on a phone in a loading dock.</li>
+    <li><b>Nothing about settings, permissions or pricing.</b> Those belong in the long version.</li>
+  </ul>
+
+  <p class="foot">Source: docs/video/2026-09-11-overview-script.md — edit there, then regenerate.</p>
+</div>

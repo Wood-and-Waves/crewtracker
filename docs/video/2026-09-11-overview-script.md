@@ -18,6 +18,34 @@ screen moves, it is not in this video.
   is closed out, so the punch cells are locked. To film punching live, use
   Northwind, which is next week and genuinely unpunched.
 
+## Recording the phone
+
+Three beats are on a phone. Do not point a camera at it — capture the screen.
+
+**Use QuickTime and a cable.** Plug the iPhone into the Mac, open QuickTime
+Player, **File → New Movie Recording**, then click the small arrow beside the
+record button and choose the iPhone. The phone's screen appears on the Mac at
+full size and full sharpness. You tap the real phone; the Mac records it.
+
+This is also the ONLY setup that can film the QR scan, because it uses the real
+camera.
+
+**The alternative** is iPhone Mirroring, already on this Mac (macOS 15.6.1). It
+puts the phone in a window you drive with the mouse. Easier to click than to
+tap, but it cannot use the camera, so the QR moment will not work there.
+
+**Not the iOS Simulator.** Xcode is installed but has no iOS runtime — that is a
+7GB download through Xcode's settings — and it has no camera either.
+
+Two things that will bite you either way:
+
+- **Turn on Do Not Disturb before recording.** Real texts and notifications
+  appear on the captured screen otherwise, and you will not notice until you are
+  editing.
+- **Check which company the phone is signed into.** `dan@theaudiosmith.com`
+  belongs to both, and the demo needs CrewTracker Demo. Settings → Companies,
+  the second tab.
+
 ---
 
 ## 1 · The problem — 0:00 to 0:20
