@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useBoardPaint } from '@/components/BoardPaint'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
-import { useDismiss } from '@/lib/useDismiss'
-import { useMenuPlacement } from '@/lib/useMenuPlacement'
+import AnchoredPanel from '@/components/ui/AnchoredPanel'
 import { cn } from '@/lib/cn'
 
 // The booking status on a tracker crew row — and the chip IS the control.
@@ -88,18 +87,13 @@ export default function BookingStatusChip({
   // Present on the Scheduling screen, null on the tracker — the chip lives on
   // both and only one of them draws a grid to paint.
   const paint = useBoardPaint()
-  // Click anywhere else, or press Escape, and it goes away — including the
-  // removal question, which asks something and should not trap anybody.
+  // The chip is the ANCHOR; the panels themselves are rendered out of the grid
+  // by AnchoredPanel, which owns their placement and their dismissal (click
+  // away or Escape, including on the removal question — it asks something and
+  // must not trap anybody). They cannot use lib/useDismiss: a portalled panel
+  // is not inside this ref, so every click on a menu item would read as a click
+  // outside and close the menu before it fired.
   const wrapRef = useRef<HTMLSpanElement | null>(null)
-  useDismiss(open, wrapRef, () => { setOpen(false); setRemoving(null) })
-  // On the last row of the grid there is nothing below to open into.
-  // Both axes: this menu lives in a grid of days that scrolls sideways inside
-  // its own box, so on the last column there is nothing to the right of it.
-  const place = useMenuPlacement(open, wrapRef, removing ? 220 : 190, removing ? 270 : 190)
-  const panelSide = cn(
-    place.vertical === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
-    place.horizontal === 'right' ? 'right-0' : 'left-0',
-  )
 
   if (!crewMemberId) return null
   // On the TRACKER a confirmed person shows NOTHING (Dan, 2026-09-07: "the
@@ -185,8 +179,14 @@ export default function BookingStatusChip({
         <Chip tone={tone}>{LABEL[status]}</Chip>
       )}
 
-      {open && removing && (
-        <div className={cn('absolute z-50 w-64 border-2 border-ink bg-surface p-3 shadow-edge', panelSide)}>
+      <AnchoredPanel
+        anchorRef={wrapRef}
+        open={open && !!removing}
+        onDismiss={() => { setOpen(false); setRemoving(null) }}
+        role="dialog"
+        className="w-64 border-2 border-ink bg-surface p-3 shadow-edge"
+      >
+        <div>
           <p className="text-sm text-ink">
             {removing === 'day' && date
               ? `Take ${crewName.split(' ')[0]} off ${shortDay(date)}? Their other ${theirDates.length - 1} day${theirDates.length === 2 ? '' : 's'} stay.`
@@ -221,10 +221,16 @@ export default function BookingStatusChip({
             </button>
           </div>
         </div>
-      )}
+      </AnchoredPanel>
 
-      {open && !removing && (
-        <div role="menu" className={cn('absolute z-50 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge', panelSide)}>
+      <AnchoredPanel
+        anchorRef={wrapRef}
+        open={open && !removing}
+        onDismiss={() => setOpen(false)}
+        role="menu"
+        className="min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge"
+      >
+        <div>
           {status !== 'confirmed' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
               className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
@@ -270,7 +276,7 @@ export default function BookingStatusChip({
             Cancel
           </button>
         </div>
-      )}
+      </AnchoredPanel>
       {note && <span className="ml-2 text-[11px] text-muted">{note}</span>}
     </span>
   )
