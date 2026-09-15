@@ -720,6 +720,32 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   their yes". It could instead mean "book them and send the request in one press", which is a
   different button (book + email, leaving them Asked) and worth having too — possibly both, as a
   small menu on the row rather than one more button.
+- **What this show is going to COST, while it is still being crewed** (Dan, 2026-09-15: "a way to
+  see when a crew is scheduled what the total cost of the show could be, also what would an hour
+  of overtime for the entire crew cost? This is to give as much data as possible to the admin of
+  the company"). Today money appears only in Reports, which is AFTER the show — so the one moment
+  an admin could still do something about the number is the one moment the app will not show it.
+  **Two numbers, and they answer different questions.** *What is this show committed to* — the sum
+  of the day rates already booked, which thanks to the minimum guarantee is money owed whether
+  anybody works an hour of it or not. And *what does an hour of overtime cost*, which is the
+  question a PM actually asks at 6pm: `dayRate / overtimeAfterHours × overtime_multiplier`,
+  summed over the people on THAT DAY. Per day, never per show — an hour of OT on a show day with
+  twenty people and one on a travel day with three are not the same number, and averaging them
+  produces a figure that is true of no day.
+  **The permission shape is the hard part, and it is the reason this is not just a line on the
+  Scheduling strip.** Money needs `show.show_financials` AND `can_view_pay_rates` — and the
+  scheduler this screen was built for has neither (that is the whole point of Sasha in the demo
+  table). So the strip has to render this for an admin and show nothing at all to the person
+  usually standing in front of it. Read rates through `timecard_day_rates`, the SECURITY DEFINER
+  view that already checks the caller per query, so the boundary is the existing one rather than
+  a new one.
+  Three things it must get right. **An unconfirmed booking is not a commitment** — split it the
+  way the counts already split, committed versus if-everyone-says-yes, or the number lies in
+  whichever direction is most expensive. **An OPEN position has no person and therefore no rate**,
+  so a "fully staffed cost" has to assume the role's directory rate card and say out loud that it
+  is assuming. And **`lib/payroll.ts` must not learn about any of this**: this is a projection of
+  what might happen, the calculator is the record of what did, and the day the two share a code
+  path is the day an estimate can move somebody's pay.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
