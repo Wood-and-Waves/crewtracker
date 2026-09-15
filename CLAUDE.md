@@ -164,16 +164,30 @@ scroll box; `color-scheme` alone is the fallback everywhere else.
 
 **Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
 
-**A menu opens UP when there is no room below it, and RIGHT-ALIGNED when there is none to the
-right** — `lib/useMenuPlacement.ts` (was `useDropDirection`, which only knew the vertical half
-until 2026-09-15). The room is measured against the nearest CLIPPING ancestor **on each axis
-separately**, not the window, because an absolute panel inside an overflow box is clipped by that
-box — the last ROW of the Scheduling grid was the first half of this lesson, and the last COLUMN
-was the second: the grid scrolls sideways inside its own box, so a chip menu on the final day was
-drawn half outside it and could not be read. The two axes can be clipped by different ancestors,
-so stopping the search at the first box that clips either one would leave the other measured
-against the window and put the panel straight back outside. Note a left-aligned panel runs
-rightward FROM the trigger's left edge, so that is where its room is measured from. Menus also sit at
+**A MENU THAT OPENS FROM INSIDE A SCROLL BOX IS RENDERED OUT OF IT** —
+`components/ui/AnchoredPanel.tsx`. It portals to `document.body`, positions itself `fixed`
+against the anchor's rect — MEASURED rather than estimated: below if it fits, above if not,
+clamped to the viewport either way — and follows the anchor on scroll and resize.
+
+This replaced three goes at the same bug, and the sequence is the lesson. `useDropDirection`
+opened a menu UP when the last ROW had no room below (2026-09-08). It became `useMenuPlacement`
+and learned RIGHT-alignment when the last COLUMN had none beside it (2026-09-15). Then a menu on
+the FIRST row was clipped at the bottom, because the height the hook was handed was a guess and
+the menu had since grown an item. Dan: *"Its better, but the menu is still falling off. Is it
+possible to show it all?"* Each fix moved the failure to another edge, because the panel was
+still a child of the box doing the clipping. **Both hooks are deleted** — do not reintroduce a
+guessed panel size.
+
+**This is not the fixed-position editor the design rules forbid.** That rule is about a dialog
+COVERING the thing being edited; this stays pinned to its chip and covers only the grid behind it.
+
+**A portalled panel cannot use `lib/useDismiss`**, which closes on a click outside ONE ref: the
+panel is not inside the anchor's wrapper, so every click on a menu item would read as outside and
+close the menu on mousedown before it fired. AnchoredPanel owns its dismissal and counts the
+anchor as inside, so the chip's own toggle is not fighting it.
+
+The older note, kept because the reasoning still applies to anything still positioned in flow:
+menus sit at
 `z-50`, above the grid's sticky day header at `z-30`: equal z-indexes paint in DOM order, so the
 PM chip's menu, opened from the strip ABOVE the grid, was disappearing behind it.
 
