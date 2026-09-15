@@ -102,8 +102,17 @@ Breakouts. Finish on **Create show and send to scheduler**.
 ## 3 · Crew it — 1:50 to 2:50
 
 **ON SCREEN** The Needs-scheduling queue → open the Scheduling screen. Let the
-grid sit a beat so it reads. Click **Open** on a position and pick Theo
-Lindqvist. Then **Send email invites**.
+grid sit a beat so it reads.
+
+Then the double-booking beat, which needs both halves:
+
+1. Click **Open** on the Camera Operator line, **first show day**. Pick Theo
+   Lindqvist — no warning, books straight in.
+2. Click **Open** on the same line, **the next day**. Theo is there again, this
+   time with *Already scheduled on Cypress Dealer Meeting* beside his name and
+   the button reading **Book anyway**. Do not press it. Close the picker.
+
+Then **Send email invites**.
 **CUT TO PHONE:** the booking request. Scroll the day list. Tap **Accept**.
 **CUT BACK:** the grid, now green.
 
@@ -114,6 +123,11 @@ Lindqvist. Then **Send email invites**.
 > what is needed to fill.
 >
 > Filling positions is one click. Theo's free, so he goes straight in.
+>
+> Now the same position on the next day. There he is again — and he's already
+> on the Cypress job that day. It won't stop you; plenty of people work two
+> calls. It just means you find that out now, instead of at seven in the
+> morning when he doesn't turn up.
 >
 > When the sheet is full, one press sends emails to all of them at once. And
 > this is what your crew actually gets.
@@ -188,6 +202,13 @@ CSV. Send Hours on one person. Then Send Final Report and the show locking.
 - **§2 is the one that will run away from you.** It is a third of the video and
   every clause is a thing happening on screen. Rehearse it against the actual
   clicks once before recording.
+- **The double-booking beat needs both halves.** A warning on its own reads as
+  the app nagging; the clean booking first is what makes it read as the app
+  answering. It is also the one moment in five minutes that a spreadsheet
+  cannot do, so let it breathe.
+- **Say the real weekdays** rather than "the next day" — the demo dates move
+  every time it is reseeded, so check the grid before recording and use what is
+  actually on screen.
 - **Three phone cuts** — the booking email, the tracker, the crew clock. Half
   this app happens on a phone in a loading dock and a laptop recording hides it.
 - **Nothing about settings, permissions or pricing.** Those belong in the long
