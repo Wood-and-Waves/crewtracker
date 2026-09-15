@@ -6,13 +6,15 @@ import Button from '@/components/ui/Button'
 import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import ScheduleBoard from '@/components/ScheduleBoard'
+import { BoardPaintProvider } from '@/components/BoardPaint'
+import BoardCounts from '@/components/BoardCounts'
 import PositionDefsSection from '@/components/PositionDefsSection'
 import SendToSchedulingButton from '@/components/SendToSchedulingButton'
 import AskPencilledButton from '@/components/AskPencilledButton'
 import CrewNoticesBar from '@/components/CrewNoticesBar'
 import { fetchUntold } from '@/lib/crewNotices'
 import PmStatusChip from '@/components/PmStatusChip'
-import { buildBoard, describeBoard, type BoardBooking, type SlotFlag } from '@/lib/scheduleBoard'
+import { buildBoard, type BoardBooking, type SlotFlag } from '@/lib/scheduleBoard'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
 // The Scheduling screen (spec: 2026-09-07-scheduling-screen-design.md).
@@ -127,10 +129,16 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
         </div>
       </div>
 
+      {/* The counts and the grid share one piece of state — what has been
+          booked but not yet re-rendered — so the strip can never be caught
+          saying a cell is open while the grid shows a name in it. */}
+      <BoardPaintProvider>
+
       {/* Where the show stands, and the things you do to the whole show: one
           line of counts, then the actions on the same rule. */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-line py-3">
-        <p className="text-sm font-semibold text-ink">{describeBoard(board.summary)}</p>
+        {/* Client-rendered so it moves with the grid: see BoardPaint. */}
+        <BoardCounts board={board} />
         {/* The PM's answer is a chip that IS the control, like a crew row's:
             a PM says yes on the phone too. */}
         <PmStatusChip
@@ -186,6 +194,8 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
       ) : (
         <ScheduleBoard showId={id} board={board} locked={locked} />
       )}
+
+      </BoardPaintProvider>
 
       {/* The positions themselves, under the grid they explain. Flags show in
           the CELLS on this screen, so the section's own list is empty here. */}

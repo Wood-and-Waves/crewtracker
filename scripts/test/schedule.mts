@@ -25,7 +25,7 @@ import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, type UntoldRow } from '../../lib/crewNotices.ts'
-import { buildBoard, describeBoard } from '../../lib/scheduleBoard.ts'
+import { buildBoard, describeBoard, applyBookings } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
@@ -639,6 +639,31 @@ console.log('\n--- scheduling board ---')
     describeBoard({ total: 0, confirmed: 0, open: 0, waitingPeople: 0, flags: 0 }), 'Nothing to schedule yet')
   check('a full show reads clean',
     describeBoard({ total: 4, confirmed: 4, open: 0, waitingPeople: 0, flags: 0 }), '4 of 4 positions confirmed')
+
+  // PAINT FIRST, RECONCILE SECOND. applyBookings puts a verified write on the
+  // grid before the page refresh lands, and the STRIP has to move with it —
+  // painting a cell while the counts stay behind is the disagreement the
+  // summary rules exist to prevent.
+  const openSlot = (at('Ballroom', 1, '2026-09-08') as any)
+  check('the cell painted on is open to begin with', openSlot.kind, 'open')
+  const painted = applyBookings(board, [{
+    slotId: openSlot.slotId,
+    booking: { timecardId: 'new1', crewMemberId: 'zz', crewMemberName: 'Hana Kwon', role: 'BO Tech', status: 'pencilled' },
+  }])
+  const paintedCell = (name: string, i: number, date: string) =>
+    painted.rooms.find(r => r.name === name)!.lines[i].byDate[date] as any
+  check('the painted cell is booked', paintedCell('Ballroom', 1, '2026-09-08').kind, 'booked')
+  check('to the person who was booked', paintedCell('Ballroom', 1, '2026-09-08').booking.crewMemberName, 'Hana Kwon')
+  check('the open count drops with it', painted.summary.open, board.summary.open - 1)
+  check('and the person joins those waiting', painted.summary.waitingPeople, board.summary.waitingPeople + 1)
+  check('the total never moves — the cell existed either way', painted.summary.total, board.summary.total)
+  check('the board itself is untouched', (at('Ballroom', 1, '2026-09-08') as any).kind, 'open')
+  check('a slot the refresh already filled is dropped, never double-painted',
+    applyBookings(board, [{
+      slotId: 's1',  // already booked on the server board
+      booking: { timecardId: 'x', crewMemberId: 'q', crewMemberName: 'Nobody', role: 'A1', status: 'pencilled' },
+    }]).summary, board.summary)
+  check('nothing to paint returns the same board object', applyBookings(board, []), board)
 
   // THE GRID RULE: a person keeps one line all week, whoever holds which slot.
   const steady = buildBoard({

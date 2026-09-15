@@ -10,6 +10,7 @@ import SlotFlagActions from '@/components/SlotFlagActions'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
 import { dayLabel, dayActivitiesBgClass } from '@/lib/dayActivities'
 import type { Board, BoardEntry, BoardRoom } from '@/lib/scheduleBoard'
+import { useBoardPaint, usePaintedBoard } from '@/components/BoardPaint'
 
 // Rooms down the side, days across the top — and it reads like a grid, because
 // it is one (Dan, 2026-09-08: "Make this more gridline with lines and line
@@ -40,7 +41,7 @@ function dayHead(date: string) {
 }
 
 export default function ScheduleBoard({
-  showId, board, locked = false,
+  showId, board: serverBoard, locked = false,
 }: {
   showId: string
   board: Board
@@ -50,6 +51,14 @@ export default function ScheduleBoard({
   const [picker, setPicker] = useState<{ slotId: string; roomId: string; role: string; date: string; roomName: string } | null>(null)
   const [openFlag, setOpenFlag] = useState<string | null>(null)
   const [changed, setChanged] = useState<{ id: string; name: string }[]>([])
+
+  // PAINT FIRST, RECONCILE SECOND — the tracker's punch rule (CLAUDE.md),
+  // applied to booking. A fill is a verified write, but the name only appeared
+  // once a full server re-render of the whole screen came back: "a pretty long
+  // beat before it is populated" (Dan, 2026-09-15). The state is shared with
+  // the counts in the strip above, which are computed from these same cells.
+  const paint = useBoardPaint()
+  const board = usePaintedBoard(serverBoard)
 
   // The picker opens under the row it belongs to, and the grid is its own
   // scroll box — so on a row near the bottom it opened out of sight and the
@@ -202,7 +211,11 @@ export default function ScheduleBoard({
                   roomName={room.name}
                   date={picker.date}
                   onCancel={() => setPicker(null)}
-                  onFilled={() => { setPicker(null); router.refresh() }}
+                  onFilled={rows => {
+                    setPicker(null)
+                    paint?.paint(rows)
+                    router.refresh()
+                  }}
                 />
               </div>
             )}

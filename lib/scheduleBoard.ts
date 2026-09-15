@@ -230,12 +230,26 @@ export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput):
     return { name, roomIdByDate, lines }
   })
 
-  // Counted FROM THE GRID, so the strip can never disagree with what is on it.
+  return { days, rooms: boardRooms, summary: summarizeRooms(boardRooms) }
+}
+
+/**
+ * The strip's numbers, counted FROM THE GRID so it can never disagree with
+ * what is on it.
+ *
+ * Extracted from buildBoard 2026-09-15 so the browser can recount after an
+ * optimistic paint without owning a second copy of the rules. The units are
+ * the part that got misread before (Dan, on a "12 waiting" that was
+ * person-days: "There are not 12 people on the Test Show 3"): `total`,
+ * `confirmed` and `open` are GRID ENTRIES — one person on four days is four —
+ * while `waitingPeople` and `pencilledPeople` are distinct PEOPLE.
+ */
+export function summarizeRooms(rooms: BoardRoom[]): BoardSummary {
   let total = 0, confirmed = 0, open = 0, flagCount = 0
   const waiting = new Set<string>()
   // Per person: have they been asked (or answered) anywhere on this show?
   const onlyPencilled = new Map<string, boolean>()
-  for (const room of boardRooms) {
+  for (const room of rooms) {
     for (const line of room.lines) {
       for (const e of Object.values(line.byDate)) {
         if (!e) continue
@@ -249,16 +263,55 @@ export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput):
       }
     }
   }
-
   return {
-    days, rooms: boardRooms,
-    summary: {
-      total, confirmed, open,
-      waitingPeople: waiting.size,
-      pencilledPeople: [...onlyPencilled.values()].filter(Boolean).length,
-      flags: flagCount,
-    },
+    total, confirmed, open,
+    waitingPeople: waiting.size,
+    pencilledPeople: [...onlyPencilled.values()].filter(Boolean).length,
+    flags: flagCount,
   }
+}
+
+/** A booking that has been WRITTEN but whose page refresh has not landed yet. */
+export type PaintedBooking = { slotId: string; booking: BoardBooking }
+
+/**
+ * Paint bookings onto a board before the server has caught up.
+ *
+ * The write is already verified when this is called — the row came back from
+ * the database — so this is not a guess about what might happen, it is the
+ * same reconcile-second shape the tracker uses for punches: the answer is
+ * known, the page render is just slow to say so.
+ *
+ * Only an OPEN slot is painted. If the refresh has already landed, or somebody
+ * else took the slot in between, the board wins and the entry is dropped.
+ */
+export function applyBookings(board: Board, painted: PaintedBooking[]): Board {
+  if (painted.length === 0) return board
+  const bySlot = new Map(painted.map(p => [p.slotId, p.booking]))
+  let touched = false
+  const rooms = board.rooms.map(room => ({
+    ...room,
+    lines: room.lines.map(line => {
+      let lineTouched = false
+      const byDate: Record<string, BoardEntry | null> = {}
+      for (const [date, e] of Object.entries(line.byDate)) {
+        const b = e && e.kind === 'open' ? bySlot.get(e.slotId) : undefined
+        if (b && e && e.kind === 'open') {
+          byDate[date] = { kind: 'booked', slotId: e.slotId, roomId: e.roomId, booking: b, flag: null }
+          lineTouched = true
+        } else {
+          byDate[date] = e
+        }
+      }
+      if (!lineTouched) return line
+      touched = true
+      return { ...line, byDate }
+    }),
+  }))
+  if (!touched) return board
+  // Recounted, never patched: the strip is computed from the cells, so painting
+  // a cell and adjusting a number by hand is exactly how the two drift apart.
+  return { ...board, rooms, summary: summarizeRooms(rooms) }
 }
 
 /** "12 of 20 positions confirmed · 2 people waiting · 3 open · 1 to sort out" */

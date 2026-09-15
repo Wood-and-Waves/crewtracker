@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { liveBookings } from '@/lib/timecardFields'
 import { logStaffingEvent } from '@/lib/staffingEvents'
 import { compressDays } from '@/lib/readyEmail'
+import type { PaintedBooking } from '@/lib/scheduleBoard'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
 import { cn } from '@/lib/cn'
@@ -94,7 +95,9 @@ export default function FillPositionPicker({
   roomId: string
   roomName: string
   date: string
-  onFilled: () => void
+  /** The rows that were written, so the grid can paint them before the page
+   *  refresh lands. Verified writes, not a guess — see book(). */
+  onFilled: (painted: PaintedBooking[]) => void
   onCancel: () => void
 }) {
   const supabase = createClient()
@@ -310,8 +313,9 @@ export default function FillPositionPicker({
         role: positionRole,
         booking_status: 'pencilled',
       }))
+    const painted: PaintedBooking[] = []
     if (rows.length > 0) {
-      const { data, error: e } = await supabase.from('timecards').insert(rows).select('id')
+      const { data, error: e } = await supabase.from('timecards').insert(rows).select('id, call_position_id')
       if (e || !data?.length) {
         setBusy(false)
         // 23505 = a unique index: somebody else filled one of these positions
@@ -320,22 +324,47 @@ export default function FillPositionPicker({
         setError(e?.code === '23505' ? clashMessage(e.details ?? '', c, extra) : (e?.message ?? 'That did not save.'))
         return
       }
+      for (const r of data as any[]) {
+        if (!r.call_position_id) continue
+        painted.push({
+          slotId: r.call_position_id as string,
+          booking: { timecardId: r.id as string, crewMemberId: c.id, crewMemberName: c.name, role: positionRole, status: 'pencilled' },
+        })
+      }
     }
     for (const t of targets) {
       const r = existingByRoom.get(t.room_id)
       if (!r) continue
       const { data, error: e } = await supabase.from('timecards')
         .update({ booking_status: 'pencilled', call_position_id: t.call_position_id, role: positionRole })
-        .eq('id', r.id).select('id')
+        .eq('id', r.id).select('id, call_position_id')
       if (e || !data?.length) {
         setBusy(false)
         setError(e?.message ?? 'That did not save.')
         return
       }
+      const row = data[0] as any
+      if (row.call_position_id) {
+        painted.push({
+          slotId: row.call_position_id as string,
+          booking: { timecardId: row.id as string, crewMemberId: c.id, crewMemberName: c.name, role: positionRole, status: 'pencilled' },
+        })
+      }
     }
     setBusy(false)
+
+    // HAND THE GRID THE ANSWER FIRST. Everything above is already written and
+    // verified; what used to follow was a staffing-event write and a full
+    // server re-render of the whole screen before a single name appeared —
+    // "a pretty long beat before it is populated" (Dan, 2026-09-15). The
+    // tracker learned this for punches in September: paint at write
+    // acknowledgement, reconcile in the background.
+    onFilled(painted)
+
+    // Best-effort by design (lib/staffingEvents.ts never throws), so it has no
+    // business standing between the write and the screen. Not awaited.
     if (showId) {
-      await logStaffingEvent(supabase, {
+      void logStaffingEvent(supabase, {
         showId,
         kind: 'booked',
         crewMemberId: c.id,
@@ -344,7 +373,6 @@ export default function FillPositionPicker({
         days: compressDays([date, ...extra.map(s => s.date)]),
       })
     }
-    onFilled()
   }
 
   function clashMessage(details: string, c: Candidate, extra: SiblingSlot[]) {
