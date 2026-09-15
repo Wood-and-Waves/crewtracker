@@ -720,6 +720,40 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   their yes". It could instead mean "book them and send the request in one press", which is a
   different button (book + email, leaving them Asked) and worth having too — possibly both, as a
   small menu on the row rather than one more button.
+- **A PM WORKS AND GETS PAID, AND HAS NOWHERE TO STAND** (Dan, 2026-09-15: "Production
+  manager doesnt always belong to a room, but needs to track time. How can we differentiate if
+  they are over all and not in a room, and if they are production manager over the 'Plenary'
+  only? Also, the PM is not anywhere to be found in Scheduling. Should they be at the top above
+  rooms? It just says 'No PM yet'.").
+  **Two problems that look like one.** The second is small: the PM chip is in the strip, so on a
+  show with a PM it says their name — but the GRID is rooms and positions, and a PM is neither,
+  so the person running the show is the one person not on the sheet. A PM row pinned above the
+  first room, spanning the days they are on, is probably right and is mostly presentation.
+  **The first is a data-model question and needs deciding before anything is built.** Hours live
+  on `timecards`, and a timecard hangs off a ROOM (`timecards.room_id`, not null) — a room is
+  scoped to a day, so "on the show but not in a room" has nowhere to exist. Everything downstream
+  assumes it: payroll, Reports' by-day grouping, the crew clock, the venue QR's pick-a-room step.
+  Three ways out, and the third is the one to argue for:
+  (1) **A room called "Production"** — costs nothing, works today, and is a lie that shows up in
+  every report and on the QR sign.
+  (2) **Make `room_id` nullable** — honest, and it touches every reader of a timecard in the app.
+  A wide, quiet change; the kind that breaks payroll grouping six weeks later.
+  (3) **A SHOW-LEVEL room, flagged rather than invented**: `rooms` gains something like
+  `is_show_wide`, one per work day, created on demand when somebody is staffed to the show rather
+  than to a room. The shape the app already understands (a timecard still has a room, so nothing
+  downstream changes), but the readers that show rooms can label it "Whole show" instead of
+  printing a fake name, and the QR sign can skip it.
+  **Dan's second question is the one that decides it**: a PM over the Plenary only is ALREADY
+  expressible — that is just a timecard in the Plenary room with the PM role — so whatever gets
+  built must not make the room-specific case harder than the show-wide one. That asymmetry is the
+  test of any design here.
+  Two things worth saying out loud when this is designed: it is NOT the same as
+  `shows.pm_profile_id`, which is about ACCESS and an invitation, not about hours — one person
+  can hold both and they must not be conflated; and a show can have more than one of these
+  (a PM and a producer, say), so it cannot be modelled as a single field on `shows`.
+  Design it with the per-person schedule grid item above — both are "who is on this show, on
+  which days", and solving them separately would produce two ways to staff somebody.
+
 - **What this show is going to COST, while it is still being crewed** (Dan, 2026-09-15: "a way to
   see when a crew is scheduled what the total cost of the show could be, also what would an hour
   of overtime for the entire crew cost? This is to give as much data as possible to the admin of
