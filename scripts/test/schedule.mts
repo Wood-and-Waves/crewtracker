@@ -24,7 +24,7 @@ import { defWants, derivedCounts, describeDefDays, type PositionDef, type GridDa
 import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
-import { summarizeUntold, type UntoldRow } from '../../lib/crewNotices.ts'
+import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
 import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
@@ -839,6 +839,23 @@ console.log('\n--- who has not been told ---')
     summarizeUntold([row('booked', 'a', 'Alex Reyes')]).length, 0)
   check('their own answers are not either',
     summarizeUntold([row('accepted', 'a', 'Alex Reyes'), row('declined', 'b', 'Bo Ellery')]).length, 0)
+
+  // AND NEITHER IS A CHANGE TO SOMEBODY WHO WAS NEVER ASKED. Dan, 2026-09-15,
+  // removing a Not Asked person and being prompted to tell them: "He did not
+  // even know he was tentatively scheduled." The rule is at WRITE time — the
+  // status is gone once the rows are — so these pin the rule itself.
+  check('nobody has told a Not Asked person anything', worthTelling(['pencilled']), false)
+  check('being asked is being told', worthTelling(['invited']), true)
+  check('so is having accepted', worthTelling(['confirmed']), true)
+  // A decliner knew — they answered — but they said no and hold nothing, so
+  // tidying their row away is not news. False for a different reason than
+  // 'pencilled', and worth the line so nobody "fixes" it later.
+  check('a decliner already had the last word', worthTelling(['declined']), false)
+  check('asked on ANY of the days counts — they may have it in their diary',
+    worthTelling(['pencilled', 'pencilled', 'invited']), true)
+  check('every day still unasked does not', worthTelling(['pencilled', 'pencilled']), false)
+  check('nothing at all is nothing to tell', worthTelling([]), false)
+  check('a missing status is not a reason to email somebody', worthTelling([null, undefined]), false)
 
   // One person, three changes, is one person to tell — with the whole picture
   // in one email, not three.

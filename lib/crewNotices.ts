@@ -24,6 +24,31 @@ export const NOTIFIABLE_KINDS: readonly StaffingEventKind[] = [
   'moved', 'released', 'extended', 'days_changed',
 ]
 
+/**
+ * IS THERE ANYTHING TO TELL THEM?
+ *
+ * Only if they knew they were on the show in the first place. Dan, 2026-09-15,
+ * on being prompted to tell somebody he had removed before asking them: "He did
+ * not even know he was tentatively scheduled."
+ *
+ * Being asked is the moment somebody learns they are on a job — which is why
+ * `booked` was never a notifiable kind to begin with. A person still marked Not
+ * Asked has been told nothing, so a change to their days changes nothing they
+ * know, and prompting about it teaches schedulers to ignore the count. That
+ * makes it worse than absent: a counter everybody dismisses is no counter.
+ *
+ * NOT confirmed-only, which was the obvious reading. Somebody who was ASKED and
+ * has not replied may well have the dates pencilled in their own diary and be
+ * about to say yes — they are owed the news as much as somebody who accepted.
+ *
+ * Takes every status the change touched, because a person can hold several days
+ * at different stages: asked for the show days, never asked for the load-in. If
+ * ANY of it had reached them, the change is worth passing on.
+ */
+export function worthTelling(statuses: (string | null | undefined)[]): boolean {
+  return statuses.some(s => s === 'invited' || s === 'confirmed')
+}
+
 /** One untold staffing event, as read from the database. */
 export type UntoldRow = {
   id: string

@@ -30,6 +30,15 @@ export type StaffingEventInput = {
   role?: string | null
   /** Already formatted, e.g. "Tue 8 – Thu 10" — use compressDays() from lib/readyEmail. */
   days?: string | null
+  /**
+   * The crew member never knew about this in the first place, so there is
+   * nothing to pass on — see worthTelling() in lib/crewNotices.ts. The row is
+   * still written, because the PM's digest should carry it either way; it is
+   * stamped told on the way in so the Scheduling screen never asks anybody to
+   * tell somebody news they cannot have. Migration 0040's backfill marked
+   * existing history the same way and for the same reason.
+   */
+  nothingToTell?: boolean
 }
 
 export async function logStaffingEvent(
@@ -44,6 +53,7 @@ export async function logStaffingEvent(
       crew_member_name: input.crewMemberName,
       role: input.role ?? null,
       days: input.days ?? null,
+      crew_told_at: input.nothingToTell ? new Date().toISOString() : null,
     })
     if (error) console.error('logStaffingEvent failed:', error)
   } catch (e) {

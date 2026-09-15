@@ -1279,7 +1279,24 @@ and **Already told them**. Notifiable is any DATE change, added or subtracted
 (Dan, 2026-09-09) — `moved`, `released`, `extended`, `days_changed`.
 Deliberately not `booked`, because the booking request is how somebody is told
 they are on a show at all, nor `accepted`/`declined`, which are the crew
-member's own answers. **The second button is not a convenience**: if the only
+member's own answers.
+
+**AND ONLY IF THEY EVER KNEW.** Dan, 2026-09-15, removing somebody who was still
+Not Asked and being prompted to tell them: *"He did not even know he was
+tentatively scheduled."* Being ASKED is the moment a person learns they are on a
+job — the same reasoning that kept `booked` off the list — so a change to
+somebody nobody has contacted is news to nobody, and prompting about it is how
+schedulers learn to ignore the count. `worthTelling()` in `lib/crewNotices.ts`
+is the rule: **asked OR confirmed, not confirmed alone**, because somebody who
+was asked and has not replied may have the dates in their own diary and is owed
+the news just as much. The decision is made at WRITE time — pass
+`nothingToTell` to `logStaffingEvent`, which stamps `crew_told_at` on the way in
+— because once the timecards are deleted the status that answers the question is
+gone. The row is still written: the PM's digest should carry it either way.
+`/api/bookings/remove` does this; **`RoomActionsMenu` and `AddDayButton` do
+not**, because neither has the booking status to hand (`RoomCrew` does not carry
+it), so removing a Not Asked person from a room still prompts. Same fix, one
+field further up. **The second button is not a convenience**: if the only
 way to clear the count were to send an email, people would send unwanted ones
 or learn to ignore the number, and a counter everyone ignores is worse than
 none. It runs BEFORE the has-an-email check, so somebody with no address on

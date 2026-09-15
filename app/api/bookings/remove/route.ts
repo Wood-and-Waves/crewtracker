@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling } from '@/lib/session'
 import { logStaffingEvent } from '@/lib/staffingEvents'
 import { compressDays } from '@/lib/readyEmail'
+import { worthTelling } from '@/lib/crewNotices'
 import { sendDaysChangedEmail } from '@/lib/daysChangedEmail'
 
 // Taking somebody off a show, from the status chip (Dan, 2026-09-08, reversing
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
     // Everything they hold on this show — declined rows included, so nothing of
     // theirs is left behind on a show they are off.
     supabase.from('timecards')
-      .select('id, role, crew_member_name, rooms!inner ( work_days!inner ( date ) )')
+      .select('id, role, crew_member_name, booking_status, rooms!inner ( work_days!inner ( date ) )')
       .eq('show_id', showId).eq('crew_member_id', crewMemberId),
     // THE PUNCH GUARD, ASKED WITHOUT WAITING FOR THE TIMECARDS. It used to run
     // afterwards, keyed on the ids that read returned, which made it a fifth
@@ -133,6 +134,9 @@ export async function POST(request: Request) {
   await logStaffingEvent(supabase, {
     showId, kind: 'released', crewMemberId, crewMemberName: name,
     role: role ?? undefined, days: removedDates.length ? compressDays(removedDates) : undefined,
+    // Never asked, so there is nothing to pass on and the Scheduling screen
+    // should not offer to. See worthTelling().
+    nothingToTell: !worthTelling(targets.map((c: any) => c.booking_status)),
   })
 
   // STILL ON THE SHOW, just fewer days: the right message is their REVISED
