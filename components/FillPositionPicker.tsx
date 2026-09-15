@@ -33,11 +33,15 @@ import { cn } from '@/lib/cn'
 // people get asked twice or never.
 //
 // A POSITION DEFINED "BY KIND OF DAY" (position_defs, migration 0034) runs on
-// several days, and most of the time one person does the whole run. So when the
-// clicked slot belongs to a definition, choosing a person opens a second step —
-// their days: the definition's other OPEN slots, each ticked, to untick — and
-// books every ticked day in ONE insert. A slot with no definition (built in the
-// old per-day grid, or a one-off) behaves exactly as before: one day, no step.
+// several days, and most of the time one person does the whole run — so
+// CLICKING THEM BOOKS THE WHOLE RUN, every open day of the definition in ONE
+// insert, and the row says how many days that is before you press it. Somebody
+// doing only part of it is the exception and has its own control, "Days", which
+// opens the day step: the definition's other open slots as chips, each on, tap
+// to drop. That step used to open on EVERY booking with everything already
+// ticked, which made the common case pay for the rare one (2026-09-15).
+// A slot with no definition (built in the old per-day grid, or a one-off) is
+// one day with no choice to make, exactly as before, and shows no Days control.
 // The picker finds the definition itself from the slot, so no caller has to
 // know the difference.
 
@@ -236,15 +240,24 @@ export default function FillPositionPicker({
     })
   }, [candidates, onlyRole, search, positionRole])
 
+  // THE ROW BOOKS THE WHOLE RUN. A position defined by kind of day runs on
+  // several days and most of the time one person does all of them — which is
+  // why the day step opened with every day ALREADY TICKED. Showing a screenful
+  // of switches so somebody can agree with them cost a scroll and a second
+  // click on every booking, twenty-odd times on a normal sheet (Dan,
+  // 2026-09-15: "There is a lot of scrolling when scheduling"). So the row now
+  // does the common thing, and the exception has its own door: `choose`.
   function fill(c: Candidate) {
     if (busy) return
     setError('')
-    // A definition with other open days: ask which of them first.
-    if (siblings.length > 0) {
-      setPlan({ c, picked: new Set(siblings.map(s => s.id)) })
-      return
-    }
-    void book(c, [])
+    void book(c, siblings)
+  }
+
+  /** The exception — they are not doing the whole run. Opens the day step. */
+  function choose(c: Candidate) {
+    if (busy) return
+    setError('')
+    setPlan({ c, picked: new Set(siblings.map(s => s.id)) })
   }
 
   async function book(c: Candidate, extra: SiblingSlot[]) {
@@ -375,32 +388,59 @@ export default function FillPositionPicker({
 
       {plan ? (
         <div>
-          <p className="mb-1 text-sm font-semibold text-ink">{plan.c.name}&rsquo;s days</p>
-          <p className="mb-2 text-xs text-muted">
-            This position runs on {siblings.length + 1} days. Untick any {plan.c.name.split(' ')[0]} is not doing.
-          </p>
-          <ul className="divide-y divide-line rounded-field border border-line">
-            <li className="flex items-center justify-between gap-2 px-3 py-2">
-              <span className="text-sm text-ink">{fmtDay(date)} <span className="text-xs text-muted">· this one</span></span>
-              <Toggle checked disabled onChange={() => {}} label={`${fmtDay(date)}, always included`} />
-            </li>
-            {siblings.map(s => (
-              <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                <span className="text-sm text-ink">{fmtDay(s.date)}</span>
-                <Toggle
-                  checked={plan.picked.has(s.id)}
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <p className="text-sm font-semibold text-ink">
+              {plan.c.name}&rsquo;s days
+              <span className="ml-2 text-xs font-normal text-muted">tap a day to drop it</span>
+            </p>
+            {/* All / None, because the reason you opened this step is that the
+                run is not the answer — and on a long show that is a dozen taps
+                before you get to the two days you meant. */}
+            <span className="flex items-center gap-2 text-xs">
+              <button type="button" disabled={busy} className="text-muted underline-offset-2 hover:text-ink hover:underline"
+                onClick={() => setPlan(p => p && { ...p, picked: new Set(siblings.map(x => x.id)) })}>All</button>
+              <span className="text-line">|</span>
+              <button type="button" disabled={busy} className="text-muted underline-offset-2 hover:text-ink hover:underline"
+                onClick={() => setPlan(p => p && { ...p, picked: new Set<string>() })}>None</button>
+            </span>
+          </div>
+          {/* CHIPS ON ONE WRAPPING LINE, not a full-width row per day. A row
+              each is ~36px, so a five-day run was 180px of switches and a
+              fortnight was most of a screen — inside a panel that already sits
+              below the grid. Same information, one line. */}
+          <div className="flex flex-wrap gap-1.5">
+            <span
+              title="The day you clicked — always included."
+              className="rounded-field border-2 border-ink bg-ink px-2.5 py-1.5 text-xs font-semibold text-bg"
+            >
+              {fmtDay(date)}
+            </span>
+            {siblings.map(s => {
+              const on = plan.picked.has(s.id)
+              return (
+                <button
+                  key={s.id}
+                  type="button"
                   disabled={busy}
-                  label={fmtDay(s.date)}
-                  onChange={on => setPlan(p => {
+                  aria-pressed={on}
+                  className={cn(
+                    'rounded-field border-2 px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60',
+                    on
+                      ? 'border-accent bg-accent text-accent-ink'
+                      : 'border-line bg-surface-2 text-muted line-through hover:border-ink hover:text-ink',
+                  )}
+                  onClick={() => setPlan(p => {
                     if (!p) return p
                     const picked = new Set(p.picked)
-                    if (on) picked.add(s.id); else picked.delete(s.id)
+                    if (on) picked.delete(s.id); else picked.add(s.id)
                     return { ...p, picked }
                   })}
-                />
-              </li>
-            ))}
-          </ul>
+                >
+                  {fmtDay(s.date)}
+                </button>
+              )
+            })}
+          </div>
           <div className="mt-3 flex items-center gap-2">
             <Button size="sm" disabled={busy} onClick={() => book(plan.c, siblings.filter(s => plan.picked.has(s.id)))}>
               {busy ? 'Booking…' : `Book ${plan.picked.size + 1} day${plan.picked.size === 0 ? '' : 's'}`}
@@ -427,13 +467,16 @@ export default function FillPositionPicker({
             // Booked elsewhere is a WARNING, never a block: a load-out on one
             // show and a rehearsal on another in one day is normal.
             return (
-              <li key={c.id}>
+              // Two controls, not one nested in the other: the row itself books
+              // the run, and "Days" beside it opens the exception. A <button>
+              // inside a <button> is invalid markup and does not reliably fire.
+              <li key={c.id} className="flex items-stretch">
                 <button
                   type="button"
                   disabled={busy || !!sameRoom}
                   title={sameRoom ? 'They are already in this room today.' : undefined}
                   onClick={() => fill(c)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-ink">{c.name}</span>
@@ -455,9 +498,23 @@ export default function FillPositionPicker({
                     'shrink-0 text-[11px] font-semibold uppercase tracking-wide',
                     sameRoom ? 'text-muted' : warn ? 'text-ot' : 'text-accent',
                   )}>
-                    {sameRoom ? 'In room' : warn ? 'Book anyway' : 'Book'}
+                    {sameRoom ? 'In room'
+                      : warn ? 'Book anyway'
+                      : siblings.length > 0 ? `Book ${siblings.length + 1} days`
+                      : 'Book'}
                   </span>
                 </button>
+                {siblings.length > 0 && !sameRoom && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    title={`${c.name.split(' ')[0]} is not doing all ${siblings.length + 1} days`}
+                    onClick={() => choose(c)}
+                    className="shrink-0 border-l border-line px-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Days
+                  </button>
+                )}
               </li>
             )
           })}
