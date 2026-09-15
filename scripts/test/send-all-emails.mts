@@ -90,7 +90,7 @@ const EMAILS: { name: string; send: () => Promise<{ error?: string }> }[] = [
     send: () => sendCallHandoffEmail({
       to: 'scheduler@example.test', recipientName: 'Sasha Vine', showName: SHOW, venue: 'Moscone West',
       startDate: '2026-10-01', endDate: '2026-10-05', organizationName: ORG, sentByName: 'Dan Smith',
-      callSize: 'up to 6 crew across 5 days', link: LINK,
+      callSize: 'up to 6 crew across 5 days', link: `${LINK}/schedule`,
     }),
   },
   {

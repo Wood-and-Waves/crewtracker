@@ -27,6 +27,8 @@ export type CallHandoffEmailInput = {
   sentByName: string | null
   /** Already-phrased size, e.g. "12 crew across 5 days". Never a raw row count. */
   callSize: string
+  /** The show's SCHEDULING screen, not its tracker — this email exists to get
+   *  somebody staffing, and the tracker is the wrong end of the job. */
   link: string
 }
 
@@ -62,7 +64,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
     `Dates:      ${dates}`,
     `Positions:  ${positions}`,
     '',
-    `Open it here: ${input.link}`,
+    `Open the schedule: ${input.link}`,
     '',
     'Sent from CrewTracker.app',
   ].filter(Boolean).join('\n')
@@ -81,7 +83,7 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.link)}"
        style="display:inline-block;background:#3366CC;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">
-      Open the show
+      Open the schedule
     </a>
   </p>
   <p style="font-size:12px;color:#a1a1aa;margin:0">Sent from CrewTracker.app</p>

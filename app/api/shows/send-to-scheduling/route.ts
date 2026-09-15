@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       to: r.email!, recipientName: r.name, showName: show.name, venue: show.venue,
       startDate: show.start_date, endDate: show.end_date,
       organizationName: org?.name ?? 'your team', sentByName: user.fullName,
-      callSize: describeCallSize(call), link: `${origin}/dashboard/shows/${show.id}`,
+      callSize: describeCallSize(call), link: `${origin}/dashboard/shows/${show.id}/schedule`,
     })
     if (result.error) failures.push(r.email!)
   }

@@ -31,7 +31,7 @@ const { subject, text } = buildCallHandoffEmail({
   organizationName: 'Wood & Waves Productions',
   sentByName: 'Dan Smith',
   callSize: describeCallSize(call),
-  link: 'https://crewtracker.app/dashboard/shows/abc123',
+  link: 'https://crewtracker.app/dashboard/shows/abc123/schedule',
 })
 
 console.log(`Subject: ${subject}\n`)
