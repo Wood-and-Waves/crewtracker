@@ -150,7 +150,10 @@ export async function respondToBooking(
         crewName: crew?.full_name ?? 'A crew member',
         showName: show.name,
         note: note?.slice(0, 500) || null,
-        link: `${origin}/dashboard/shows/${show.id}`,
+        // The SCHEDULING screen: a decline reopens a position, and that is
+        // where it gets filled. Somebody without the permission (the show's
+        // creator arm below) is redirected back to the show by that page.
+        link: `${origin}/dashboard/shows/${show.id}/schedule`,
       })))
     }
   }

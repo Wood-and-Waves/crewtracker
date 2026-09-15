@@ -107,7 +107,7 @@ const EMAILS: { name: string; send: () => Promise<{ error?: string }> }[] = [
     name: '6. Crew said no — to everyone who can schedule',
     send: () => sendDeclineNoticeEmail({
       to: 'scheduler@example.test', recipientName: 'Sasha Vine', crewName: 'Alex Reyes',
-      showName: SHOW, note: "I'm out of town that week.", link: LINK,
+      showName: SHOW, note: "I'm out of town that week.", link: `${LINK}/schedule`,
     }),
   },
   {

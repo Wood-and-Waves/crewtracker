@@ -401,7 +401,7 @@ export async function sendDeclineNoticeEmail(input: DeclineNoticeInput): Promise
   <p style="margin:0 0 24px">
     <a href="${escapeHtml(input.link)}"
        style="display:inline-block;background:#3366CC;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">
-      Open the show
+      Open the schedule
     </a>
   </p>
   <p style="font-size:12px;color:#a1a1aa;margin:0">Sent from CrewTracker.app</p>
