@@ -501,7 +501,7 @@ export default async function ShowDetailPage({
                     </span>
                   )}
                 </h2>
-                <RoomActionsMenu onBand locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0 }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={show.id} />
+                <RoomActionsMenu onBand locked={locked} roomId={room.id} roomName={room.name} crewCount={crew.length} crew={crew.map(tc => ({ id: tc.id, crewMemberId: tc.crew_member_id, name: tc.crew_member_name, role: tc.role, dayRate: rateById.get(tc.id) ?? 0, bookingStatus: tc.booking_status ?? null }))} canViewRates={canViewRates} canEditRates={canEditRates} showId={show.id} />
               </div>
 
               {crew.length > 0 && (

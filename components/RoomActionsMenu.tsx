@@ -4,13 +4,19 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { logStaffingEvent } from '@/lib/staffingEvents'
+import { worthTelling } from '@/lib/crewNotices'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
 import { cn } from '@/lib/cn'
 import { useDismiss } from '@/lib/useDismiss'
 
-type RoomCrew = { id: string; crewMemberId: string | null; name: string; role: string; dayRate: number }
+type RoomCrew = {
+  id: string; crewMemberId: string | null; name: string; role: string; dayRate: number
+  /** Their standing answer on this show. Removing somebody still Not Asked is
+   *  news to nobody, so it is neither flagged nor offered — worthTelling(). */
+  bookingStatus?: string | null
+}
 
 // Free-text escape hatch in the role picker, matching StaffRoomModal. Staffing
 // someone has always allowed a one-off title; EDITING them afterwards did not,
@@ -118,6 +124,7 @@ export default function RoomActionsMenu({
     setLoading(false)
     if (error) { setError(error.message); return }
     if (showId) {
+      const told = worthTelling([tc.bookingStatus])
       await logStaffingEvent(supabase, {
         showId,
         kind: 'released',
@@ -125,8 +132,11 @@ export default function RoomActionsMenu({
         crewMemberName: tc.name,
         role: tc.role,
         days: null,
+        nothingToTell: !told,
       })
-      if (tc.crewMemberId) {
+      // And do not OFFER to tell them either: the standing bar on the
+      // Scheduling screen and this in-place offer are one judgement.
+      if (tc.crewMemberId && told) {
         setChanged(prev => [...prev, { id: tc.crewMemberId!, name: tc.name }])
       }
     }

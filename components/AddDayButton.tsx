@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { logStaffingEvent } from '@/lib/staffingEvents'
+import { worthTelling } from '@/lib/crewNotices'
 import { compressDays } from '@/lib/readyEmail'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
@@ -99,7 +100,30 @@ export default function AddDayButton({
       if (!extendError) {
         // row.day_date is the new day itself — the same one just extended to.
         const extendedDay = row?.day_date ? compressDays([String(row.day_date).slice(0, 10)]) : null
-        for (const r of (extendedRows ?? []) as { crew_member_id: string | null; crew_member_name: string; role: string | null }[]) {
+        const rows = (extendedRows ?? []) as { crew_member_id: string | null; crew_member_name: string; role: string | null }[]
+
+        // HAVE THEY EVER BEEN TOLD they are on this show? The RPC does not say
+        // — it returns who it booked, not what state they are in — so read it
+        // off the rows it just wrote. The extension KEEPS a person's existing
+        // answer (migration 0036: a run growing by a day does not re-ask
+        // somebody who confirmed the whole run), so this is their standing
+        // status, and a person still Not Asked has heard nothing to update.
+        const statusByCrew = new Map<string, string | null>()
+        const extendedIds = rows.map(r => r.crew_member_id).filter(Boolean) as string[]
+        if (extendedIds.length) {
+          const { data: fresh } = await supabase
+            .from('timecards')
+            .select('crew_member_id, booking_status, rooms!inner ( work_day_id )')
+            .eq('show_id', showId)
+            .eq('rooms.work_day_id', workDayId)
+            .in('crew_member_id', extendedIds)
+          for (const t of (fresh ?? []) as any[]) {
+            if (t.crew_member_id) statusByCrew.set(t.crew_member_id, t.booking_status ?? null)
+          }
+        }
+        const told = (id: string | null) => !!id && worthTelling([statusByCrew.get(id)])
+
+        for (const r of rows) {
           await logStaffingEvent(supabase, {
             showId,
             kind: 'extended',
@@ -107,10 +131,14 @@ export default function AddDayButton({
             crewMemberName: r.crew_member_name,
             role: r.role,
             days: extendedDay,
+            nothingToTell: !told(r.crew_member_id),
           })
         }
-        const people = ((extendedRows ?? []) as { crew_member_id: string | null; crew_member_name: string }[])
-          .filter((r): r is { crew_member_id: string; crew_member_name: string } => !!r.crew_member_id)
+        // And do not OFFER to tell them either — the bar and the offer are the
+        // same judgement made in two places.
+        const people = rows
+          .filter((r): r is { crew_member_id: string; crew_member_name: string; role: string | null } =>
+            !!r.crew_member_id && told(r.crew_member_id))
           .map(r => ({ id: r.crew_member_id, name: r.crew_member_name }))
         setExtended(people)
         if (people.length > 0) {

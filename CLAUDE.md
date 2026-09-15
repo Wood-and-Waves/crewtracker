@@ -1293,10 +1293,15 @@ the news just as much. The decision is made at WRITE time — pass
 `nothingToTell` to `logStaffingEvent`, which stamps `crew_told_at` on the way in
 — because once the timecards are deleted the status that answers the question is
 gone. The row is still written: the PM's digest should carry it either way.
-`/api/bookings/remove` does this; **`RoomActionsMenu` and `AddDayButton` do
-not**, because neither has the booking status to hand (`RoomCrew` does not carry
-it), so removing a Not Asked person from a room still prompts. Same fix, one
-field further up. **The second button is not a convenience**: if the only
+All three writers of a notifiable kind do this now:
+`/api/bookings/remove` reads the status off the cards it is deleting;
+`RoomActionsMenu` takes it on `RoomCrew`, which the tracker fills from the
+timecard it already selects; and `AddDayButton` reads it back off the rows
+`extend_all_day_positions` just wrote, because the RPC returns who it booked and
+not what state they are in — and since the extension KEEPS a person's answer
+(0036) that read IS their standing status. **The bar and the in-place offer are
+one judgement**: each of those writers also filters the people it offers to tell,
+so a Not Asked person is neither counted nor suggested. **The second button is not a convenience**: if the only
 way to clear the count were to send an email, people would send unwanted ones
 or learn to ignore the number, and a counter everyone ignores is worse than
 none. It runs BEFORE the has-an-email check, so somebody with no address on
