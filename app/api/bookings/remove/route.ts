@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   // run through the CALLER'S OWN SESSION, so RLS has already decided what they
   // may see, and canUseScheduling is a commercial gate rather than the data
   // boundary. NOTHING IS WRITTEN until both checks below have passed.
-  const [me, { data: show }, { data: cards }] = await Promise.all([
+  const [me, { data: show }, { data: cards }, { data: punches }] = await Promise.all([
     getCurrentUser(),
     supabase.from('shows')
       .select('id, name, venue, organization_id, finalized_at').eq('id', showId).maybeSingle(),
@@ -59,6 +59,15 @@ export async function POST(request: Request) {
     supabase.from('timecards')
       .select('id, role, crew_member_name, rooms!inner ( work_days!inner ( date ) )')
       .eq('show_id', showId).eq('crew_member_id', crewMemberId),
+    // THE PUNCH GUARD, ASKED WITHOUT WAITING FOR THE TIMECARDS. It used to run
+    // afterwards, keyed on the ids that read returned, which made it a fifth
+    // trip in its own right. punches carries show_id since migration 0023, so
+    // the same question — "has this person clocked anything on this show?" —
+    // can be asked of punches directly and ride along with everything else.
+    // The guard is unchanged; only its place in the queue is.
+    supabase.from('punches')
+      .select('id, timecards!inner ( crew_member_id )')
+      .eq('show_id', showId).eq('timecards.crew_member_id', crewMemberId).limit(1),
   ])
 
   if (!me) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -72,7 +81,6 @@ export async function POST(request: Request) {
   if (!cards?.length) return NextResponse.json({ error: 'They are not on this show.' }, { status: 404 })
 
   const ids = cards.map((c: any) => c.id as string)
-  const { data: punches } = await supabase.from('punches').select('id').in('timecard_id', ids).limit(1)
   if (punches?.length) {
     return NextResponse.json(
       { error: 'They have punches recorded on this show, so removing them would delete worked time. Clear those on the tracker first.' },
