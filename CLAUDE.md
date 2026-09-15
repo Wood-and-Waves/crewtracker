@@ -676,12 +676,39 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   shape. Never per-accept emails (three schedulers × thirty crew = ninety emails per show)
   and not browser push (a service worker + permission prompts + a key: a project, not an
   evening). Roughly one evening, inline.
-- **Setting travel days while booking.** The tracker's ⋮ → Positions panel could mark a person
-  Work / Travel / Travel + work as they were booked; that panel is gone (2026-09-08) and the
-  tracker's flag pills are now the only place. Decide whether a Scheduling-screen cell wants it:
-  the argument for is that the booking request email says which days are travel, so a scheduler
-  wants it set before asking. Small either way — one menu item on the chip, or a third state on
-  the cell.
+- **ONE PERSON'S DAY IS NOT THE SHOW'S DAY — travel, on the Scheduling screen** (Dan,
+  2026-09-15: *"What if someone could not travel in on the travel day? So the next day because
+  travel just for them. How do we depict that in the schedule screen? The change is easy in the
+  tracker."*). This supersedes the older "setting travel days while booking" note, which was the
+  same gap seen from the entry side only.
+  **The grid cannot say it at all today.** The day header carries the SHOW's activities and a
+  cell carries a name and an answer — so a scheduler looking at the sheet cannot see that Theo
+  travels on the Friday while everybody else travelled Thursday. The data has handled it since
+  long before the screen existed (`timecards.is_travel_day`, `travel_in_day`, `travel_out_day`,
+  per person per day) and so does the crew-facing copy: `describeDayLines` already writes a
+  booking request from the crew member's own side. It is the SCHEDULER who is blind.
+  **Dan's case is two changes, not one, and that is the thing to get right.** "Could not travel in
+  on the travel day, so the next day" means they are NOT on the show's travel day at all — no
+  timecard — and their first day carries `travel_in_day`, which is the hybrid flag: they travel
+  AND work that day, and payroll adds it to the hours. So depicting it needs a cell that says
+  "travelling in" AND a blank where everyone else has a cell. The blank mostly works already: if
+  the position runs that day their slot reads Open, which is honest — you may want to backfill
+  it — and if it does not, the cell is simply empty.
+  **Three states, not one**, and conflating them is the trap: `is_travel_day` is a travel day with
+  no work (the tracker replaces the punch grid with a banner), while `travel_in_day` /
+  `travel_out_day` are hybrids ADDITIVE to hours actually worked. A single "travel" toggle on a
+  cell would quietly pick one and be wrong half the time.
+  **Recommendation.** Depict it on the CELL, never in the day header — the header is the show's
+  day and must stay that, or nobody can tell whose day is being described. The day-type tint
+  tokens already exist (`--day-travel`, exposed as `bg-day-travel`) and the house rule is that
+  colour is information, so a travelling cell wears the travel tint plus a small word. Set it from
+  the chip's menu, because on this screen the chip IS the control and a second affordance in a
+  cell would be the thing the Positions panel was deleted for. First concrete step is plumbing,
+  not design: the Scheduling page's timecard select stops at `booking_status`, and `BoardBooking`
+  carries no travel flags at all, so nothing downstream can render what it cannot see.
+  **Design it with the per-person schedule grid and the PM-with-nowhere-to-stand items** — all
+  three are "which days is this person actually on, and in what capacity", and solving them
+  separately would produce three ways to say the same thing.
 - **The Scheduling screen on a phone.** Desktop-first by design (it is a grid, and Dan's
   scheduling happens at a desk). It scrolls sideways below 1024px rather than restructuring.
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
