@@ -5,7 +5,7 @@ import { useBoardPaint } from '@/components/BoardPaint'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
 import { useDismiss } from '@/lib/useDismiss'
-import { useDropDirection } from '@/lib/useDropDirection'
+import { useMenuPlacement } from '@/lib/useMenuPlacement'
 import { cn } from '@/lib/cn'
 
 // The booking status on a tracker crew row — and the chip IS the control.
@@ -93,8 +93,13 @@ export default function BookingStatusChip({
   const wrapRef = useRef<HTMLSpanElement | null>(null)
   useDismiss(open, wrapRef, () => { setOpen(false); setRemoving(null) })
   // On the last row of the grid there is nothing below to open into.
-  const drop = useDropDirection(open, wrapRef, removing ? 220 : 190)
-  const panelSide = drop === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
+  // Both axes: this menu lives in a grid of days that scrolls sideways inside
+  // its own box, so on the last column there is nothing to the right of it.
+  const place = useMenuPlacement(open, wrapRef, removing ? 220 : 190, removing ? 270 : 190)
+  const panelSide = cn(
+    place.vertical === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
+    place.horizontal === 'right' ? 'right-0' : 'left-0',
+  )
 
   if (!crewMemberId) return null
   // On the TRACKER a confirmed person shows NOTHING (Dan, 2026-09-07: "the
@@ -181,7 +186,7 @@ export default function BookingStatusChip({
       )}
 
       {open && removing && (
-        <div className={cn('absolute left-0 z-50 w-64 border-2 border-ink bg-surface p-3 shadow-edge', panelSide)}>
+        <div className={cn('absolute z-50 w-64 border-2 border-ink bg-surface p-3 shadow-edge', panelSide)}>
           <p className="text-sm text-ink">
             {removing === 'day' && date
               ? `Take ${crewName.split(' ')[0]} off ${shortDay(date)}? Their other ${theirDates.length - 1} day${theirDates.length === 2 ? '' : 's'} stay.`
@@ -219,7 +224,7 @@ export default function BookingStatusChip({
       )}
 
       {open && !removing && (
-        <div role="menu" className={cn('absolute left-0 z-50 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge', panelSide)}>
+        <div role="menu" className={cn('absolute z-50 min-w-[11rem] border-2 border-ink bg-surface p-1 shadow-edge', panelSide)}>
           {status !== 'confirmed' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
               className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">

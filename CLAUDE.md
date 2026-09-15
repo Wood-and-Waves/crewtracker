@@ -164,9 +164,16 @@ scroll box; `color-scheme` alone is the fallback everywhere else.
 
 **Everything is token-driven — never hardcode a color.** Tokens live in `app/globals.css` as CSS variables (`--bg`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--accent`, `--accent-ink`, `--accent-wash`, `--ot`, `--good`, `--danger`, `--radius*`), mapped into Tailwind v4's `@theme inline` so they're usable as ordinary utilities: `bg-surface`, `text-ink`, `text-muted`, `border-line`, `text-accent`, `rounded-card`, `rounded-field`, `rounded-pill`. Light values are the `:root` default (media-query fallback via `prefers-color-scheme: dark` for the dark values); an explicit `data-theme="light"|"dark"` on `<html>` (set by `components/ui/ThemeToggle.tsx`, persisted to `localStorage['ct-theme']`, applied pre-paint by `components/ThemeScript.tsx` to avoid a flash) overrides the media query in both directions. **If you introduce a new color, add it as a token in globals.css, not as a one-off Tailwind class** — that's the whole point of the system Dan asked for, so future restyles are a one-file edit.
 
-**A menu opens UP when there is no room below it** — `lib/useDropDirection.ts`. The room is
-measured against the nearest SCROLLING ancestor, not the window, because an absolute panel inside
-an overflow box is clipped by that box (the last row of the Scheduling grid). Menus also sit at
+**A menu opens UP when there is no room below it, and RIGHT-ALIGNED when there is none to the
+right** — `lib/useMenuPlacement.ts` (was `useDropDirection`, which only knew the vertical half
+until 2026-09-15). The room is measured against the nearest CLIPPING ancestor **on each axis
+separately**, not the window, because an absolute panel inside an overflow box is clipped by that
+box — the last ROW of the Scheduling grid was the first half of this lesson, and the last COLUMN
+was the second: the grid scrolls sideways inside its own box, so a chip menu on the final day was
+drawn half outside it and could not be read. The two axes can be clipped by different ancestors,
+so stopping the search at the first box that clips either one would leave the other measured
+against the window and put the panel straight back outside. Note a left-aligned panel runs
+rightward FROM the trigger's left edge, so that is where its room is measured from. Menus also sit at
 `z-50`, above the grid's sticky day header at `z-30`: equal z-indexes paint in DOM order, so the
 PM chip's menu, opened from the strip ABOVE the grid, was disappearing behind it.
 

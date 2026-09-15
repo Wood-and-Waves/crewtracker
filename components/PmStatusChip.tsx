@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Chip from '@/components/ui/Chip'
 import { useDismiss } from '@/lib/useDismiss'
-import { useDropDirection } from '@/lib/useDropDirection'
+import { useMenuPlacement } from '@/lib/useMenuPlacement'
 import { cn } from '@/lib/cn'
 import type { PmState } from '@/components/PmField'
 
@@ -37,7 +37,7 @@ export default function PmStatusChip({
   const [note, setNote] = useState('')
   const wrapRef = useRef<HTMLSpanElement | null>(null)
   useDismiss(open, wrapRef, () => setOpen(false))
-  const drop = useDropDirection(open, wrapRef, 170)
+  const place = useMenuPlacement(open, wrapRef, 170, 200)
   // z-50: the grid below has a sticky day header at z-30, and equal z-indexes
   // are painted in DOM order — so a menu opened from the strip above the grid
   // disappeared behind it (Dan, 2026-09-08: "this needs to overlay. It is lost").
@@ -96,8 +96,9 @@ export default function PmStatusChip({
       </button>
 
       {open && (
-        <div role="menu" className={cn('absolute left-0 z-50 min-w-[12rem] border-2 border-ink bg-surface p-1 shadow-edge',
-          drop === 'up' ? 'bottom-full mb-1' : 'top-full mt-1')}>
+        <div role="menu" className={cn('absolute z-50 min-w-[12rem] border-2 border-ink bg-surface p-1 shadow-edge',
+          place.vertical === 'up' ? 'bottom-full mb-1' : 'top-full mt-1',
+          place.horizontal === 'right' ? 'right-0' : 'left-0')}>
           {!accepted && (
             <>
               <button type="button" role="menuitem" disabled={busy} onClick={record}
