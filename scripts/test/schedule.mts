@@ -25,7 +25,7 @@ import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, type UntoldRow } from '../../lib/crewNotices.ts'
-import { buildBoard, describeBoard, applyBookings } from '../../lib/scheduleBoard.ts'
+import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
@@ -646,7 +646,8 @@ console.log('\n--- scheduling board ---')
   // summary rules exist to prevent.
   const openSlot = (at('Ballroom', 1, '2026-09-08') as any)
   check('the cell painted on is open to begin with', openSlot.kind, 'open')
-  const painted = applyBookings(board, [{
+  const painted = applyPending(board, [{
+    kind: 'book',
     slotId: openSlot.slotId,
     booking: { timecardId: 'new1', crewMemberId: 'zz', crewMemberName: 'Hana Kwon', role: 'BO Tech', status: 'pencilled' },
   }])
@@ -659,11 +660,50 @@ console.log('\n--- scheduling board ---')
   check('the total never moves — the cell existed either way', painted.summary.total, board.summary.total)
   check('the board itself is untouched', (at('Ballroom', 1, '2026-09-08') as any).kind, 'open')
   check('a slot the refresh already filled is dropped, never double-painted',
-    applyBookings(board, [{
+    applyPending(board, [{
+      kind: 'book',
       slotId: 's1',  // already booked on the server board
       booking: { timecardId: 'x', crewMemberId: 'q', crewMemberName: 'Nobody', role: 'A1', status: 'pencilled' },
     }]).summary, board.summary)
-  check('nothing to paint returns the same board object', applyBookings(board, []), board)
+  check('nothing to paint returns the same board object', applyPending(board, []), board)
+
+  // REMOVAL IS SHOW-WIDE, so painting it is too: every cell that person holds,
+  // not the one whose chip was clicked. Alex is on BOTH days here (s1 pencilled
+  // on the load-in, s3 confirmed on the show day).
+  const without = applyPending(board, [{ kind: 'remove', crewMemberId: 'c1' }])
+  const goneCell = (name: string, i: number, date: string) =>
+    without.rooms.find(r => r.name === name)!.lines[i].byDate[date] as any
+  check('a slot they held opens again', goneCell('Ballroom', 0, '2026-09-08').kind, 'open')
+  check('and keeps its slot id, so it can be filled', goneCell('Ballroom', 0, '2026-09-08').slotId, 's1')
+  check('and its role, so the picker knows what to offer', goneCell('Ballroom', 0, '2026-09-08').role, 'A1')
+  check('their other day goes too — removal is the whole show',
+    goneCell('Ballroom', 0, '2026-09-09').kind, 'open')
+  check('the open count picks both up', without.summary.open, board.summary.open + 2)
+  check('their confirmed day stops counting', without.summary.confirmed, board.summary.confirmed - 1)
+  check('and the flag on it goes with them', without.summary.flags, board.summary.flags - 1)
+  check('somebody else is untouched',
+    (without.rooms.find(r => r.name === 'Ballroom')!.lines[1].byDate['2026-09-09'] as any).booking.crewMemberName,
+    'Bo Ellery')
+  // Bo is hand-staffed: a live booking holding NO slot, so there is nothing to
+  // reopen and the cell simply stops existing — which empties his line.
+  const noBo = applyPending(board, [{ kind: 'remove', crewMemberId: 'c2' }])
+  check('a hand-staffed booking leaves no open slot behind', noBo.summary.open, board.summary.open)
+  check('their cell simply stops existing', 
+    noBo.rooms.find(r => r.name === 'Ballroom')!.lines[1].byDate['2026-09-09'], null)
+  check('but the line survives, because it still carries an open slot that day',
+    (noBo.rooms.find(r => r.name === 'Ballroom')!.lines[1].byDate['2026-09-08'] as any).slotId, 's2')
+  // A line holding NOTHING but that person is a different matter: buildBoard
+  // would never emit a row of blanks with a role label on it, so neither does
+  // this. Breakout runs one day, with one hand-staffed person on it.
+  const soloBoard = buildBoard({
+    days, rooms, slots: [], flags: [],
+    bookings: [booking({ timecardId: 'solo', roomId: 'r3', slotId: null, crewMemberId: 'c9', crewMemberName: 'Solo Tech', role: 'V1' })],
+  })
+  check('the solo line exists to begin with', soloBoard.rooms.find(r => r.name === 'Breakout')!.lines.length, 1)
+  check('and is dropped once its only occupant goes, not left as a blank row',
+    applyPending(soloBoard, [{ kind: 'remove', crewMemberId: 'c9' }]).rooms.find(r => r.name === 'Breakout')!.lines.length, 0)
+  check('removing somebody already gone changes nothing',
+    applyPending(board, [{ kind: 'remove', crewMemberId: 'nobody' }]), board)
 
   // THE GRID RULE: a person keeps one line all week, whoever holds which slot.
   const steady = buildBoard({

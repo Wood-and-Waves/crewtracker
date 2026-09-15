@@ -26,12 +26,9 @@ import { sendDaysChangedEmail } from '@/lib/daysChangedEmail'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  if (!canUseScheduling(await getCurrentUser())) {
-    return NextResponse.json({ error: 'Scheduling is not enabled for this account.' }, { status: 403 })
-  }
 
+  // Parsed before anything is asked of the network: a malformed body should
+  // cost nothing, and showId is needed by the reads below anyway.
   let showId: string | undefined
   let crewMemberId: string | undefined
   let notify: boolean | undefined
@@ -44,19 +41,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 })
   }
 
-  const { data: show } = await supabase
-    .from('shows').select('id, name, venue, organization_id, finalized_at').eq('id', showId).maybeSingle()
+  // ONE ROUND TRIP'S WALL TIME INSTEAD OF THREE. Who you are and what you are
+  // removing do not depend on each other, and this route was four sequential
+  // trips to Supabase before it touched anything — most of the second it took
+  // (Dan, 2026-09-15: "Removing someone is not [faster]").
+  //
+  // Issuing the reads beside the permission check hands nobody anything: both
+  // run through the CALLER'S OWN SESSION, so RLS has already decided what they
+  // may see, and canUseScheduling is a commercial gate rather than the data
+  // boundary. NOTHING IS WRITTEN until both checks below have passed.
+  const [me, { data: show }, { data: cards }] = await Promise.all([
+    getCurrentUser(),
+    supabase.from('shows')
+      .select('id, name, venue, organization_id, finalized_at').eq('id', showId).maybeSingle(),
+    // Everything they hold on this show — declined rows included, so nothing of
+    // theirs is left behind on a show they are off.
+    supabase.from('timecards')
+      .select('id, role, crew_member_name, rooms!inner ( work_days!inner ( date ) )')
+      .eq('show_id', showId).eq('crew_member_id', crewMemberId),
+  ])
+
+  if (!me) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  if (!canUseScheduling(me)) {
+    return NextResponse.json({ error: 'Scheduling is not enabled for this account.' }, { status: 403 })
+  }
   if (!show) return NextResponse.json({ error: 'Show not found.' }, { status: 404 })
   if (show.finalized_at) {
     return NextResponse.json({ error: 'This show has been closed out. Unlock it first.' }, { status: 400 })
   }
-
-  // Everything they hold on this show — declined rows included, so nothing of
-  // theirs is left behind on a show they are off.
-  const { data: cards } = await supabase
-    .from('timecards')
-    .select('id, role, crew_member_name, rooms!inner ( work_days!inner ( date ) )')
-    .eq('show_id', showId).eq('crew_member_id', crewMemberId)
   if (!cards?.length) return NextResponse.json({ error: 'They are not on this show.' }, { status: 404 })
 
   const ids = cards.map((c: any) => c.id as string)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useBoardPaint } from '@/components/BoardPaint'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
 import { useDismiss } from '@/lib/useDismiss'
@@ -63,6 +64,9 @@ export default function BookingStatusChip({
   // over the top of it. Somebody who was ASKED or said YES is expecting to
   // work, so that question carries the offer to tell them (Dan, 2026-09-08).
   const [removing, setRemoving] = useState(false)
+  // Present on the Scheduling screen, null on the tracker — the chip lives on
+  // both and only one of them draws a grid to paint.
+  const paint = useBoardPaint()
   // Click anywhere else, or press Escape, and it goes away — including the
   // removal question, which asks something and should not trap anybody.
   const wrapRef = useRef<HTMLSpanElement | null>(null)
@@ -109,8 +113,13 @@ export default function BookingStatusChip({
     if (!body) return
     setRemoving(false)
     setOpen(false)
-    // The row goes with the refresh; the note is for the email's fate, which
-    // the row cannot say.
+    // TAKE THEM OFF THE GRID NOW. The delete is already done and verified
+    // server-side; what used to follow was a full re-render of the whole
+    // screen before the name went away (Dan, 2026-09-15: "Removing someone is
+    // not [faster]"). Show-wide, like the route itself — every cell of theirs,
+    // not the one whose chip was clicked.
+    if (crewMemberId) paint?.paint([{ kind: 'remove', crewMemberId }])
+    // The note is for the email's fate, which the row cannot say.
     if (body.warning) setNote(body.warning)
     router.refresh()
   }

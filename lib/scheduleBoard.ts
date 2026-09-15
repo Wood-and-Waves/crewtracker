@@ -271,47 +271,83 @@ export function summarizeRooms(rooms: BoardRoom[]): BoardSummary {
   }
 }
 
-/** A booking that has been WRITTEN but whose page refresh has not landed yet. */
-export type PaintedBooking = { slotId: string; booking: BoardBooking }
+/**
+ * A write the database has ALREADY ACCEPTED, whose page refresh has not landed.
+ *
+ * Not a guess about what might happen — the row came back — so this is the
+ * reconcile-second half of the tracker's punch rule, applied to the grid.
+ *
+ * `remove` carries no slot because removal is SHOW-WIDE: the route deletes
+ * every timecard that person holds on the show, so every cell of theirs has to
+ * go, not the one whose chip was clicked.
+ */
+export type PendingChange =
+  | { kind: 'book'; slotId: string; booking: BoardBooking }
+  | { kind: 'remove'; crewMemberId: string }
+
+/** Back-compat alias: a booking is the commonest pending change. */
+export type PaintedBooking = Extract<PendingChange, { kind: 'book' }>
 
 /**
- * Paint bookings onto a board before the server has caught up.
+ * Apply accepted-but-not-yet-rendered writes to a board.
  *
- * The write is already verified when this is called — the row came back from
- * the database — so this is not a guess about what might happen, it is the
- * same reconcile-second shape the tracker uses for punches: the answer is
- * known, the page render is just slow to say so.
- *
- * Only an OPEN slot is painted. If the refresh has already landed, or somebody
- * else took the slot in between, the board wins and the entry is dropped.
+ * Booking only ever fills an OPEN slot, and removing only ever empties a cell
+ * held by that person: if the refresh has already landed, or somebody else
+ * changed the slot in between, the server's board wins and nothing is painted.
  */
-export function applyBookings(board: Board, painted: PaintedBooking[]): Board {
-  if (painted.length === 0) return board
-  const bySlot = new Map(painted.map(p => [p.slotId, p.booking]))
+export function applyPending(board: Board, pending: PendingChange[]): Board {
+  if (pending.length === 0) return board
+  const bySlot = new Map<string, BoardBooking>()
+  const gone = new Set<string>()
+  for (const p of pending) {
+    if (p.kind === 'book') bySlot.set(p.slotId, p.booking)
+    else gone.add(p.crewMemberId)
+  }
+
   let touched = false
-  const rooms = board.rooms.map(room => ({
-    ...room,
-    lines: room.lines.map(line => {
+  const rooms = board.rooms.map(room => {
+    const lines = room.lines.map(line => {
       let lineTouched = false
       const byDate: Record<string, BoardEntry | null> = {}
       for (const [date, e] of Object.entries(line.byDate)) {
-        const b = e && e.kind === 'open' ? bySlot.get(e.slotId) : undefined
-        if (b && e && e.kind === 'open') {
-          byDate[date] = { kind: 'booked', slotId: e.slotId, roomId: e.roomId, booking: b, flag: null }
+        if (e && e.kind === 'open') {
+          const b = bySlot.get(e.slotId)
+          if (b) {
+            byDate[date] = { kind: 'booked', slotId: e.slotId, roomId: e.roomId, booking: b, flag: null }
+            lineTouched = true
+            continue
+          }
+        } else if (e && e.kind === 'booked' && e.booking.crewMemberId && gone.has(e.booking.crewMemberId)) {
+          // A slot they held opens again; a hand-staffed booking held no slot,
+          // so its cell simply stops existing, exactly as a rebuild would.
+          byDate[date] = e.slotId
+            ? { kind: 'open', slotId: e.slotId, roomId: e.roomId, role: e.booking.role }
+            : null
           lineTouched = true
-        } else {
-          byDate[date] = e
+          continue
         }
+        byDate[date] = e
       }
       if (!lineTouched) return line
       touched = true
       return { ...line, byDate }
-    }),
-  }))
+    })
+    // A line emptied completely is a row of blanks with a role label on it —
+    // buildBoard would not have produced one, so neither does this.
+    const kept = lines.filter(l => Object.values(l.byDate).some(e => e !== null))
+    if (kept.length !== lines.length) touched = true
+    return { ...room, lines: kept }
+  })
+
   if (!touched) return board
   // Recounted, never patched: the strip is computed from the cells, so painting
   // a cell and adjusting a number by hand is exactly how the two drift apart.
   return { ...board, rooms, summary: summarizeRooms(rooms) }
+}
+
+/** @deprecated use applyPending — kept so a book-only caller reads plainly. */
+export function applyBookings(board: Board, painted: PaintedBooking[]): Board {
+  return applyPending(board, painted)
 }
 
 /** "12 of 20 positions confirmed · 2 people waiting · 3 open · 1 to sort out" */

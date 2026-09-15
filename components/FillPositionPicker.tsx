@@ -327,6 +327,7 @@ export default function FillPositionPicker({
       for (const r of data as any[]) {
         if (!r.call_position_id) continue
         painted.push({
+          kind: 'book',
           slotId: r.call_position_id as string,
           booking: { timecardId: r.id as string, crewMemberId: c.id, crewMemberName: c.name, role: positionRole, status: 'pencilled' },
         })
@@ -346,6 +347,7 @@ export default function FillPositionPicker({
       const row = data[0] as any
       if (row.call_position_id) {
         painted.push({
+          kind: 'book',
           slotId: row.call_position_id as string,
           booking: { timecardId: row.id as string, crewMemberId: c.id, crewMemberName: c.name, role: positionRole, status: 'pencilled' },
         })
