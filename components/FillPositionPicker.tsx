@@ -84,6 +84,7 @@ export default function FillPositionPicker({
   positionId,
   positionRole,
   roomId,
+  roomName,
   date,
   onFilled,
   onCancel,
@@ -91,6 +92,7 @@ export default function FillPositionPicker({
   positionId: string
   positionRole: string
   roomId: string
+  roomName: string
   date: string
   onFilled: () => void
   onCancel: () => void
@@ -363,27 +365,30 @@ export default function FillPositionPicker({
     // row and its button at the other (Dan, 2026-09-08: "the name and book are
     // so far apart").
     <div className="max-w-[620px] rounded-field border border-line p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+      {/* One line, not two. Where and when used to sit ABOVE the panel as a
+          separate breadcrumb; between it, the header, the search box and the
+          filter row there were ~160px of furniture before the first name. */}
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-muted">
           Fill · {positionRole}
+          <span className="ml-2 font-normal normal-case tracking-normal">{roomName} · {fmtDay(date)}</span>
         </p>
-        <button onClick={onCancel} className="text-xs text-muted hover:text-ink">Cancel</button>
+        <button onClick={onCancel} className="shrink-0 text-xs text-muted hover:text-ink">Cancel</button>
       </div>
 
       {!plan && (
-        <>
+        <div className="mb-2 flex items-center gap-3">
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search crew…"
-            className="mb-2 w-full rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+            className="min-w-0 flex-1 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
           />
-
-          <label className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-xs text-muted">Only show {positionRole}s</span>
+          <label className="flex shrink-0 items-center gap-2">
+            <span className="text-xs text-muted">{positionRole}s only</span>
             <Toggle checked={onlyRole} onChange={setOnlyRole} />
           </label>
-        </>
+        </div>
       )}
 
       {plan ? (

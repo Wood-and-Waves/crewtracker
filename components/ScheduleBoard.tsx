@@ -62,10 +62,28 @@ export default function ScheduleBoard({
   // the click that follows opens.
   useDismiss(!!picker, pickerRef, () => setPicker(null))
   useEffect(() => {
+    const el = pickerRef.current
+    if (!picker || !el) return
     // Instant, not smooth: a smooth scroll is driven by animation frames, so it
     // silently does nothing in a backgrounded tab — and the point here is that
     // the picker is on screen the moment it opens, not a second later.
-    if (picker) pickerRef.current?.scrollIntoView({ block: 'nearest' })
+    const show = () => el.scrollIntoView({ block: 'nearest' })
+    show()
+    // AND THEN FOLLOW IT, because the panel GROWS after it opens. It renders
+    // "Loading crew…" first — about sixty pixels — so the one-shot scroll
+    // faithfully brought that into view, and the candidate list arrived a
+    // moment later, four times taller, below the fold (Dan, 2026-09-15: "the
+    // list not showing up unless I scroll is not ideal"). The day step does
+    // the same thing when it opens. Only on GROWTH: re-scrolling when the
+    // panel shrinks would yank the page while somebody is reading it.
+    let last = el.getBoundingClientRect().height
+    const ro = new ResizeObserver(() => {
+      const h = el.getBoundingClientRect().height
+      if (h > last) show()
+      last = h
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [picker?.slotId])
 
   const cols = { gridTemplateColumns: `minmax(140px, 190px) repeat(${board.days.length}, minmax(150px, 1fr))` }
@@ -177,11 +195,11 @@ export default function ScheduleBoard({
             {picker && picker.roomName === room.name && line.byDate[picker.date]?.kind === 'open'
               && (line.byDate[picker.date] as Extract<BoardEntry, { kind: 'open' }>).slotId === picker.slotId && (
               <div ref={pickerRef} className="border-b border-line bg-surface-2/40 px-3 py-3">
-                <p className="mb-2 max-w-[620px] text-xs text-muted">{room.name} · {line.role} · {dayHead(picker.date)}</p>
                 <FillPositionPicker
                   positionId={picker.slotId}
                   positionRole={picker.role}
                   roomId={picker.roomId}
+                  roomName={room.name}
                   date={picker.date}
                   onCancel={() => setPicker(null)}
                   onFilled={() => { setPicker(null); router.refresh() }}
