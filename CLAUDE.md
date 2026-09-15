@@ -1588,8 +1588,23 @@ where the open slots are. **Everybody on it is confirmed and it has no position 
 it has no open slot, nobody waiting and no flag — which is what keeps it off the
 Needs-scheduling list while the demo is looking at that list.
 
-Run all three with **`npm run demo:reset`**, which is the main seed (it deletes every show in the
-org) followed by the other two, which each delete only their own by name. Order matters. Two things in it are load-bearing: punches are written BEFORE `finalized_at` is set,
+**A FOURTH seed tops the directory up and holds a week hostage** —
+`seed-crewtracker-demo-oct-availability.sql` (Dan, 2026-09-15, staffing Oct 1-5 with 3 BO Techs,
+1 A1, 1 V1, 1 LD and 1 Stagehand). The twelve people in the main seed hold **no BO Tech at all**,
+which was three of those seven positions, so the fill picker opened on an empty list on the
+busiest line of the sheet. It ADDS ten people (six BO Techs, an A1, a V1, two LDs) and builds
+*Lakeshore Investor Day* across the same five days with ONE person from each of those roles
+confirmed on it — so every line meets a clash and every line still has somebody free.
+
+It is the one demo seed that is **additive and safe to run twice**: every insert is guarded on
+the person not already being there, and the show is deleted by name first. Its dates are the
+first October still ahead rather than an offset from today, because Dan named them — but not a
+hardcoded year, since a show in the past raises no conflict at all and the demo would look broken
+while the app was right. **Run it LAST**: the main seed deletes every crew member in the org, so
+running that afterwards takes these ten with it.
+
+Run all four with **`npm run demo:reset`**, which is the main seed (it deletes every show in the
+org) followed by the other three, which each delete only their own by name. Order matters. Two things in it are load-bearing: punches are written BEFORE `finalized_at` is set,
 because `punches_blocked_when_finalized` is a trigger and the service role does not bypass
 triggers; and punch instants are built from the day's own date `at time zone` the show's zone,
 never from a UTC literal — Grapevine is CDT in September, and a hand-written "13:00Z" is how a
