@@ -36,14 +36,27 @@ type Status = 'pencilled' | 'invited' | 'confirmed' | 'declined'
 // contacted them.
 const LABEL: Record<Status, string> = { pencilled: 'Not Asked', invited: 'Asked', confirmed: 'Confirmed', declined: 'Declined' }
 
+// "Thu, Oct 1" — the same shape every other date in the app wears. Weekday plus
+// a bare number rendered as "1 Thu" here, which reads as a quantity.
+function shortDay(date: string) {
+  return new Date(date + 'T00:00:00')
+    .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
 export default function BookingStatusChip({
   showId, crewMemberId, crewName, status: initial, locked = false, context = 'tracker',
+  date, theirDates = [],
 }: {
   showId: string
   crewMemberId: string | null
   crewName: string
   status: string | null | undefined
   locked?: boolean
+  /** The day this chip's cell is. With it, Remove can offer just that day. */
+  date?: string
+  /** Every day they hold on this show. Empty on the tracker, which has no
+   *  board to read it from — there Remove stays show-wide, as it always was. */
+  theirDates?: string[]
   /** 'tracker' hides a confirmed chip entirely; 'scheduling' shows it and lets
    *  it be tapped (somebody backed out) and offers the single Ask by email. */
   context?: 'tracker' | 'scheduling'
@@ -63,14 +76,22 @@ export default function BookingStatusChip({
   // The menu becomes the removal question rather than opening a second thing
   // over the top of it. Somebody who was ASKED or said YES is expecting to
   // work, so that question carries the offer to tell them (Dan, 2026-09-08).
-  const [removing, setRemoving] = useState(false)
+  // WHAT IS BEING TAKEN BACK — decided by which menu item was pressed, not by
+  // editing a selection inside the confirm (Dan, 2026-09-15: "What about
+  // 'remove this day'. Without day editing capabilities, this grid is nothing
+  // more than an overview of the week"). null = the slip is closed.
+  const [removing, setRemoving] = useState<null | 'day' | 'show'>(null)
+  // Only worth offering separately when they hold more than one day; on a
+  // one-day booking the two are the same act. The tracker passes neither, so
+  // it keeps the single show-wide Remove it has always had.
+  const perDay = theirDates.length > 1 && !!date
   // Present on the Scheduling screen, null on the tracker — the chip lives on
   // both and only one of them draws a grid to paint.
   const paint = useBoardPaint()
   // Click anywhere else, or press Escape, and it goes away — including the
   // removal question, which asks something and should not trap anybody.
   const wrapRef = useRef<HTMLSpanElement | null>(null)
-  useDismiss(open, wrapRef, () => { setOpen(false); setRemoving(false) })
+  useDismiss(open, wrapRef, () => { setOpen(false); setRemoving(null) })
   // On the last row of the grid there is nothing below to open into.
   const drop = useDropDirection(open, wrapRef, removing ? 220 : 190)
   const panelSide = drop === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
@@ -109,16 +130,25 @@ export default function BookingStatusChip({
   // panel that used to own this is gone. Scheduling screen only: the tracker's
   // menu stays Confirmed / Declined.
   async function remove(notify: boolean) {
-    const body = await post('/api/bookings/remove', { showId, crewMemberId, notify })
+    const dates = removing === 'day' && date ? [date] : undefined
+    const body = await post('/api/bookings/remove', { showId, crewMemberId, notify, dates })
     if (!body) return
-    setRemoving(false)
+    // STILL ON THE SHOW, fewer days: the right message is their revised
+    // schedule, which /api/crew/days-changed already builds from a person's
+    // LIVE days — exactly what is left after the delete. The remove route
+    // deliberately does not send it, so it never has to own a second copy.
+    if (notify && body.remaining > 0 && crewMemberId) {
+      const told = await post('/api/crew/days-changed', { showId, crewMemberIds: [crewMemberId] })
+      if (told) setNote(`Told ${crewName.split(' ')[0]} their days changed.`)
+    }
+    setRemoving(null)
     setOpen(false)
     // TAKE THEM OFF THE GRID NOW. The delete is already done and verified
     // server-side; what used to follow was a full re-render of the whole
     // screen before the name went away (Dan, 2026-09-15: "Removing someone is
     // not [faster]"). Show-wide, like the route itself — every cell of theirs,
     // not the one whose chip was clicked.
-    if (crewMemberId) paint?.paint([{ kind: 'remove', crewMemberId }])
+    if (crewMemberId) paint?.paint([{ kind: 'remove', crewMemberId, dates }])
     // The note is for the email's fate, which the row cannot say.
     if (body.warning) setNote(body.warning)
     router.refresh()
@@ -138,7 +168,7 @@ export default function BookingStatusChip({
       {tappable ? (
         <button
           type="button"
-          onClick={() => { setOpen(v => !v); setRemoving(false); setNote('') }}
+          onClick={() => { setOpen(v => !v); setRemoving(null); setNote('') }}
           aria-haspopup="menu"
           aria-expanded={open}
           title="Tap to record their answer"
@@ -153,7 +183,9 @@ export default function BookingStatusChip({
       {open && removing && (
         <div className={cn('absolute left-0 z-50 w-64 border-2 border-ink bg-surface p-3 shadow-edge', panelSide)}>
           <p className="text-sm text-ink">
-            Remove {crewName.split(' ')[0]} from this show? Every day of theirs goes with it.
+            {removing === 'day' && date
+              ? `Take ${crewName.split(' ')[0]} off ${shortDay(date)}? Their other ${theirDates.length - 1} day${theirDates.length === 2 ? '' : 's'} stay.`
+              : `Remove ${crewName.split(' ')[0]} from this show? Every day of theirs goes with it.`}
           </p>
           {answered && (
             <p className="mt-1 text-xs text-muted">
@@ -165,20 +197,20 @@ export default function BookingStatusChip({
               <>
                 <button type="button" disabled={busy} onClick={() => remove(true)}
                   className="rounded-field border-2 border-ink px-2.5 py-1 text-xs font-semibold text-ink hover:bg-surface-2 disabled:opacity-40">
-                  Remove and tell them
+                  {removing === 'day' ? 'Take the day and tell them' : 'Remove and tell them'}
                 </button>
                 <button type="button" disabled={busy} onClick={() => remove(false)}
                   className="rounded-field px-2.5 py-1 text-xs font-semibold text-danger hover:bg-surface-2 disabled:opacity-40">
-                  Remove, say nothing
+                  {removing === 'day' ? 'Take the day, say nothing' : 'Remove, say nothing'}
                 </button>
               </>
             ) : (
               <button type="button" disabled={busy} onClick={() => remove(false)}
                 className="rounded-field border-2 border-ink px-2.5 py-1 text-xs font-semibold text-danger hover:bg-surface-2 disabled:opacity-40">
-                Remove
+                {removing === 'day' ? 'Take the day' : 'Remove'}
               </button>
             )}
-            <button type="button" disabled={busy} onClick={() => { setRemoving(false); setOpen(false) }}
+            <button type="button" disabled={busy} onClick={() => { setRemoving(null); setOpen(false) }}
               className="px-1 text-xs text-muted hover:text-ink">
               Cancel
             </button>
@@ -210,9 +242,23 @@ export default function BookingStatusChip({
               Ask by email
             </button>
           )}
-          <button type="button" role="menuitem" disabled={busy} onClick={() => setRemoving(true)}
-            className="mt-1 block w-full border-t-2 border-line px-3 py-2 text-left text-sm font-semibold text-danger hover:bg-danger/10 disabled:opacity-40">
-            Remove
+          {/* THE DAY FIRST: it is the commoner act — somebody is unavailable
+              on the Thursday, not off the job. Both are red; only these two
+              destroy anything, which is the whole reason the answers above
+              them are ink (Dan, 2026-09-08). */}
+          {perDay && (
+            <button type="button" role="menuitem" disabled={busy} onClick={() => setRemoving('day')}
+              className="mt-1 block w-full border-t-2 border-line px-3 py-2 text-left text-sm font-semibold text-danger hover:bg-danger/10 disabled:opacity-40">
+              Remove this day
+            </button>
+          )}
+          <button type="button" role="menuitem" disabled={busy}
+            onClick={() => setRemoving('show')}
+            className={cn(
+              'block w-full px-3 py-2 text-left text-sm font-semibold text-danger hover:bg-danger/10 disabled:opacity-40',
+              !perDay && 'mt-1 border-t-2 border-line',
+            )}>
+            {perDay ? 'Remove from the show' : 'Remove'}
           </button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}
             className="block w-full px-3 py-1.5 text-left text-xs text-muted hover:text-ink">

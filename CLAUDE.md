@@ -1443,10 +1443,28 @@ each Needs-scheduling row now gate on a count of exactly those people — `penci
 board summary, `pencilled` on the queue summary — not on "somebody has not answered", which
 stays true long after everyone has been asked.
 
-**Remove takes somebody off the whole show, and refuses on punches**
-(`app/api/bookings/remove`). It is show-wide because everything else that chip does is: a chip
-that answers for the whole run but removes one day is the split that leaves somebody on a Tuesday
-nobody meant to book. It deletes every timecard of theirs on the show, declined rows included, so
+**Remove offers THIS DAY or the whole show, and refuses on punches per day**
+(`app/api/bookings/remove`). It was show-wide only until 2026-09-15, on the reasoning that
+everything else the chip does is show-wide — and that survived until Dan tried to use it: *"I just
+tried to remove a person from one day. Under the idea that they weren't available. I could not
+remove from just one day, it pulled from all"*, and then *"Without day editing capabilities, this
+grid is nothing more than an overview of the week."* Somebody losing a Thursday is ordinary; making
+a scheduler drop the run and rebook four days is not.
+
+**The distinction that holds is ANSWER versus ACT.** Recording Confirmed or Declined stays
+show-wide, because that is the crew member's answer to being booked and they did not answer one
+day at a time. Removal is the scheduler's own act on a date, so it is offered by date: the menu
+carries **Remove this day** above **Remove from the show**, the day first because it is the
+commoner one. A booking that only runs one day shows the single **Remove** it always had, and so
+does the tracker, which passes no dates.
+
+The route takes an optional `dates` — omitted still means the whole show, which is what every
+earlier caller meant. **The punch guard is per day too**: a punch on Monday is no reason to refuse
+giving Thursday back, and the refusal names the days to go and clear. **The notice follows what
+actually happened**: losing every day sends the removal wording ("you are no longer on Northwind"),
+while losing some sends the ordinary change notice through `/api/crew/days-changed`, which lists a
+person's LIVE days — after the delete those are exactly the days they have left, so the remove
+route never grew a second copy of that email. It deletes every timecard of theirs on the show, declined rows included, so
 nothing of theirs is left behind — but a timecard carrying PUNCHES is worked time, and the route
 refuses rather than take real hours out of payroll to tidy a schedule ("Clear those on the
 tracker first"; the absence flags are what a day that went wrong is for). Authorization is RLS,

@@ -277,13 +277,13 @@ export function summarizeRooms(rooms: BoardRoom[]): BoardSummary {
  * Not a guess about what might happen — the row came back — so this is the
  * reconcile-second half of the tracker's punch rule, applied to the grid.
  *
- * `remove` carries no slot because removal is SHOW-WIDE: the route deletes
- * every timecard that person holds on the show, so every cell of theirs has to
- * go, not the one whose chip was clicked.
+ * `remove` carries no slot because it is keyed on the PERSON: their cells may sit
+ * in several rooms. `dates` narrows it to the days actually being taken back —
+ * omitted means the whole show, which is what "they are off the job" means.
  */
 export type PendingChange =
   | { kind: 'book'; slotId: string; booking: BoardBooking }
-  | { kind: 'remove'; crewMemberId: string }
+  | { kind: 'remove'; crewMemberId: string; dates?: string[] }
 
 /** Back-compat alias: a booking is the commonest pending change. */
 export type PaintedBooking = Extract<PendingChange, { kind: 'book' }>
@@ -298,10 +298,21 @@ export type PaintedBooking = Extract<PendingChange, { kind: 'book' }>
 export function applyPending(board: Board, pending: PendingChange[]): Board {
   if (pending.length === 0) return board
   const bySlot = new Map<string, BoardBooking>()
-  const gone = new Set<string>()
+  /** person → the days they lose, or null for every day they hold. */
+  const gone = new Map<string, Set<string> | null>()
   for (const p of pending) {
-    if (p.kind === 'book') bySlot.set(p.slotId, p.booking)
-    else gone.add(p.crewMemberId)
+    if (p.kind === 'book') { bySlot.set(p.slotId, p.booking); continue }
+    const had = gone.get(p.crewMemberId)
+    if (had === null) continue                       // already losing the lot
+    if (!p.dates?.length) gone.set(p.crewMemberId, null)
+    else gone.set(p.crewMemberId, new Set([...(had ?? []), ...p.dates]))
+  }
+  const losesDay = (crewMemberId: string | null, date: string) => {
+    if (!crewMemberId) return false
+    const days = gone.get(crewMemberId)
+    // undefined = not being removed at all; null = every day they hold.
+    if (days === undefined) return false
+    return days === null || days.has(date)
   }
 
   let touched = false
@@ -317,7 +328,7 @@ export function applyPending(board: Board, pending: PendingChange[]): Board {
             lineTouched = true
             continue
           }
-        } else if (e && e.kind === 'booked' && e.booking.crewMemberId && gone.has(e.booking.crewMemberId)) {
+        } else if (e && e.kind === 'booked' && losesDay(e.booking.crewMemberId, date)) {
           // A slot they held opens again; a hand-staffed booking held no slot,
           // so its cell simply stops existing, exactly as a rebuild would.
           byDate[date] = e.slotId

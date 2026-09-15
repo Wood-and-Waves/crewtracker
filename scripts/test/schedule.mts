@@ -705,6 +705,27 @@ console.log('\n--- scheduling board ---')
   check('removing somebody already gone changes nothing',
     applyPending(board, [{ kind: 'remove', crewMemberId: 'nobody' }]), board)
 
+  // ONE DAY, NOT THE RUN. Alex holds both days; taking back only the show day
+  // must leave the load-in exactly as it was.
+  const oneDay = applyPending(board, [{ kind: 'remove', crewMemberId: 'c1', dates: ['2026-09-09'] }])
+  const cellOf = (b: typeof board, n: string, i: number, d: string) =>
+    b.rooms.find(r => r.name === n)!.lines[i].byDate[d] as any
+  check('the day named is given back', cellOf(oneDay, 'Ballroom', 0, '2026-09-09').kind, 'open')
+  check('the day not named is untouched', cellOf(oneDay, 'Ballroom', 0, '2026-09-08').kind, 'booked')
+  check('and still theirs', cellOf(oneDay, 'Ballroom', 0, '2026-09-08').booking.crewMemberName, 'Alex Reyes')
+  check('one day back, not two', oneDay.summary.open, board.summary.open + 1)
+  // Alex still holds the load-in and has not answered for it, and Bo has never
+  // been asked at all — so both are still waiting. Losing a CONFIRMED day does
+  // not make somebody more answered than they were.
+  check('they are still waiting on the day they kept', oneDay.summary.waitingPeople, 2)
+  check('and the confirmed count drops by the day that went',
+    oneDay.summary.confirmed, board.summary.confirmed - 1)
+  check('a date they do not hold takes nothing',
+    applyPending(board, [{ kind: 'remove', crewMemberId: 'c1', dates: ['2026-09-30'] }]), board)
+  check('naming every day they hold is the same as naming none',
+    applyPending(board, [{ kind: 'remove', crewMemberId: 'c1', dates: ['2026-09-08', '2026-09-09'] }]).summary,
+    applyPending(board, [{ kind: 'remove', crewMemberId: 'c1' }]).summary)
+
   // THE GRID RULE: a person keeps one line all week, whoever holds which slot.
   const steady = buildBoard({
     days,

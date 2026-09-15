@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDismiss } from '@/lib/useDismiss'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/cn'
@@ -59,6 +59,22 @@ export default function ScheduleBoard({
   // the counts in the strip above, which are computed from these same cells.
   const paint = useBoardPaint()
   const board = usePaintedBoard(serverBoard)
+
+  // Every day each person holds, across every room. A person keeps one LINE
+  // per room, so somebody working two rooms appears twice — the removal slip
+  // needs all of it, because removal is by day and by person, not by line.
+  const daysByPerson = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    for (const room of board.rooms)
+      for (const line of room.lines)
+        for (const [date, e] of Object.entries(line.byDate))
+          if (e && e.kind === 'booked' && e.booking.crewMemberId) {
+            const set = m.get(e.booking.crewMemberId) ?? new Set<string>()
+            set.add(date)
+            m.set(e.booking.crewMemberId, set)
+          }
+    return m
+  }, [board])
 
   // The picker opens under the row it belongs to, and the grid is its own
   // scroll box — so on a row near the bottom it opened out of sight and the
@@ -143,6 +159,10 @@ export default function ScheduleBoard({
             crewName={b.crewMemberName}
             status={b.status}
             locked={locked}
+            // The day this cell IS, and every day they hold — so Remove can
+            // offer "this Thursday" as readily as "the whole run".
+            date={date}
+            theirDates={b.crewMemberId ? [...(daysByPerson.get(b.crewMemberId) ?? [])].sort() : []}
           />
         </div>
         {flag && (

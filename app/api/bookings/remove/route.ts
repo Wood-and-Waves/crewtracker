@@ -32,8 +32,11 @@ export async function POST(request: Request) {
   let showId: string | undefined
   let crewMemberId: string | undefined
   let notify: boolean | undefined
+  // WHICH DAYS. Omitted means the whole show, which is what every caller meant
+  // before this existed and what "they are off the job" still means.
+  let dates: string[] | undefined
   try {
-    ({ showId, crewMemberId, notify } = await request.json())
+    ({ showId, crewMemberId, notify, dates } = await request.json())
   } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
@@ -65,9 +68,12 @@ export async function POST(request: Request) {
     // the same question — "has this person clocked anything on this show?" —
     // can be asked of punches directly and ride along with everything else.
     // The guard is unchanged; only its place in the queue is.
+    // timecard_id, not just "is there one": the guard refuses per DAY now, so
+    // it has to know which of their timecards carry worked time. Scoped to one
+    // person on one show, so this is a handful of rows at most.
     supabase.from('punches')
-      .select('id, timecards!inner ( crew_member_id )')
-      .eq('show_id', showId).eq('timecards.crew_member_id', crewMemberId).limit(1),
+      .select('timecard_id, timecards!inner ( crew_member_id )')
+      .eq('show_id', showId).eq('timecards.crew_member_id', crewMemberId),
   ])
 
   if (!me) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -80,21 +86,42 @@ export async function POST(request: Request) {
   }
   if (!cards?.length) return NextResponse.json({ error: 'They are not on this show.' }, { status: 404 })
 
-  const ids = cards.map((c: any) => c.id as string)
-  if (punches?.length) {
+  const dateOf = (c: any) => {
+    const room = Array.isArray(c.rooms) ? c.rooms[0] : c.rooms
+    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+    return wd?.date as string | undefined
+  }
+
+  // SOME DAYS OR ALL OF THEM. Dan, 2026-09-15: "I just tried to remove a person
+  // from one day. Under the idea that they weren't available. I could not
+  // remove from just one day, it pulled from all." A scheduler losing somebody
+  // for a Thursday is ordinary; making them drop the whole run and rebook four
+  // days is not.
+  const wanted = dates?.length ? new Set(dates) : null
+  const targets = wanted ? cards.filter((c: any) => wanted.has(dateOf(c) ?? '')) : cards
+  if (!targets.length) {
+    return NextResponse.json({ error: 'They are not on this show on those days.' }, { status: 404 })
+  }
+  const ids = targets.map((c: any) => c.id as string)
+  const removedDates = targets.map(dateOf).filter(Boolean) as string[]
+  const keptDates = cards.filter((c: any) => !ids.includes(c.id)).map(dateOf).filter(Boolean) as string[]
+
+  // The punch guard is per DAY now, for the same reason the removal is: a punch
+  // on Monday is not a reason to refuse giving Thursday back. The days it
+  // refuses are named, so the message says what to go and clear.
+  const punchedDates = new Set(
+    ((punches ?? []) as any[]).map(p => p.timecard_id as string),
+  )
+  const blocked = targets.filter((c: any) => punchedDates.has(c.id)).map(dateOf).filter(Boolean) as string[]
+  if (blocked.length) {
     return NextResponse.json(
-      { error: 'They have punches recorded on this show, so removing them would delete worked time. Clear those on the tracker first.' },
+      { error: `They have punches recorded on ${compressDays(blocked)}, so removing that would delete worked time. Clear those on the tracker first.` },
       { status: 409 },
     )
   }
 
-  const dates = cards.map((c: any) => {
-    const room = Array.isArray(c.rooms) ? c.rooms[0] : c.rooms
-    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-    return wd?.date as string | undefined
-  }).filter(Boolean) as string[]
-  const name = (cards[0] as any).crew_member_name as string
-  const role = (cards[0] as any).role as string | null
+  const name = (targets[0] as any).crew_member_name as string
+  const role = (targets[0] as any).role as string | null
 
   // A verified delete: zero rows means the policy refused, not that it worked.
   const { data: gone, error } = await supabase.from('timecards').delete().in('id', ids).select('id')
@@ -105,17 +132,25 @@ export async function POST(request: Request) {
 
   await logStaffingEvent(supabase, {
     showId, kind: 'released', crewMemberId, crewMemberName: name,
-    role: role ?? undefined, days: dates.length ? compressDays(dates) : undefined,
+    role: role ?? undefined, days: removedDates.length ? compressDays(removedDates) : undefined,
   })
 
-  if (!notify) return NextResponse.json({ ok: true, removed: gone.length, emailed: false })
+  // STILL ON THE SHOW, just fewer days: the right message is their REVISED
+  // schedule, not "you are no longer on Northwind" — and the route that builds
+  // that already exists and lists a person's live days, which after this delete
+  // are exactly the days they have left. The caller sends it rather than this
+  // route growing a second copy of that email.
+  const remaining = keptDates.length
+  if (!notify || remaining > 0) {
+    return NextResponse.json({ ok: true, removed: gone.length, remaining, emailed: false })
+  }
 
   const [{ data: crew }, { data: org }] = await Promise.all([
     supabase.from('crew_members').select('full_name, email').eq('id', crewMemberId).maybeSingle(),
     supabase.from('organizations').select('name').eq('id', show.organization_id).maybeSingle(),
   ])
   if (!crew?.email) {
-    return NextResponse.json({ ok: true, removed: gone.length, emailed: false, warning: 'They have no email address on file, so nothing was sent.' })
+    return NextResponse.json({ ok: true, removed: gone.length, remaining, emailed: false, warning: 'They have no email address on file, so nothing was sent.' })
   }
   // The removal wording of the crew change notice: there are no days left to
   // list, so it says what happened instead of printing an empty schedule.
@@ -130,10 +165,10 @@ export async function POST(request: Request) {
     // The dates they were holding, read BEFORE the delete. This is the only
     // path that can name them: everywhere else the rows are gone by the time
     // the notice is offered.
-    heldDates: dates.length ? compressDays(dates) : null,
+    heldDates: removedDates.length ? compressDays(removedDates) : null,
   })
   if (mailError) {
-    return NextResponse.json({ ok: true, removed: gone.length, emailed: false, warning: `They were removed, but the email did not send: ${mailError}` })
+    return NextResponse.json({ ok: true, removed: gone.length, remaining, emailed: false, warning: `They were removed, but the email did not send: ${mailError}` })
   }
-  return NextResponse.json({ ok: true, removed: gone.length, emailed: true })
+  return NextResponse.json({ ok: true, removed: gone.length, remaining, emailed: true })
 }
