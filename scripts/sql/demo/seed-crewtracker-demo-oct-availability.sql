@@ -42,6 +42,13 @@ declare
     extract(year from current_date)::int
       + case when current_date > make_date(extract(year from current_date)::int, 10, 5) then 1 else 0 end,
     10, 1);
+  -- A PARTIAL OVERLAP, not the whole week (Dan, 2026-09-16). Covering all five
+  -- days made everybody on it unavailable for the entire run, so there was no
+  -- clean day to book against — and the point of the beat is the CONTRAST: one
+  -- booking that goes straight in, then the same reach hitting somebody who is
+  -- spoken for. Starting on the third day leaves the travel and load-in clear.
+  v_clash  date := v_start + 2;
+  v_clash_days constant integer := 2;   -- 0..2, so three days
   d       integer;
   v_day   record;
   v_room  uuid;
@@ -104,7 +111,7 @@ begin
                      show_financials, created_by, show_notes,
                      sent_to_scheduling_at, sent_to_scheduling_by)
   values (v_org, v_name, 'Renaissance Dallas', 'Dallas, TX', 'Lakeshore Capital',
-          'CT-2611', v_start, v_start + 4, 'America/Chicago', true, v_dan,
+          'CT-2611', v_clash, v_clash + v_clash_days, 'America/Chicago', true, v_dan,
           'Demo show. Exists so the Oct 1-5 sheet has real clashes to warn about.',
           now() - interval '8 days', v_dan)
   returning id into v_show;
@@ -116,12 +123,11 @@ begin
     cancellation_pay_percent)
   values (v_show, 10, true, 12, true, 6, 25, true, 30, 60, true, 10, 50);
 
-  for d in 0..4 loop
+  for d in 0..v_clash_days loop
     insert into work_days (show_id, date, day_number, activities)
-    values (v_show, v_start + d, d + 1,
+    values (v_show, v_clash + d, d + 1,
             case d when 0 then array['load_in']
-                   when 1 then array['rehearsal']
-                   when 4 then array['show','load_out']
+                   when v_clash_days then array['show','load_out']
                    else array['show'] end);
   end loop;
 
@@ -172,7 +178,8 @@ begin
     end loop;
   end loop;
 
-  raise notice 'Availability seeded. Clash show % runs % to %', v_show, v_start, v_start + 4;
+  raise notice 'Availability seeded. Clash show % runs % to % (week is % to %)',
+    v_show, v_clash, v_clash + v_clash_days, v_start, v_start + 4;
 end $$;
 
 -- Who can work Dan's week, by role, and who cannot.
