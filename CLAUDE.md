@@ -802,6 +802,36 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   Design it with the per-person schedule grid item above — both are "who is on this show, on
   which days", and solving them separately would produce two ways to staff somebody.
 
+- **EMAIL EVERY CREW MEMBER THEIR OWN PUNCH LINK, THE DAY BEFORE** (Dan, 2026-09-16: *"Can the
+  crew time punch link be automatically emailed to the crew the day before the show? Each person
+  gets their own link."*). Today the links exist but are handed out by hand — Edit Show → Crew
+  Clock → Create links, then paste the Slack list — so the PM has to remember, the night before,
+  for every show.
+  **The one real obstacle is that minting links IS the opt-in.** There is deliberately no feature
+  flag on the crew clock: a show uses it because somebody pressed Create links. A cron that mints
+  and sends would switch the feature on for every show in every company, including PMs who have
+  never wanted crew punching themselves. So this needs a switch it does not currently have —
+  cheapest honest version is per show (a toggle beside Crew Clock on Edit Show, off by default),
+  with an org-level default later if customers ask.
+  **Fold it into the existing digest run rather than adding a cron.** `/api/digest` already runs
+  daily at 23:30 UTC behind `CRON_SECRET`, which is 6:30pm Central — the night before, which is
+  when somebody wants it. A third cron is allowed on Hobby (one run a day each) but a second
+  moving part is not worth it.
+  **Who gets one: CONFIRMED people only.** A punch link says "you are working tomorrow, here is
+  how to clock in", and sending that to somebody who never answered is telling them they are on a
+  job they never accepted. Not-asked and merely-invited people are the change-notice's business,
+  not this.
+  Traps, each of which this codebase has been bitten by before. **"Tomorrow" is per show, in the
+  show's own timezone** — `Intl.DateTimeFormat('en-CA', { timeZone })`, never UTC and never the
+  server's clock; this class of bug has already recurred twice. **It must send once**, so it needs
+  a per-person stamp rather than a per-show one (somebody staffed later still gets theirs) —
+  `ready_email_sent_at` is the shape, claimed BEFORE sending and released on failure.
+  **Links may not exist yet**, so the job has to mint the missing ones, which is the first time
+  anything but a human press has written `clock_links`. And **somebody with no email on file is
+  skipped silently today** — they should show up somewhere the PM will see, or the person turns
+  up with no way to clock in.
+  It is core tracker rather than the scheduling module, so do NOT gate it on `canUseScheduling`.
+
 - **NAMING A PM IS STILL CLUNKIER THAN IT SHOULD BE** (Dan, 2026-09-16: *"I think there is more
   around this to make it simpler for people using it"*, having asked why a crew login and a
   read-only office account were offered as production managers). The immediate fix shipped — the
