@@ -49,7 +49,11 @@ export default function BookingResponseForm({
     return (
       <div className="text-center">
         <p className="text-lg font-bold text-ink">
-          {answer === 'confirmed' ? "You're booked in" : "You've declined"}
+          {/* THE WORD ON THE BUTTON THEY PRESSED. "Booked in" was a third
+              vocabulary for a thing the app already has one word for, and it
+              did not survive being read on a phone (Dan, 2026-09-16: "That does
+              not mean anything"). Accept and decline, nowhere else. */}
+          {answer === 'confirmed' ? "You've accepted" : "You've declined"}
         </p>
         <p className="mt-1 text-sm text-muted">
           {answer === 'confirmed'
