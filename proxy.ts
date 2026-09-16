@@ -46,7 +46,13 @@ export async function proxy(request: NextRequest) {
     // of every deployed build: NODE_ENV is inlined at build time and Vercel
     // builds everything, preview included, as production.
     (process.env.NODE_ENV === "development" && path.startsWith("/api/dev/")) ||
-    path.startsWith("/join-beta")
+    path.startsWith("/join-beta") ||
+    // The terms and the privacy policy. Both have to be readable with no
+    // account: one is read BEFORE signing up and the other is read by crew, who
+    // never sign up at all. Forgetting this is the 307-to-/login trap that has
+    // already caught the keepalive cron and the web manifest.
+    path.startsWith("/terms") ||
+    path.startsWith("/privacy")
 
   if (isPublic) {
     return NextResponse.next({ request })
