@@ -133,9 +133,14 @@ begin
   -- because the warning reads "Already scheduled on…" only for a held date;
   -- somebody who has merely been asked is not yet unavailable.
   --
-  -- Leaves free: BO Tech — Hana, Desmond, Lucia, Owen (he needs 3) · A1 — Alex,
+  -- Leaves free: BO Tech — Hana, Desmond, Lucia, Owen (he needs 3) · A1 — Chris,
   -- Bianca · V1 — Jordan, Elias · LD — Marcus, Rosa · Stagehand — Dana, Ruth,
   -- Miles.
+  --
+  -- ALEX REYES holds the A1 here rather than Chris Ferraro (Dan, 2026-09-16:
+  -- "Switch Alex for Chris on the Lakeshore investor day. It will help my
+  -- script"). Alex is the name the demo's crew login is linked to, so he is the
+  -- person the script already says out loud.
   --
   -- NO position_defs and nobody waiting, so this show has no open slot, nobody
   -- unanswered and no flag — which is what keeps it off the Needs-scheduling
@@ -144,7 +149,7 @@ begin
     select * from (values
       ('Farrah Nasser',  'BO Tech'),
       ('Gil Tran',       'BO Tech'),
-      ('Chris Ferraro',  'A1'),
+      ('Alex Reyes',     'A1'),
       ('Sam Whitfield',  'V1'),
       ('Tobias Kerr',    'LD'),
       ('Nina Brennan',   'Stagehand')
