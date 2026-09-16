@@ -38,12 +38,20 @@ function fmt(ts: string) {
 
 export default function PmField({
   showId,
+  organizationId,
   pm,
   onPick,
   disabled = false,
 }: {
   /** Present on Edit Show: choices are sent straight away. Absent on New Show. */
   showId?: string
+  /** WHOSE members to offer. Without it the list is every membership the caller
+   *  can read, and the memberships policy lets somebody see their OWN rows in
+   *  every company they belong to — so anyone in two companies appeared twice
+   *  (Dan, 2026-09-16: "Why do I (Dan Smith) show up twice in production
+   *  managers?"). Both entries carried the same profile, so it picked the right
+   *  person either way; it just could not be read. */
+  organizationId?: string
   pm: PmState
   /** New Show only: the choice, for the create path to act on. */
   onPick?: (member: Member | null) => void
@@ -59,20 +67,27 @@ export default function PmField({
 
   useEffect(() => {
     let active = true
-    supabase
+    const q = supabase
       .from('memberships')
       .select('profile_id, profiles(full_name, email)')
       .is('deactivated_at', null)
+    if (organizationId) q.eq('organization_id', organizationId)
+    q
       .then(({ data }) => {
         if (!active) return
         const rows = (data ?? []).map((m: any) => {
           const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
           return { id: m.profile_id as string, name: (p?.full_name || p?.email || 'Unnamed') as string }
         })
-        setMembers(rows.sort((a, b) => a.name.localeCompare(b.name)))
+        // Belt as well as braces: the filter above is the fix, and this makes
+        // one person one entry whatever the query returns.
+        const seen = new Set<string>()
+        setMembers(rows
+          .filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)))
+          .sort((a, b) => a.name.localeCompare(b.name)))
       })
     return () => { active = false }
-  }, [])
+  }, [organizationId])
 
   const options = [{ value: '', label: 'Not assigned yet' }, ...members.map(m => ({ value: m.id, label: m.name }))]
   const nameOf = (id: string) => members.find(m => m.id === id)?.name ?? 'them'

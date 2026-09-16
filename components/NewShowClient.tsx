@@ -437,7 +437,7 @@ export default function NewShowClient({
             </div>
             <div className="mt-3">
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Production manager</p>
-              <PmField pm={{ profileId: pm?.id ?? null, name: pm?.name ?? null, invitedAt: null, acceptedAt: null }} onPick={setPm} />
+              <PmField organizationId={organizationId} pm={{ profileId: pm?.id ?? null, name: pm?.name ?? null, invitedAt: null, acceptedAt: null }} onPick={setPm} />
             </div>
         </div>
       </section>

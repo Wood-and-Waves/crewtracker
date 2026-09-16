@@ -526,7 +526,7 @@ export default function EditShowClient({
       {pm && (
         <section className="mb-6">
           <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Production manager</p>
-          <PmField showId={show.id} pm={pm} />
+          <PmField showId={show.id} organizationId={organizationId} pm={pm} />
           <p className="mt-2 text-xs text-muted">
             They get an email, and the show appears in their CrewTracker once they accept. Nothing is shared before that.
           </p>
