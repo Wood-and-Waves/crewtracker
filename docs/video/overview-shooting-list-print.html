@@ -62,11 +62,15 @@ because that press sends a real email.
 <tr><td>9</td><td>§6</td><td>Shows list</td></tr></table>The new show has no punches until take 5, and even then only the few you tap —
 so anything that needs a real week of hours is Meridian.
 <p></div><div class="take"><h2>Setup</h2>
-<p><ul class="check"><li>- [ ] <code>npm run demo:reset</code> — rebuilds the demo. <b>Do not run <code>npm run demo:team</code></b>:
-      it rewrites the presets and would give Sasha the scheduling permission
-      back, so the §3 email would arrive twice.</li><li>- [ ] Sign in as <b>dan@theaudiosmith.com</b>, company <b>CrewTracker Demo</b>
-      (Settings → Companies, second tab).</li><li>- [ ] <b>Light mode.</b></li><li>- [ ] <b>Do Not Disturb on</b>, Mac and phone.</li><li>- [ ] Unlock <b>Meridian Partner Summit</b> (Edit Show → Unlock).</li><li>- [ ] On Meridian: Edit Show → <b>Crew Clock</b> → <b>Create links</b> → <b>Show list</b>,
-      and send yourself <b>Alex Reyes's</b> link. Have it open on the phone for take 7.</li><li>- [ ] Open the Scheduling screen on any show and note the weekday each date falls
+<p><ul class="check"><li>- [ ] <b>Do not run <code>npm run demo:reset</code></b> unless something is broken — the demo
+      is already prepped, and a reset moves every date and re-locks Meridian. If
+      you do run it, run <code>demo-recording-prep.sql</code> again afterwards.</li><li>- [ ] <b>Do not run <code>npm run demo:team</code></b> at all: it rewrites the presets and
+      would give Sasha the scheduling permission back, so the §3 email would
+      arrive twice.</li><li>- [ ] Sign in as <b>dan@theaudiosmith.com</b>, company <b>CrewTracker Demo</b>
+      (Settings → Companies, second tab).</li><li>- [ ] <b>Light mode.</b></li><li>- [ ] <b>Do Not Disturb on</b>, Mac and phone.</li><li>- [ ] <b>Already done for you</b> — <code>scripts/sql/demo/demo-recording-prep.sql</code> has
+      removed the hand-built Oct 1–5 show, unlocked Meridian, and minted Alex
+      Reyes's clock link. Re-run it only if you reset the demo, which re-locks
+      Meridian and drops that link.</li><li>- [ ] Open the Scheduling screen on any show and note the weekday each date falls
       on. Say those, not "the next day".</li><li>- [ ] QuickTime → File → New Movie Recording → the arrow beside record → iPhone.</li></ul>
 <p></div><div class="take"><h2>TAKE 1 — §1 The problem</h2>
 <p><ol><li>1. <b>Shows</b> in the top nav.</li><li>2. Sit still for three seconds.</li><li>3. Scroll down once, slowly. Stop.</li></ol>

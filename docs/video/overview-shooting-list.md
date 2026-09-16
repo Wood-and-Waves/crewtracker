@@ -53,16 +53,20 @@ so anything that needs a real week of hours is Meridian.
 
 ## Setup
 
-- [ ] `npm run demo:reset` — rebuilds the demo. **Do not run `npm run demo:team`**:
-      it rewrites the presets and would give Sasha the scheduling permission
-      back, so the §3 email would arrive twice.
+- [ ] **Do not run `npm run demo:reset`** unless something is broken — the demo
+      is already prepped, and a reset moves every date and re-locks Meridian. If
+      you do run it, run `demo-recording-prep.sql` again afterwards.
+- [ ] **Do not run `npm run demo:team`** at all: it rewrites the presets and
+      would give Sasha the scheduling permission back, so the §3 email would
+      arrive twice.
 - [ ] Sign in as **dan@theaudiosmith.com**, company **CrewTracker Demo**
       (Settings → Companies, second tab).
 - [ ] **Light mode.**
 - [ ] **Do Not Disturb on**, Mac and phone.
-- [ ] Unlock **Meridian Partner Summit** (Edit Show → Unlock).
-- [ ] On Meridian: Edit Show → **Crew Clock** → **Create links** → **Show list**,
-      and send yourself **Alex Reyes's** link. Have it open on the phone for take 7.
+- [ ] **Already done for you** — `scripts/sql/demo/demo-recording-prep.sql` has
+      removed the hand-built Oct 1–5 show, unlocked Meridian, and minted Alex
+      Reyes's clock link. Re-run it only if you reset the demo, which re-locks
+      Meridian and drops that link.
 - [ ] Open the Scheduling screen on any show and note the weekday each date falls
       on. Say those, not "the next day".
 - [ ] QuickTime → File → New Movie Recording → the arrow beside record → iPhone.
