@@ -71,6 +71,21 @@ export default function PmField({
       .from('memberships')
       .select('profile_id, profiles(full_name, email)')
       .is('deactivated_at', null)
+      // PEOPLE WHO COULD ACTUALLY RUN THE SHOW. Every login in the company was
+      // offered until 2026-09-16, including crew-only ones and read-only office
+      // staff (Dan: "Sasha is not a PM, Meredith is not a PM, Alex is not a
+      // PM. Why would they be on the list?"). Naming one of those invites them,
+      // grants them the show when they accept, and leaves them unable to touch
+      // a punch on it.
+      //
+      // The gate is can_edit_timecards, NOT the `pm` base_role — which is the
+      // tempting version and the wrong one. base_role is a preset of
+      // permissions, not a badge: an owner-operator is `admin` and is the PM on
+      // most of their own shows, so filtering on the preset would remove the
+      // commonest PM of all. And PM is a job on ONE SHOW rather than a person's
+      // title — the same person PMs on Tuesday and is the A1 on Thursday, which
+      // is why the field lives on the show.
+      .eq('can_edit_timecards', true)
     if (organizationId) q.eq('organization_id', organizationId)
     q
       .then(({ data }) => {
@@ -89,8 +104,17 @@ export default function PmField({
     return () => { active = false }
   }, [organizationId])
 
-  const options = [{ value: '', label: 'Not assigned yet' }, ...members.map(m => ({ value: m.id, label: m.name }))]
-  const nameOf = (id: string) => members.find(m => m.id === id)?.name ?? 'them'
+  // WHOEVER ALREADY HOLDS THE SHOW STAYS ON THE LIST, even if they would not be
+  // offered today — somebody named before the filter existed, or since moved to
+  // a role that cannot run a show. Dropping them would blank the field on a
+  // show that plainly has a PM, and make the fix look like data loss.
+  const listed = new Set(members.map(m => m.id))
+  const held = pm.profileId && !listed.has(pm.profileId)
+    ? [{ id: pm.profileId, name: pm.name ?? 'Current PM' }]
+    : []
+  const choices = [...held, ...members]
+  const options = [{ value: '', label: 'Not assigned yet' }, ...choices.map(m => ({ value: m.id, label: m.name }))]
+  const nameOf = (id: string) => choices.find(m => m.id === id)?.name ?? 'them'
 
   async function post(body: Record<string, unknown>) {
     setBusy(true); setError(''); setNotice('')

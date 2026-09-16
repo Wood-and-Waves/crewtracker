@@ -802,6 +802,26 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   Design it with the per-person schedule grid item above — both are "who is on this show, on
   which days", and solving them separately would produce two ways to staff somebody.
 
+- **NAMING A PM IS STILL CLUNKIER THAN IT SHOULD BE** (Dan, 2026-09-16: *"I think there is more
+  around this to make it simpler for people using it"*, having asked why a crew login and a
+  read-only office account were offered as production managers). The immediate fix shipped — the
+  picker offers people who hold `can_edit_timecards`, i.e. who could actually run the show, rather
+  than every login in the company — but the shape of the thing is worth a proper look:
+  **PM is a job on ONE SHOW, not a person's title.** The same person PMs on Tuesday and is the A1
+  on Thursday, which is why the field lives on the show and why filtering the list by the `pm`
+  base_role would be wrong — an owner-operator is `admin` and is the PM on most of their own
+  shows. Anything built here has to keep that true.
+  Things that would make it simpler, none of them decided: **remembering who usually PMs** (most
+  companies have three or four, and the list is every trusted login); **naming yourself in one
+  tap**, which is the commonest case of all and currently takes the same trip through a dropdown
+  as anybody else; **saying what the invitation will do** before it is sent rather than in the
+  confirm afterwards; and **showing on the Team screen who is PM on what**, since today a person's
+  PM work is only visible show by show.
+  Two traps for whoever picks this up. The list is LOGINS, not the crew directory — being PM
+  grants access to the show, so it can only be somebody who can sign in, and a crew member with no
+  login can never be one. And a person already holding a show stays on the list even when the
+  filter would now exclude them (`PmField`), or the field blanks on a show that plainly has a PM.
+
 - **What this show is going to COST, while it is still being crewed** (Dan, 2026-09-15: "a way to
   see when a crew is scheduled what the total cost of the show could be, also what would an hour
   of overtime for the entire crew cost? This is to give as much data as possible to the admin of
