@@ -127,7 +127,6 @@ export default async function BookingPage({
       <BookingResponseForm
         token={invite.token}
         alreadyResponded={invite.response}
-        respondedAt={invite.respondedAt}
       />
     </Shell>
   )

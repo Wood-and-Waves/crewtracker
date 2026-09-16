@@ -19,11 +19,9 @@ import Button from '@/components/ui/Button'
 export default function BookingResponseForm({
   token,
   alreadyResponded,
-  respondedAt,
 }: {
   token: string
   alreadyResponded: 'confirmed' | 'declined' | null
-  respondedAt: string | null
 }) {
   const [answer, setAnswer] = useState<'confirmed' | 'declined' | null>(alreadyResponded)
   const [note, setNote] = useState('')
@@ -55,9 +53,8 @@ export default function BookingResponseForm({
         </p>
         <p className="mt-1 text-sm text-muted">
           {answer === 'confirmed'
-            ? 'Thanks — they know you can do it.'
-            : 'Thanks for letting them know.'}
-          {respondedAt && !busy ? '' : ''}
+            ? 'Thank you for confirming.'
+            : 'Thanks for letting us know.'}
         </p>
       </div>
     )
