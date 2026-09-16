@@ -47,15 +47,13 @@ export default function BookingResponseForm({
 
   if (answer) {
     return (
+      // ONE LINE, NO HEADING (Dan, 2026-09-16: "Just remove that altogether. The
+      // only wording I need is 'Thank you for confirming'"). The heading was
+      // saying in worse words what the sentence under it already said, on a
+      // page that already carries the show name above — and the answer they
+      // just gave is not news to them.
       <div className="text-center">
         <p className="text-lg font-bold text-ink">
-          {/* THE WORD ON THE BUTTON THEY PRESSED. "Booked in" was a third
-              vocabulary for a thing the app already has one word for, and it
-              did not survive being read on a phone (Dan, 2026-09-16: "That does
-              not mean anything"). Accept and decline, nowhere else. */}
-          {answer === 'confirmed' ? "You've accepted" : "You've declined"}
-        </p>
-        <p className="mt-1 text-sm text-muted">
           {answer === 'confirmed'
             ? 'Thank you for confirming.'
             : 'Thanks for letting us know.'}
