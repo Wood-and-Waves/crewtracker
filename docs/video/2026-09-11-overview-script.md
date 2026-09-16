@@ -58,23 +58,22 @@ Two things that will bite you either way:
 > handwriting a time sheet.
 >
 > Today I want to show you a new way I've created. This is one show in
-> CrewTracker — from the day it is sold to the client to the day everyone gets
-> paid.
+> CrewTracker — from the day it is sold to the day everyone gets paid.
 
 ---
 
-## 2 · Build the show — 0:30 to 1:50  *(the longest beat — it earns it)*
+## 2 · Build the show — 0:30 to 1:50  *(a third of the video — rehearse it)*
 
 **ON SCREEN** New Show, in the order the words go: name, venue, dates → the
-payroll preset → the day activities grid (toggle Travel, Load-in, Rehearsal,
-Show, Load-out and let the labels appear) → the PM field, choosing Ray Delgado
-→ the rooms: **Main Stage** and **Breakouts** → the positions: A1, V1, LD on
-Main Stage, a Stage Manager set to **show days only**, and **2 × Operator** on
-Breakouts. Finish on **Create show and send to scheduler**.
+payroll preset → the day activities grid → the PM field → the rooms, **Main
+Stage** and **Breakouts** → the positions: A1, V1, LD on Main Stage, a Stage
+Manager on **show days only**, **2 × Operator** on Breakouts. Finish on
+**Create show and send to scheduler**.
 
 **YOU SAY**
-> A show starts with what you already know — the show details. Add the show
-> name, the venue, the dates.
+> A show starts with what you already know — The show details.
+>
+> Add the show name, the venue, the dates.
 >
 > You'll choose the payroll rules for this event. These payroll rules are
 > specific to the way your organization pays their crew and are highly
@@ -84,12 +83,12 @@ Breakouts. Finish on **Create show and send to scheduler**.
 > rehearsal, show, load-out. Everything else is built on that.
 >
 > If you know who you want as Production Manager for this event, add them here
-> and an invite email will be sent — if not, you can do this later.
+> and an invite email will be sent, if not, you can do this later.
 >
-> Next, add the rooms you want to crew. In this case, it is Main Stage and
+> Next, add the rooms you want to crew. In this case, it is Main stage and
 > Breakouts.
 >
-> Now, choose the crew roles. Main Stage will get an A1, V1, and LD. We also
+> Now, choose the crew roles. Main stage will get an A1, V1, and LD. We also
 > need a stage manager for just show days, so we will add them like this. The
 > breakout rooms need 2 operators.
 >
@@ -101,33 +100,27 @@ Breakouts. Finish on **Create show and send to scheduler**.
 
 ## 3 · Crew it — 1:50 to 2:50
 
-**ON SCREEN** The Needs-scheduling queue → open the Scheduling screen. Let the
-grid sit a beat so it reads.
+**ON SCREEN** Cut to the mail app — the email has arrived. Click **Open the
+schedule**; it lands on the Scheduling screen for that show. Let the grid sit a
+beat.
 
-Then the double-booking beat, which needs both halves:
-
-1. Click **Open** on the Camera Operator line, **first show day**. Pick Theo
-   Lindqvist — no warning, books straight in.
-2. Click **Open** on the same line, **the next day**. Theo is there again, this
-   time with *Already scheduled on Cypress Dealer Meeting* beside his name and
-   the button reading **Book anyway**. Do not press it. Close the picker.
+Then the A1 line: click **Open**. **Alex Reyes** reads *Booked on Lakeshore
+Investor Day — Sat 3 – Mon 5* with **Book anyway** beside him. Do not press it.
+Click **Chris Ferraro** instead — books straight in.
 
 Then **Send email invites**.
-**CUT TO PHONE:** the booking request. Scroll the day list. Tap **Accept**.
+**CUT TO PHONE:** the booking request. Scroll the days. Tap **Accept**.
 **CUT BACK:** the grid, now green.
 
 **YOU SAY**
-> This is the scheduler screen. Select the show you want to crew.
+> There is the email now. I click the schedule button and it brings me to the
+> scheduler screen for that show.
 >
 > Rooms are down the side, days across the top, every position you need and
 > what is needed to fill.
 >
-> Filling positions is one click. Theo's free, so he goes straight in.
->
-> Now the same position on the next day. There he is again — and he's already
-> on the Cypress job that day. It won't stop you; plenty of people work two
-> calls. It just means you find that out now, instead of at seven in the
-> morning when he doesn't turn up.
+> Filling positions is one click. Alex is booked on Lakeshore Investor Day some
+> of the days, but Chris is free, so he goes straight in.
 >
 > When the sheet is full, one press sends emails to all of them at once. And
 > this is what your crew actually gets.
@@ -135,24 +128,28 @@ Then **Send email invites**.
 > *(on the phone)* Their days, what each day is, and two buttons. No login. No
 > app to install.
 >
-> *(tap Accept, cut back)* The sheet updates. You didn't chase anybody.
+> *(tap Accept, cut back)* The sheet updates to show that he is booked.
+>
+> If he declines, the schedulers get an email with a link back to scheduling
+> that show.
 
 ---
 
 ## 4 · Show day — 2:50 to 3:50
 
-**ON SCREEN, PHONE** The tracker for one room. Tap **Start** on a crew member.
-Then the batch bar — **Start All**. Fix one time in the editor.
-**CUT:** the printed venue sign, then a phone scanning it, picking a name,
-clocking in. Then tap **Your hours**.
+**ON SCREEN, PHONE** The tracker for one room. Tap **Start** on one person. Then
+the batch bar — **Start All**. Then one time set on its own in the editor.
+**CUT:** the printed QR sign, then a phone scanning it, picking a name, clocking
+in. Then tap **Your hours**.
 
 **YOU SAY**
-> Show day. This is the tracker on a phone, because that's where it gets used
-> most — in a dark room, one-handed. Tap to start. A whole room at once when
-> the call is the same. Fix a time somebody missed.
+> Show day. This is the tracker on a phone.
 >
-> And here's the other half for the crew. Print this sign or send the crew
-> their links. Your crew enters without a login, finds their name, and can
+> Tap to start. A whole room at once when the call is the same. Or individual
+> times if they are different.
+>
+> And here's the other half for the crew. Print out the QR code or send the
+> crew their links. Your crew enters without a login, finds their name, and can
 > clock themselves in and out.
 >
 > They can see their own hours, too — every day, their breaks, their overtime.
@@ -167,13 +164,13 @@ clocking in. Then tap **Your hours**.
 CSV. Send Hours on one person. Then Send Final Report and the show locking.
 
 **YOU SAY**
-> Then the part you actually dread.
+> This is the reports section.
 >
 > Hours, overtime, double time, meal penalties, travel — worked out while the
 > show was happening. By day, or by person.
 >
-> Export it for whoever runs your payroll. Or text somebody their own
-> timesheet — hours only, never rates.
+> Export it for whoever runs your payroll. Or text a crew member their own
+> timesheet.
 >
 > And when it's done, one button sends the final report and locks the show, so
 > nothing moves after sign-off.
@@ -193,23 +190,17 @@ CSV. Send Hours on one person. Then Send Final Report and the show locking.
 
 ## Notes on delivery
 
-- **534 words — about 3 minutes 34 seconds of speech in a five-minute video.**
+- **558 words — about 3 minutes 43 seconds of speech** in a five-minute video.
   The rest is silence for the screen to do the work. Do not fill it.
-- **The timings above are not the ones this script was first written to.** §2
-  grew from a sentence about positions into the whole build, which is 73
-  seconds of speech, and §3 lost a beat. The time was moved rather than the
-  words cut: §2 now runs 0:30 to 1:50 and §3 takes the slack.
-- **§2 is the one that will run away from you.** It is a third of the video and
-  every clause is a thing happening on screen. Rehearse it against the actual
-  clicks once before recording.
-- **The double-booking beat needs both halves.** A warning on its own reads as
-  the app nagging; the clean booking first is what makes it read as the app
-  answering. It is also the one moment in five minutes that a spreadsheet
-  cannot do, so let it breathe.
-- **Say the real weekdays** rather than "the next day" — the demo dates move
-  every time it is reseeded, so check the grid before recording and use what is
-  actually on screen.
+- **§2 is the only beat that is tight**, at 73 seconds of speech in its 80. It
+  is a third of the video and every clause is a click. Rehearse it against the
+  real screen once. Every other section has 30 seconds of room.
+- **The names in §3 are the demo's, and they are true**: Alex Reyes is on
+  Lakeshore Investor Day Sat 3 – Mon 5, Chris Ferraro is free all week, and both
+  are A1s. Reseeding moves the dates, so check the picker before recording.
+- **Only `dan@theaudiosmith.com` schedules on the demo**, so the §3 email
+  arrives once rather than three times.
 - **Three phone cuts** — the booking email, the tracker, the crew clock. Half
-  this app happens on a phone in a loading dock and a laptop recording hides it.
+  this app happens on a phone in a loading dock.
 - **Nothing about settings, permissions or pricing.** Those belong in the long
   version.
