@@ -661,9 +661,15 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   phones and pay rates — say what is stored, where (Supabase, US), who it is shared with
   (Resend for email, Vercel for hosting), and how a customer gets it deleted; (4) a short
   **beta agreement** for testers: confidentiality, feedback belongs to CrewTracker, no
-  guarantee the data survives the beta; (5) **trademark**: search "CrewTracker" at USPTO
-  before spending on branding — a domain is not a trademark; the code itself is copyrighted
-  automatically, registration is optional. Build side: an `accepted_terms_at` on profiles and a
+  guarantee the data survives the beta; (5) ~~**trademark**: search "CrewTracker" at USPTO~~ **SEARCHED 2026-09-16 —
+  `docs/legal/trademark-crewtracker.md`.** Nothing is registered: the one USPTO record is a
+  DEAD 2014 application (serial 86175766, Class 009, logo mark) by CrewTracker Software, LLC
+  of Kansas, abandoned for not answering an Office action. **But they are still trading** —
+  crewtracker.com is live and © 2026, selling operations software to snow/ice and landscaping
+  contractors, with first use claimed since 2012. A mark does not need registering to exist,
+  so the open questions are whether the markets overlap and how far their common-law rights
+  reach. Both are for the lawyer, and they are the sharpest thing to bring to that consult. A
+  domain is not a trademark; the code itself is copyrighted automatically. Build side: an `accepted_terms_at` on profiles and a
   click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
   consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
 - ~~"Pencilled" is on the wording list.~~ **DONE 2026-09-09** — "Not Asked". See
