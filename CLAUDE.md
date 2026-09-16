@@ -657,9 +657,17 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   company, not on Dan; (2) **Terms of Service** shown and accepted at first sign-in (a "beta"
   clause: as-is, no warranty, may change or end, no liability for payroll decisions made from
   the numbers — the app calculates, the customer is responsible for paying people correctly);
-  (3) a **Privacy Policy**, required because the app stores other people's names, emails,
-  phones and pay rates — say what is stored, where (Supabase, US), who it is shared with
-  (Resend for email, Vercel for hosting), and how a customer gets it deleted; (4) a short
+  (3) a **Privacy Policy** — the factual base for it is written:
+  `docs/legal/data-inventory.md`, derived from the live schema rather than memory. The shape of
+  the problem, in one line: **most people in the database never signed up** — crew are typed in
+  by a production company, hold no account, agreed to nothing, and the app holds their name,
+  phone, pay rate and every clock-in. Data sits in **AWS us-east-2 (Ohio)** via Supabase, with
+  Vercel hosting and Resend sending every email; IP addresses are kept in `rate_limits` and
+  purged daily, which is the only automatic deletion in the system. The inventory ends with six
+  gaps a lawyer will ask about, of which the sharpest are that **there is no deletion path for
+  anybody**, no export, crew cannot see or correct their own record, and **`db:dump` backups sync
+  to Dropbox**, putting production pay rates and phone numbers on personal machines via a
+  processor nobody has counted; (4) a short
   **beta agreement** for testers: confidentiality, feedback belongs to CrewTracker, no
   guarantee the data survives the beta; (5) ~~**trademark**: search "CrewTracker" at USPTO~~ **SEARCHED 2026-09-16 —
   `docs/legal/trademark-crewtracker.md`.** Nothing is registered: the one USPTO record is a
