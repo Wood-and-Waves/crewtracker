@@ -654,9 +654,11 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
 - **Legal groundwork before the first outside beta tester** (Dan, 2026-09-07: "research IP for
   this site… how do I set up terms to protect myself?"). Not code, but it gates handing out
   logins. The pieces, in the order that matters: (1) an LLC or similar so a claim lands on the
-  company, not on Dan; (2) **Terms of Service** shown and accepted at first sign-in (a "beta"
-  clause: as-is, no warranty, may change or end, no liability for payroll decisions made from
-  the numbers — the app calculates, the customer is responsible for paying people correctly);
+  company, not on Dan; (2) **Terms of Service** — DRAFTED,
+  `docs/legal/DRAFT-terms-of-service.md`: the beta clause (as-is, may change or end), who owns
+  what, and the one that carries the real exposure — **the app calculates, the customer pays
+  people**, so the numbers are a tool and not payroll advice. Still to be shown and accepted at
+  first sign-in;
   (3) a **Privacy Policy** — the factual base for it is written:
   `docs/legal/data-inventory.md`, derived from the live schema rather than memory. The shape of
   the problem, in one line: **most people in the database never signed up** — crew are typed in
@@ -678,7 +680,10 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   so the open questions are whether the markets overlap and how far their common-law rights
   reach. Both are for the lawyer, and they are the sharpest thing to bring to that consult. A
   domain is not a trademark; the code itself is copyrighted automatically. Build side: an `accepted_terms_at` on profiles and a
-  click-through screen; keep the marketing page's claims modest until terms exist. A one-hour
+  click-through screen — plus **three things the privacy draft promises that the code cannot do**,
+  each marked ⚠ BUILD in that file: deleting a company's data, exporting it, and doing either
+  without a human doing it by hand. A policy that promises what the software cannot do is worse
+  than no policy, so those ship before it does; keep the marketing page's claims modest until terms exist. A one-hour
   consult with a lawyer who does SaaS terms is the right spend before the first login goes out.
 - ~~"Pencilled" is on the wording list.~~ **DONE 2026-09-09** — "Not Asked". See
   "The copy pass" below.
