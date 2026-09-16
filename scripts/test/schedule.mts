@@ -25,6 +25,7 @@ import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
+import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
 import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
@@ -1208,6 +1209,41 @@ console.log('\n--- days changed email ---')
   // digest and the fully-staffed email say "Sent BY" instead, because nobody
   // pressed anything (Dan, 2026-09-09).
   check('signs off as person-triggered', gone.text.includes('Sent from CrewTracker.app'), true)
+}
+
+// --- who else has a claim on these days ---
+{
+  const clash = (over: Partial<BookingConflict>): BookingConflict => ({
+    showId: 'x', showName: 'Harbour Point Gala', roomName: 'Hall',
+    sameRoom: false, status: 'confirmed', date: '2026-10-06', ...over,
+  })
+
+  check('a held day names the show and the day',
+    describeConflicts([clash({})]),
+    'Booked on Harbour Point Gala — Tue 6')
+  check('consecutive days collapse to a range',
+    describeConflicts([clash({}), clash({ date: '2026-10-07' })]),
+    'Booked on Harbour Point Gala — Tue 6 – Wed 7')
+  // Dan, 2026-09-16: "What happens if there are multiple. Say he is booked on
+  // one gig at the beginning and another at the end?"
+  check('one job at each end of the week is two facts, not one list',
+    describeConflicts([
+      clash({}), clash({ date: '2026-10-07' }),
+      clash({ showId: 'y', showName: 'Westbrook Sales Meeting', date: '2026-10-10' }),
+    ]),
+    'Booked on Harbour Point Gala — Tue 6 – Wed 7 · Booked on Westbrook Sales Meeting — Sat 10')
+  check('a gap inside ONE job breaks the range rather than hiding it',
+    describeConflicts([clash({}), clash({ date: '2026-10-09' })]),
+    'Booked on Harbour Point Gala — Tue 6, Fri 9')
+  // Being asked is not holding the day, and booking over it is a different
+  // decision from booking over a yes.
+  check('an unanswered ask reads as pending',
+    describeConflicts([clash({ status: 'invited' })]),
+    'Pending on Harbour Point Gala — Tue 6')
+  check('one held day makes the whole job held',
+    describeConflicts([clash({ status: 'invited' }), clash({ date: '2026-10-07' })]),
+    'Booked on Harbour Point Gala — Tue 6 – Wed 7')
+  check('no clash says nothing at all', describeConflicts([]), '')
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

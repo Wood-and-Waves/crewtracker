@@ -6,6 +6,7 @@ import { liveBookings } from '@/lib/timecardFields'
 import { logStaffingEvent } from '@/lib/staffingEvents'
 import { compressDays } from '@/lib/readyEmail'
 import type { PaintedBooking } from '@/lib/scheduleBoard'
+import { describeConflicts, type BookingConflict } from '@/lib/bookingConflicts'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
 import { cn } from '@/lib/cn'
@@ -50,8 +51,9 @@ type Candidate = {
   id: string
   name: string
   roles: string[]
-  /** Where they are already committed on this date, within this organization. */
-  conflicts: { showId: string; showName: string; roomName: string; sameRoom: boolean; status: string | null }[]
+  /** Where they are already committed on any day THIS BOOKING COVERS, within
+   *  this organization. */
+  conflicts: BookingConflict[]
   /** They said no to THIS show. Kept on purpose (migration 0012) so the
    *  scheduler is not the last to know; booking them again is allowed. */
   declinedThisShow: boolean
@@ -69,18 +71,6 @@ function fmtDay(date: string) {
  * confirmed booking that day; pending = pencilled or invited (Dan, 2026-09-07:
  * say which, so the scheduler knows whether the other show is real yet).
  */
-function describeConflicts(conflicts: Candidate['conflicts']): string {
-  const byShow = new Map<string, { name: string; confirmed: boolean }>()
-  for (const c of conflicts) {
-    const e = byShow.get(c.showId) ?? { name: c.showName, confirmed: false }
-    if (c.status === 'confirmed') e.confirmed = true
-    byShow.set(c.showId, e)
-  }
-  return [...byShow.values()]
-    .map((e, i) => `${i === 0 ? 'Already ' : ''}${e.confirmed ? 'scheduled' : 'pending'} on ${e.name}`)
-    .join(' · ')
-}
-
 export default function FillPositionPicker({
   positionId,
   positionRole,
@@ -114,10 +104,15 @@ export default function FillPositionPicker({
   // The show this position belongs to — the picker only ever knows roomId,
   // and logging a staffing event needs the show. Read once per room.
   const [showId, setShowId] = useState<string | null>(null)
+  // The conflict read is scoped to the days this booking COVERS, so it cannot
+  // run until the day list is settled — otherwise it checks the clicked day,
+  // then has to be thrown away and run again.
+  const [daysReady, setDaysReady] = useState(false)
 
   useEffect(() => {
     let active = true
     setSiblings([])
+    setDaysReady(false)
     setPlan(null)
     ;(async () => {
       const [{ data: me }, { data: room }] = await Promise.all([
@@ -126,7 +121,9 @@ export default function FillPositionPicker({
       ])
       if (active) setShowId((room as any)?.show_id ?? null)
       const defId = (me as any)?.position_def_id
-      if (!defId || !active) return
+      // No definition means a one-day slot: no siblings, and the day list is
+      // settled at exactly the day that was clicked.
+      if (!defId || !active) { if (active) setDaysReady(true); return }
       const { data: slots } = await supabase
         .from('crew_call_positions')
         .select('id, room_id, rooms!inner ( name, work_days!inner ( date ) )')
@@ -152,12 +149,19 @@ export default function FillPositionPicker({
         })
         .sort((a, b) => a.date.localeCompare(b.date))
         .filter(s => (seenRoom.has(s.roomId) ? false : (seenRoom.add(s.roomId), true))))
+      setDaysReady(true)
     })()
     return () => { active = false }
   }, [positionId, roomId])
 
+  // Every day this booking would cover — the clicked one plus the definition's
+  // other open days. Sorted and joined so the effect below re-runs when the set
+  // genuinely changes rather than on every new array identity.
+  const bookingDates = [date, ...siblings.map(s => s.date)].sort().join(',')
+
   useEffect(() => {
     let active = true
+    if (!daysReady) return
     ;(async () => {
       setLoading(true)
       // This room's show, for "this show" wording and for the declines below.
@@ -189,7 +193,12 @@ export default function FillPositionPicker({
             crew_member_id, booking_status, room_id,
             rooms!inner ( name, work_days!inner ( date, shows!inner ( id, name ) ) )
           `))
-          .eq('rooms.work_days.date', date),
+          // EVERY DAY THIS BOOKING COVERS, not just the one clicked. The row
+          // books the whole run in one press (2026-09-15), so checking only the
+          // clicked day let somebody free on the Wednesday be booked straight
+          // over a job they were already on for the rest of the week, with no
+          // warning at all.
+          .in('rooms.work_days.date', bookingDates.split(',')),
         // Who already said NO to this show (Dan, 2026-09-07: "so the scheduler
         // doesn't try to schedule the same person over again").
         thisShowId
@@ -219,7 +228,17 @@ export default function FillPositionPicker({
         if (!room || !show) continue
         conflictsByCrew.set(t.crew_member_id, [
           ...(conflictsByCrew.get(t.crew_member_id) ?? []),
-          { showId: show.id, showName: show.id === thisShowId ? 'this show' : show.name, roomName: room.name, sameRoom: t.room_id === roomId, status: t.booking_status ?? null },
+          {
+            showId: show.id,
+            showName: show.id === thisShowId ? 'this show' : show.name,
+            roomName: room.name,
+            // sameRoom stays about the CLICKED day: it is what refuses the row
+            // outright ("In room"), and a clash on one of the other days is a
+            // warning like any other.
+            sameRoom: t.room_id === roomId && wd.date === date,
+            status: t.booking_status ?? null,
+            date: wd.date as string,
+          },
         ])
       }
       const declinedIds = new Set(((declined ?? []) as any[]).map(t => t.crew_member_id).filter(Boolean))
@@ -234,7 +253,7 @@ export default function FillPositionPicker({
       setLoading(false)
     })()
     return () => { active = false }
-  }, [date, roomId])
+  }, [bookingDates, roomId, daysReady])
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -516,7 +535,13 @@ export default function FillPositionPicker({
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-ink">{c.name}</span>
                     {c.conflicts.length > 0 && (
-                      <span className="block truncate text-[11px] text-ot">
+                      // Titled as well as shown: two jobs in one week is a long
+                      // line in a 620px panel, and the part that truncates is
+                      // the dates — which is the half worth reading.
+                      <span
+                        className="block truncate text-[11px] text-ot"
+                        title={sameRoom ? undefined : describeConflicts(c.conflicts)}
+                      >
                         {sameRoom ? 'Already in this room today' : describeConflicts(c.conflicts)}
                       </span>
                     )}
