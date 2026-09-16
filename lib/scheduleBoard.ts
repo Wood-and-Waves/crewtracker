@@ -120,7 +120,19 @@ const roleOf = (e: BoardEntry) => (e.kind === 'open' ? e.role : e.booking.role) 
 const personKey = (b: BoardBooking) => b.crewMemberId ?? `name:${b.crewMemberName}`
 
 export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput): Board {
-  const roomNames = [...new Set(rooms.map(r => r.name))].sort((a, b) => a.localeCompare(b))
+  // THE ORDER THE ROOMS WERE ENTERED IN, not alphabetical (Dan, 2026-09-16:
+  // "I would like them to go in the order entered in the show creation page,
+  // just like it is in the tracker"). Both pages read rooms `.order('created_at')`
+  // — insertion order, matching iOS — and this was the only thing putting them
+  // back into name order, so the same show read one way on the tracker and
+  // another on the grid.
+  //
+  // A room NAME exists once per day, each row with its own created_at, so a
+  // name takes the position of its FIRST appearance: rooms entered together on
+  // New Show keep that order, and one added later lands at the end rather than
+  // jumping into the middle of the sheet because of its initial. `Set` keeps
+  // insertion order, so dropping the sort is the whole change.
+  const roomNames = [...new Set(rooms.map(r => r.name))]
   const roomIdFor = new Map(rooms.map(r => [`${r.name}|${r.workDayId}`, r.id]))
   const flagBySlot = new Map(flags.map(f => [f.slot_id, f]))
 

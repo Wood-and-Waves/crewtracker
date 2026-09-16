@@ -610,7 +610,36 @@ console.log('\n--- scheduling board ---')
   const room = (n: string) => board.rooms.find(r => r.name === n)!
   const at = (n: string, roleIdx: number, date: string) => room(n).lines[roleIdx].byDate[date]
 
-  check('rooms are the room NAMES, sorted', board.rooms.map(r => r.name), ['Ballroom', 'Breakout'])
+  check('rooms are the room NAMES', board.rooms.map(r => r.name), ['Ballroom', 'Breakout'])
+  // IN THE ORDER THEY WERE ENTERED, not alphabetical — the callers read rooms
+  // by created_at and the grid must not undo that, or a show reads one way on
+  // the tracker and another here. This fixture is deliberately reverse
+  // alphabetical, because the one above is not and would pass either way.
+  check('and in the order they were entered, not sorted',
+    buildBoard({
+      days: [{ workDayId: 'w1', date: '2026-09-08', activities: ['show'] }],
+      rooms: [
+        { id: 'z1', name: 'Main Stage', workDayId: 'w1' },
+        { id: 'z2', name: 'Breakouts', workDayId: 'w1' },
+        { id: 'z3', name: 'Annex', workDayId: 'w1' },
+      ],
+      slots: [], bookings: [], flags: [],
+    }).rooms.map(r => r.name),
+    ['Main Stage', 'Breakouts', 'Annex'])
+  check('a name takes the place of its FIRST appearance, so a later day cannot reorder the sheet',
+    buildBoard({
+      days: [
+        { workDayId: 'w1', date: '2026-09-08', activities: ['load_in'] },
+        { workDayId: 'w2', date: '2026-09-09', activities: ['show'] },
+      ],
+      rooms: [
+        { id: 'y1', name: 'Main Stage', workDayId: 'w1' },
+        { id: 'y2', name: 'Breakouts', workDayId: 'w2' },
+        { id: 'y3', name: 'Main Stage', workDayId: 'w2' },
+      ],
+      slots: [], bookings: [], flags: [],
+    }).rooms.map(r => r.name),
+    ['Main Stage', 'Breakouts'])
   check('a room that does not run that day has no room row', room('Breakout').roomIdByDate['2026-09-08'], null)
   check('and nothing on its lines that day', room('Breakout').lines[0].byDate['2026-09-08'], null)
   check('lines are one per position, in the room\'s role order',
