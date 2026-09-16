@@ -1789,7 +1789,7 @@ password on this list can reach the real company:
 | Login | Is | Sees |
 |---|---|---|
 | `dan@theaudiosmith.com` | Admin | Everything: builds the show, writes positions, names the PM. |
-| `dan+sasha@…` | Scheduler (staff + `can_manage_scheduling`) | The queue and the Scheduling screen. Books and asks crew. No pay rates, cannot build a show. |
+| `dan+sasha@…` | Scheduler (staff + `can_manage_scheduling`) | The queue and the Scheduling screen. Books and asks crew. No pay rates, cannot build a show. **Her permission is OFF right now** — see the note below. |
 | `dan+ray@…` | PM (the `pm` preset) | The tracker, punches, reports, rates — on his shows only. He is the demo show's ACCEPTED PM. |
 | `dan+meredith@…` | The office (staff, reports and money, no editing) | Reads and exports reports, sees rates, cannot touch a punch or staff anybody. |
 | `dan+alex@…` | Crew | Their own six days and their own punches. Nothing else exists for them. |
@@ -1800,6 +1800,17 @@ Two things make that table work and would break quietly if changed. The crew log
 story; the seed prints whether it landed. And the seed script makes **Ray** the PM when his login
 exists (falling back to Dan when it does not), so the two scripts compose in either order and
 re-running the seed does not hand the show back to the admin.
+
+**ONE SCHEDULER AT A TIME, while the video is being made** (Dan, 2026-09-16: *"Currently, I get
+all the scheduler emails… Then I will only get one popup"*). Sending a show to scheduling emails
+EVERY member holding `can_manage_scheduling`, and in this org every address is an alias of the
+same inbox — so three holders meant three copies of one message on his desktop. Only
+`dan@theaudiosmith.com` holds it now; `scripts/sql/demo/demo-one-scheduler.sql` is what did it.
+
+**This costs the demo something, so put it back**: Sasha is the persona the Scheduling screen was
+built for, and without the permission she cannot open it — the table above is describing a view
+she no longer has. `scripts/sql/demo/demo-restore-sasha-scheduling.sql` returns it in one run.
+Note `npm run demo:team` would also restore it, since it writes the presets fresh.
 
 The PM invitation itself is already accepted, so Ray's view works out of the box; to demonstrate
 the invitation arriving, use the PM chip's "Send the invitation again" — it lands in Dan's inbox
