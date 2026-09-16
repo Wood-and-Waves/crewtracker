@@ -10,28 +10,23 @@ show" below.
 
 ---
 
-## Two things to settle BEFORE you record
+## Before you record
 
-**1. Two roles in the script are not in the demo directory.**
-"Stage manager" and "operators" have nobody holding them, so the fill picker in
-§3 would open on *"Nobody in the directory is listed as Stage Manager"* — which
-looks like the app is broken when it is doing exactly what it should.
+**1. ~~Two roles are missing from the directory.~~ Fixed 2026-09-16.** "Stage
+manager" and "operators" now exist as roles and people hold them, so the script
+stands as written and the fill picker finds somebody:
 
-What the directory actually holds:
+| Role you ask for | Free | Busy on Lakeshore |
+|---|---|---|
+| Stage Manager | Dana Okafor, Miles Turner, Ruth Callahan | Nina Brennan |
+| Operator | Hana Kwon, Desmond Pike, Lucia Ferrer, Owen Baptiste | Farrah Nasser, Gil Tran |
+| A1 | Bianca Moss, Chris Ferraro | Alex Reyes |
+| V1 | Jordan Vega, Elias Vance | Sam Whitfield |
+| LD | Marcus Webb, Rosa Delacruz | Tobias Kerr |
 
-| Role | People |
-|---|---|
-| BO Tech | 6 — Desmond, Farrah, Gil, Hana, Lucia, Owen |
-| Stagehand | 4 — Dana, Miles, Nina, Ruth |
-| A1 | 3 — Alex, Bianca, Chris |
-| LD | 3 — Marcus, Rosa, Tobias |
-| V1 | 3 — Elias, Jordan, Sam |
-| Camera Operator | 2 — Sofia, Theo |
-| A2 | 1 — Priya |
-
-Easiest fix is two words in the narration: **"stagehand"** instead of stage
-manager, **"BO techs"** instead of operators. Say the word and I will add the
-other two roles to the directory instead, and your script stays as written.
+They are SECOND roles on people who already had one — the stagehands are the
+stage managers, the BO techs are the operators — so nobody new appeared in the
+directory and the same people stay spoken for on Lakeshore.
 
 **2. Unlock Meridian Partner Summit.** It is closed out, so §5's *Send Final
 Report* reads "Final report sent" and cannot be pressed. Unlock it first and the

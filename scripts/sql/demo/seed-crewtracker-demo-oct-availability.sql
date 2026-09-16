@@ -98,6 +98,58 @@ begin
       select 1 from rate_cards rc where rc.crew_member_id = v_crew and rc.role = p.role);
   end loop;
 
+  --------------------------------------------------- the words the script uses
+  -- THE SCRIPT SAYS "stage manager" AND "operators" (Dan, 2026-09-16: "Add
+  -- those two roles to the directory so my script stands"). Neither was a role
+  -- anybody held, so a position asking for one would have opened the fill
+  -- picker on "Nobody in the directory is listed as Stage Manager" — the app
+  -- being right while the video looked broken.
+  --
+  -- Both halves are needed. av_roles is what the POSITION editor offers when
+  -- you say what a room needs; a rate card is what the FILL PICKER reads to
+  -- know somebody does that job. One without the other still fails, just later.
+  --
+  -- These are SECOND roles on people who already have one, which is ordinary:
+  -- rate_cards is keyed on (crew member, role), and an A1 on one show is an A2
+  -- on the next. The same people stay busy on Lakeshore under either name, so
+  -- every role still reads some free and one or two spoken for.
+  for p in
+    select * from (values ('Stage Manager', 14), ('Operator', 15))
+      as t(role, ord)
+  loop
+    insert into av_roles (organization_id, name, sort_order)
+    select v_org, p.role, p.ord
+    where not exists (
+      select 1 from av_roles a where a.organization_id = v_org and lower(a.name) = lower(p.role));
+  end loop;
+
+  for p in
+    select * from (values
+      -- The stagehands are stage managers too; the job is a step up, so is the rate.
+      ('Dana Okafor',    'Stage Manager', 525),
+      ('Miles Turner',   'Stage Manager', 525),
+      ('Nina Brennan',   'Stage Manager', 525),   -- the one busy on Lakeshore
+      ('Ruth Callahan',  'Stage Manager', 525),
+      -- "Operator" is what the breakout job is called out loud; BO Tech is what
+      -- it is called on the sheet. Same six people, same rate.
+      ('Hana Kwon',      'Operator',      575),
+      ('Desmond Pike',   'Operator',      575),
+      ('Lucia Ferrer',   'Operator',      575),
+      ('Owen Baptiste',  'Operator',      575),
+      ('Farrah Nasser',  'Operator',      575),   -- busy on Lakeshore
+      ('Gil Tran',       'Operator',      575)    -- busy on Lakeshore
+    ) as t(person, role, rate)
+  loop
+    select c.id into v_crew from crew_members c
+      where c.organization_id = v_org and c.full_name = p.person;
+    if v_crew is not null then
+      insert into rate_cards (crew_member_id, role, day_rate)
+      select v_crew, p.role, p.rate
+      where not exists (
+        select 1 from rate_cards rc where rc.crew_member_id = v_crew and rc.role = p.role);
+    end if;
+  end loop;
+
   ------------------------------------------------------------- the clash show
   delete from shows where organization_id = v_org and name = v_name;
 
