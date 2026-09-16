@@ -1477,7 +1477,13 @@ shows Open on the line's day, and a day the position is not needed is simply bla
 shifts because a stagehand joins on Tuesday. Lines are packed, so two people who never work the
 same day share a line rather than each holding a mostly empty row; the busiest person takes the
 top line. Roles keep the room's own order (where each first appears in its slot list); a role
-that only exists because somebody was hand-staffed sorts last. Inside a cell the chip ALWAYS sits
+that only exists because somebody was hand-staffed sorts last. **Rooms keep the order they were
+ENTERED IN** — `buildBoard` sorted the names alphabetically until 2026-09-16, which put Breakout A
+above the Keynote Hall and made one show read one way here and another on the tracker (Dan: *"I
+would like them to go in the order entered in the show creation page, just like it is in the
+tracker"*). Both pages already read rooms `.order('created_at')`; a name takes the position of its
+FIRST appearance, so a room added later lands at the end rather than jumping into the middle of
+the sheet because of its initial. Inside a cell the chip ALWAYS sits
 under the name rather than beside it: wrapping only when a name was long put the control in a
 different place in every cell, and a column you scan cannot have its buttons wandering.
 
