@@ -1,0 +1,114 @@
+<title>Overview video — shooting list</title>
+<style>
+  @page { size: letter; margin: 0.7in 0.75in 0.6in; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 10.5pt/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #18181b; }
+  h1 { font-size: 24pt; letter-spacing: -0.4pt; margin: 0 0 2pt; text-transform: uppercase; }
+  .sub { color: #6b6b6b; font-size: 10.5pt; margin: 0 0 16pt; }
+  h2 { font-size: 12.5pt; text-transform: uppercase; letter-spacing: 0.6pt;
+       margin: 0 0 8pt; padding-bottom: 4pt; border-bottom: 2.5pt solid #18181b;
+       page-break-after: avoid; }
+  .take { page-break-inside: avoid; margin: 0 0 18pt; }
+  ol { margin: 0; padding-left: 18pt; }
+  li { margin: 0 0 5pt; }
+  ul { margin: 0; padding-left: 16pt; }
+  p { margin: 0 0 8pt; }
+  em { color: #6b6b6b; }
+  code { font: 9.5pt ui-monospace, Menlo, monospace; background: #f1ece0; padding: 1pt 3pt; }
+  table { border-collapse: collapse; width: 100%; margin: 0 0 10pt; font-size: 9.5pt; }
+  th, td { text-align: left; padding: 4pt 8pt 4pt 0; border-bottom: 1pt solid #ddd; vertical-align: top; }
+  th { text-transform: uppercase; letter-spacing: 0.5pt; font-size: 8.5pt; color: #6b6b6b; }
+  .warn { background: #f6f2e2; border-left: 3pt solid #b8892b; padding: 8pt 10pt; margin: 0 0 12pt; }
+  .check li { list-style: none; position: relative; padding-left: 20pt; }
+  .check { padding-left: 0; }
+  .check li::before { content: ""; position: absolute; left: 0; top: 2pt;
+                      width: 10pt; height: 10pt; border: 1.2pt solid #18181b; }
+  hr { border: 0; border-top: 1pt solid #d8d8d8; margin: 14pt 0; }
+  .foot { margin-top: 12pt; padding-top: 6pt; border-top: 1pt solid #d8d8d8;
+          font-size: 8.5pt; color: #8a8a8a; }
+</style>
+h1>Overview video — shooting list</h1>
+<p>Click by click, in <b>recording order</b>, for a silent screen capture that the
+narration goes over afterwards. The script is the companion file; this is only
+what your hands do.
+<p>Three of the nine takes are on a phone. Two of them are on a <b>different show</b>
+from the rest, and that is the thing most likely to trip you up — see "Which
+show" below.
+<p></div><div class="take"><h2>Two things to settle BEFORE you record</h2>
+<p><b>1. Two roles in the script are not in the demo directory.</b>
+"Stage manager" and "operators" have nobody holding them, so the fill picker in
+§3 would open on <em>"Nobody in the directory is listed as Stage Manager"</em> — which
+looks like the app is broken when it is doing exactly what it should.
+<p>What the directory actually holds:
+<p><table>
+<tr><th>Role</th><th>People</th></tr>
+<tr><td>BO Tech</td><td>6 — Desmond, Farrah, Gil, Hana, Lucia, Owen</td></tr>
+<tr><td>Stagehand</td><td>4 — Dana, Miles, Nina, Ruth</td></tr>
+<tr><td>A1</td><td>3 — Alex, Bianca, Chris</td></tr>
+<tr><td>LD</td><td>3 — Marcus, Rosa, Tobias</td></tr>
+<tr><td>V1</td><td>3 — Elias, Jordan, Sam</td></tr>
+<tr><td>Camera Operator</td><td>2 — Sofia, Theo</td></tr>
+<tr><td>A2</td><td>1 — Priya</td></tr></table>Easiest fix is two words in the narration: <b>"stagehand"</b> instead of stage
+manager, <b>"BO techs"</b> instead of operators. Say the word and I will add the
+other two roles to the directory instead, and your script stays as written.
+<p><b>2. Unlock Meridian Partner Summit.</b> It is closed out, so §5's *Send Final
+Report* reads "Final report sent" and cannot be pressed. Unlock it first and the
+press is available — and pressing it at the end of §5 re-locks it, which is the
+shot. Check <b>Settings → Final Report recipients</b> is your own address first,
+because that press sends a real email.
+<p></div><div class="take"><h2>Which show each take uses</h2>
+<p><table>
+<tr><th>Take</th><th>Section</th><th>Show</th></tr>
+<tr><td>1–4</td><td>§1 · §2 · §3</td><td><b>the new show you build on camera</b>, Oct 1 – Oct 5</td></tr>
+<tr><td>5–6</td><td>§4 tracker, QR</td><td>the same new show</td></tr>
+<tr><td>7</td><td>§4 "Your hours"</td><td><b>Meridian Partner Summit</b> — the only show with a full week of hours</td></tr>
+<tr><td>8</td><td>§5 Reports</td><td><b>Meridian Partner Summit</b></td></tr>
+<tr><td>9</td><td>§6</td><td>Shows list</td></tr></table>The new show has no punches until take 5, and even then only the few you tap —
+so anything that needs a real week of hours is Meridian.
+<p></div><div class="take"><h2>Setup</h2>
+<p><ul class="check"><li>- [ ] <code>npm run demo:reset</code> — rebuilds the demo. <b>Do not run <code>npm run demo:team</code></b>:
+      it rewrites the presets and would give Sasha the scheduling permission
+      back, so the §3 email would arrive twice.</li><li>- [ ] Sign in as <b>dan@theaudiosmith.com</b>, company <b>CrewTracker Demo</b>
+      (Settings → Companies, second tab).</li><li>- [ ] <b>Light mode.</b></li><li>- [ ] <b>Do Not Disturb on</b>, Mac and phone.</li><li>- [ ] Unlock <b>Meridian Partner Summit</b> (Edit Show → Unlock).</li><li>- [ ] On Meridian: Edit Show → <b>Crew Clock</b> → <b>Create links</b> → <b>Show list</b>,
+      and send yourself <b>Alex Reyes's</b> link. Have it open on the phone for take 7.</li><li>- [ ] Open the Scheduling screen on any show and note the weekday each date falls
+      on. Say those, not "the next day".</li><li>- [ ] QuickTime → File → New Movie Recording → the arrow beside record → iPhone.</li></ul>
+<p></div><div class="take"><h2>TAKE 1 — §1 The problem</h2>
+<p><ol><li>1. <b>Shows</b> in the top nav.</li><li>2. Sit still for three seconds.</li><li>3. Scroll down once, slowly. Stop.</li></ol>
+<p></div><div class="take"><h2>TAKE 2 — §2 Build the show</h2>
+<p>On the Shows list:
+<p><ol><li>1. <b>+ New Show</b>.</li><li>2. <b>Show name</b>: type the show name.</li><li>3. <b>Venue</b>: type it. <b>City & State</b>: type it.</li><li>4. <b>Start date</b> Oct 1. <b>End date</b> Oct 5. <em>(Pause — the day grid appears.)</em></li><li>5. Section <b>2 · Payroll Rules</b> — open the preset picker, pick one. <em>(Pause.)</em></li><li>6. Back to the day grid. On each row toggle what the day is:
+   - Oct 1 → <b>Travel</b>
+   - Oct 2 → <b>Load-in</b>
+   - Oct 3 → <b>Rehearsal</b>
+   - Oct 4 → <b>Show</b>
+   - Oct 5 → <b>Show</b> + <b>Load-out</b>
+   <em>(Let the "Reads as" label land each time. This is the beat that sells it.)</em></li><li>7. <b>Production manager</b> → pick <b>Ray Delgado</b>. <em>(Pause on the confirm.)</em></li><li>8. Section <b>3 · Rooms & Positions</b> → add room <b>Main Stage</b>.</li><li>9. Add room <b>Breakouts</b>.</li><li>10. On Main Stage add positions: <b>1 × A1</b>, <b>1 × V1</b>, <b>1 × LD</b>, each <b>All days</b>.</li><li>11. Add <b>1 × Stagehand</b>, and change its days to <b>Show days</b> *(the thing the
+    script calls the stage manager)<em>.</li><li>12. On Breakouts add <b>2 × BO Tech</b>, <b>All days</b>.</li><li>13. <b>CREATE SHOW AND SEND TO SCHEDULER</b>. </em>(Hold on the confirm, then press.)*</li></ol>
+<p></div><div class="take"><h2>TAKE 3 — §3 The email, and crewing it</h2>
+<p><ol><li>1. <b>CUT.</b> Switch to Mail. The message is <em>"<show> is ready for staffing"</em>.</li><li>2. Click <b>Open the schedule</b>. It lands on the Scheduling screen.</li><li>3. Sit still three seconds so the grid reads.</li><li>4. On the <b>A1</b> line, click <b>Open</b> on the first day.</li><li>5. The picker opens. <b>Alex Reyes</b> shows
+   <em>Booked on Lakeshore Investor Day — Sat 3 – Mon 5</em> and <b>Book anyway</b>.
+   <b>Hover it. Do not click it.</b></li><li>6. Click <b>Chris Ferraro</b> — he books across all five days at once.</li><li>7. Fill the rest quickly: V1, LD, Stagehand, both BO Techs. Anyone free.</li><li>8. <b>SEND EMAIL INVITES</b>. <em>(Hold on the confirm, then press.)</em></li></ol>
+<p></div><div class="take"><h2>TAKE 4 — §3 on the phone</h2>
+<p><ol><li>1. <b>PHONE.</b> Open the booking request email.</li><li>2. Scroll the day list slowly — top to bottom.</li><li>3. Tap <b>Accept</b>. Let the confirmation page land.</li><li>4. <b>CUT BACK</b> to the Mac. Refresh the Scheduling screen: that person is green.</li></ol>
+<p></div><div class="take"><h2>TAKE 5 — §4 The tracker</h2>
+<p><ol><li>1. <b>PHONE</b>, on the new show → <b>Back to the tracker</b>.</li><li>2. Pick a day with crew on it.</li><li>3. Tap <b>START</b> on one person. Let the time appear.</li><li>4. Tap <b>START ALL</b> on the room bar. Let them all fill.</li><li>5. Tap one person's start time → the editor → change it → <b>Save</b>.</li></ol>
+<p></div><div class="take"><h2>TAKE 6 — §4 The QR sign</h2>
+<p><ol><li>1. <b>MAC</b>: Edit Show → <b>Crew Clock</b> → <b>Create links</b> → <b>Print QR sign</b>.
+   Print it, or hold the screen up.</li><li>2. <b>PHONE</b>: camera at the QR code.</li><li>3. Tap through: pick the room, find a name, tap it.</li><li>4. Tap <b>Start</b>. Let it land.</li></ol>
+<p></div><div class="take"><h2>TAKE 7 — §4 Their own hours</h2>
+<p><ol><li>1. <b>PHONE</b>: open <b>Alex Reyes's</b> clock link for <b>Meridian Partner Summit</b>
+   (from setup).</li><li>2. Tap <b>See your hours</b>.</li><li>3. Scroll the week slowly — the meal breaks, the overtime, the totals.</li></ol>
+<p></div><div class="take"><h2>TAKE 8 — §5 Payroll</h2>
+<p>On <b>Meridian Partner Summit</b>:
+<p><ol><li>1. <b>VIEW REPORT</b>.</li><li>2. <b>By Day</b> — scroll one day.</li><li>3. <b>By Crew</b> — scroll one person.</li><li>4. Sit on the <b>Master Summary</b> strip for three seconds.</li><li>5. <b>Export CSV</b>. Let the download land.</li><li>6. <b>Send Hours</b> on one person → let the share sheet open → close it.</li><li>7. <b>Send Final Report</b>. <em>(Hold the confirm, press, let the show lock.)</em></li></ol>
+<p></div><div class="take"><h2>TAKE 9 — §6 Close</h2>
+<p><ol><li>1. <b>Shows</b> in the top nav.</li><li>2. Sit still for five seconds.</li></ol>
+<p></div><div class="take"><h2>If something surfaces</h2>
+<p>Two things are true of the demo and worth knowing before you blame the app:
+<p><ul><li><b>Dates move on every reseed.</b> The show you build is Oct 1–5 because you type
+  it, but Lakeshore's overlap is computed from the same anchor — so check the
+  picker before recording rather than trusting these notes.</li><li><b>Every email in this company comes to you.</b> That is the point, but it means
+  the inbox fills up during a session. Clear it before take 3 so the right
+  message is the top one.</li></ul>
+</div>
+<p class="foot">Source: docs/video/overview-shooting-list.md</p>
