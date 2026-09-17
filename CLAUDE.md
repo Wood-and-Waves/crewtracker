@@ -313,6 +313,7 @@ components/
   SendHoursButton.tsx            — per-crew timesheet via Text / Share / Copy, hours only, never dollars
   CrewClockPanel.tsx / CrewClockSign.tsx — mint/copy/revoke crew clock links on Edit Show, and the printable venue QR
   PositionDefsEditor.tsx / PositionDefsSection.tsx — positions by kind of day: the controlled editor (New Show) and the self-saving Edit Show section with the Move / Keep / Release flags
+  RoleSelect.tsx                 — the role dropdown that can ADD a role (saved to the org's av_roles, never to one show). NOT RolePicker.tsx, which is the positions grid's role-and-quantity line adder
   PmField.tsx                    — the production manager picker: an INVITATION on both New Show and Edit Show, with Invited/Accepted/Resend/"They accepted"
   PmStatusChip.tsx               — the PM's answer on the Scheduling screen, as a chip that IS the control (record it, resend, change the PM)
   SendToSchedulingButton.tsx     — sends a show to the scheduling queue or takes it back, in-place confirm (replaced HandoffToSchedulerButton)
@@ -1552,7 +1553,10 @@ above the Keynote Hall and made one show read one way here and another on the tr
 would like them to go in the order entered in the show creation page, just like it is in the
 tracker"*). Both pages already read rooms `.order('created_at')`; a name takes the position of its
 FIRST appearance, so a room added later lands at the end rather than jumping into the middle of
-the sheet because of its initial. Inside a cell the chip ALWAYS sits
+the sheet because of its initial. **EDIT SHOW HAD THE SAME BUG AND WAS FIXED A DAY LATER**
+(2026-09-17, Dan adding positions to a show he had just built): its Positions list sorted the
+names alphabetically AND its rooms query had no `.order()` at all, so removing the sort alone
+would have left them in no order. Any third screen that lists rooms needs both halves. Inside a cell the chip ALWAYS sits
 under the name rather than beside it: wrapping only when a name was long put the control in a
 different place in every cell, and a column you scan cannot have its buttons wandering.
 
