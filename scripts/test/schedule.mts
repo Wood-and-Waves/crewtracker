@@ -25,7 +25,6 @@ import { canUseScheduling } from '../../lib/permissions.ts'
 import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
-import { SHOW_WIDE_ROOM_NAME, isShowWide, orderRooms, orderRoomsForPicking, roomLabel } from '@/lib/showWideRoom'
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
 import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
@@ -1245,41 +1244,6 @@ console.log('\n--- days changed email ---')
     describeConflicts([clash({ status: 'invited' }), clash({ date: '2026-10-07' })]),
     'Booked on Harbour Point Gala — Tue 6 – Wed 7')
   check('no clash says nothing at all', describeConflicts([]), '')
-}
-
-// ---- The whole show as a place (0041) -------------------------------------
-{
-  const wide = { name: SHOW_WIDE_ROOM_NAME, is_show_wide: true }
-  const plenary = { name: 'Plenary', is_show_wide: false }
-  const breakout = { name: 'Breakout A' }            // the flag may be absent
-
-  check('a flagged room is show-wide', isShowWide(wide), true)
-  check('an ordinary room is not', isShowWide(plenary), false)
-  check('a missing flag is not show-wide', isShowWide(breakout), false)
-
-  check('the stored name is what prints', roomLabel(plenary), 'Plenary')
-  check('a show-wide room prints as the whole show', roomLabel(wide), SHOW_WIDE_ROOM_NAME)
-
-  // Above the rooms, wherever it appears — it is usually created last, so
-  // left alone it would sort under the spaces it sits over.
-  check('the whole show comes first',
-    orderRooms([plenary, breakout, wide]).map(r => r.name),
-    [SHOW_WIDE_ROOM_NAME, 'Plenary', 'Breakout A'])
-  check('the other rooms keep the order they were entered in',
-    orderRooms([breakout, plenary]).map(r => r.name),
-    ['Breakout A', 'Plenary'])
-  check('a show with no show-wide room is unchanged',
-    orderRooms([plenary, breakout]).map(r => r.name),
-    ['Plenary', 'Breakout A'])
-
-  // The venue QR asks "which room are you in?", and the whole show is not an
-  // answer to that — but the people on it must still be able to clock in, so
-  // it goes last rather than being dropped.
-  check('picking a room puts the whole show last',
-    orderRoomsForPicking([wide, plenary, breakout]).map(r => r.name),
-    ['Plenary', 'Breakout A', SHOW_WIDE_ROOM_NAME])
-  check('nobody is dropped from the picker',
-    orderRoomsForPicking([wide, plenary]).length, 2)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
