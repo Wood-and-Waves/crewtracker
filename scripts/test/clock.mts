@@ -15,6 +15,7 @@
 // must: Slack does not render markdown links, so a bare URL is the only format
 // that survives the paste.
 
+import { travelOffer, travelBlockedReason } from '@/lib/crewTravel'
 import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow, pickShowDay, stepDays } from '../../lib/clockLinks.ts'
 import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, type Punch } from '../../lib/punches.ts'
 import { punchRefusal } from '../../lib/clockPunch.ts'
@@ -376,6 +377,59 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   check('the org rounding is applied, not the raw clock',
     summarizeCrewHours([{ date: '2026-10-06', room: 'R', role: null, timecard: card({}, odd) }], RULES, 15, fmt)
       .days[0].hours, 9.75)
+}
+
+// ---- "I travelled today", decided from the day, not from a question --------
+{
+  const offer = (activities: any[], firstOfRun = false, lastOfRun = false) =>
+    travelOffer({ activities: activities as any, firstOfRun, lastOfRun })
+
+  // A day the show spends travelling and nothing else: the whole day IS the
+  // journey, and it replaces the work rather than adding to it.
+  check('a travel-only day offers the travel day',
+    offer(['travel'])?.kind, 'travel')
+  check('and says there is nothing to clock',
+    offer(['travel'])?.detail, 'A travel day — no hours to clock.')
+
+  // Travel alongside work is a HYBRID, added to the hours. Direction comes from
+  // what the show is doing, exactly as the day label has always read it.
+  check('travel on a load-in day is the trip out',
+    offer(['travel', 'load_in'])?.kind, 'travel_in')
+  check('travel on a load-out day is the trip home',
+    offer(['travel', 'load_out'])?.kind, 'travel_out')
+  check('a hybrid says it is added to the hours',
+    offer(['travel', 'load_in'])?.detail, 'Added to the hours you work today.')
+
+  // Dan's case: they could not travel on the show's travel day, so they arrive
+  // on the load-in. Their FIRST day is the trip in, whatever the show calls it.
+  check('their first day is the trip in even with no travel on the show day',
+    offer(['load_in'], true, false)?.kind, 'travel_in')
+  check('their last day is the trip home',
+    offer(['show', 'load_out'], false, true)?.kind, 'travel_out')
+
+  // A one-day run is both their first and their last. Going home wins: it is
+  // the half somebody remembers to record.
+  check('a one-day run reads as going home',
+    offer(['show'], true, true)?.kind, 'travel_out')
+
+  // A control that is usually wrong teaches people to ignore it, so the middle
+  // of a run is offered nothing at all.
+  check('the middle of a run is offered nothing',
+    offer(['show'], false, false), null)
+  check('a plain load-in mid-run is offered nothing',
+    offer(['load_in', 'rehearsal'], false, false), null)
+
+  // A travel day replaces the day's work, so it cannot land on top of hours
+  // somebody already clocked. The hybrids are additive and may.
+  check('a travel day is refused when times exist',
+    travelBlockedReason('travel', 2),
+    'You have times on this day already. Ask your PM to change it.')
+  check('a travel day is fine on an empty day',
+    travelBlockedReason('travel', 0), null)
+  check('travel in is fine alongside times',
+    travelBlockedReason('travel_in', 4), null)
+  check('travel out is fine alongside times',
+    travelBlockedReason('travel_out', 4), null)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

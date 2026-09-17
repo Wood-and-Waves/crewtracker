@@ -14,6 +14,8 @@ import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import Select from '@/components/ui/Select'
 import type { ClockAssignment } from '@/lib/clockSession'
+import type { Activity } from '@/lib/dayActivities'
+import { travelOffer } from '@/lib/crewTravel'
 
 // Somebody's own day. Built to read as the tracker, because it is the same job.
 //
@@ -37,6 +39,7 @@ import type { ClockAssignment } from '@/lib/clockSession'
 export default function ClockPunch({
   token, showId, endpoint = '/api/clock/punch', showName, venue, crewName, timeZone, roundingMinutes,
   selectedDate, today, days, assignments, hoursHref,
+  selectedActivities = [], myDays = [],
 }: {
   /** The link's token. Absent when reached from a login (Section 3), which
    *  sends `showId` to /api/clock/punch-me instead. */
@@ -58,6 +61,11 @@ export default function ClockPunch({
   /** Every work day of the show, ascending — the arrows walk this. */
   days: string[]
   assignments: ClockAssignment[]
+  /** What the SHOW is doing on the day shown — decides which kind of travel
+   *  this would be, so nobody has to be asked (lib/crewTravel.ts). */
+  selectedActivities?: Activity[]
+  /** The days this person is on, ascending: first and last decide direction. */
+  myDays?: string[]
   /** Their whole run with hours — the screen's second view (Dan, 2026-09-08).
    *  Absent on the venue-QR path, where nobody has been identified yet. */
   hoursHref?: string
@@ -132,6 +140,39 @@ export default function ClockPunch({
     // A full navigation, not client state: the server owns which day this is
     // and what is on it, so it re-resolves everything.
     router.push(`?d=${date}`)
+  }
+
+  /**
+   * "I travelled today", said by the person it happened to.
+   *
+   * The button never asks WHICH kind of travel — the day already says. The
+   * server decides again from the same rule, so this is the wording, not the
+   * authority: a hand-edited request cannot pick the flag that pays best.
+   */
+  async function setTravel(row: ClockAssignment, travelling: boolean) {
+    setBusy(true); setError('')
+    try {
+      const res = await fetch('/api/clock/travel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, timecardId: row.timecardId, travelling }),
+      })
+      const body = await res.json()
+      if (!res.ok) { setError(body.error ?? 'That did not save.'); setBusy(false); return }
+      // Paint from what the server actually did, not from what was asked.
+      const kind = body.kind as 'travel' | 'travel_in' | 'travel_out' | null
+      setRows(prev => prev.map(r => r.timecardId !== row.timecardId ? r : {
+        ...r,
+        isTravelDay: kind === 'travel',
+        travelInDay: kind === 'travel_in',
+        travelOutDay: kind === 'travel_out',
+        travelSource: travelling ? 'crew' : 'staff',
+      }))
+      router.refresh()
+    } catch {
+      setError('No connection. Nothing was saved — try again.')
+    }
+    setBusy(false)
   }
 
   /** Remove a punch this person entered themselves. */
@@ -263,6 +304,21 @@ export default function ClockPunch({
         const types = visiblePunchTypes([row.punches])
         const next = nextPunchType(row.punches)
 
+        // What travel would MEAN on this day, decided from the day itself.
+        // Null on the middle of a run, where the button would be noise.
+        const offer = travelOffer({
+          activities: selectedActivities,
+          firstOfRun: myDays[0] === selectedDate,
+          lastOfRun: myDays[myDays.length - 1] === selectedDate,
+        })
+        const travelSet = row.isTravelDay || row.travelInDay || row.travelOutDay
+        // Theirs to take back only if they said it. A PM-set day is the PM's,
+        // exactly as a PM-entered punch is.
+        const mineToUndo = travelSet && row.travelSource === 'crew'
+        // Not on a missed day, not once the show is closed out, and — on the
+        // venue path — not before anybody has been identified.
+        const showTravel = !!token && !row.absence && (offer || travelSet)
+
         return (
           <section key={row.timecardId} className="mb-8">
             {rows.length > 1 && (
@@ -372,6 +428,42 @@ export default function ClockPunch({
                 })}
               </div>
             </div>
+            )}
+
+            {/* "I travelled today" — one sentence that is already true for this
+                day. The crew member is never asked which of the three kinds of
+                travel it is: the day says, and the server decides again from
+                the same rule (Dan, 2026-09-17: "I don't like the question being
+                asked... We already know types of days"). */}
+            {showTravel && (
+              <div className="mt-3 px-3">
+                {mineToUndo ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setTravel(row, false)}
+                    className="w-full rounded-field border-2 border-line px-4 py-3 text-sm font-semibold text-muted transition-colors hover:border-ink hover:text-ink disabled:opacity-60"
+                  >
+                    {busy ? 'Saving…' : 'I did not travel — undo'}
+                  </button>
+                ) : travelSet ? (
+                  <p className="text-center text-xs text-muted">
+                    Your PM set the travel on this day.
+                  </p>
+                ) : offer ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setTravel(row, true)}
+                      className="w-full rounded-field border-2 border-accent px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-ink disabled:opacity-60"
+                    >
+                      {busy ? 'Saving…' : `✈ ${offer.label}`}
+                    </button>
+                    <p className="mt-1 text-center text-xs text-muted">{offer.detail}</p>
+                  </>
+                ) : null}
+              </div>
             )}
           </section>
         )

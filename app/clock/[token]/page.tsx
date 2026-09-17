@@ -195,6 +195,8 @@ export default async function ClockPage({
         selectedDate={view.selectedDate}
         today={view.today}
         days={view.days}
+        selectedActivities={view.selectedActivities}
+        myDays={view.myDays}
         assignments={view.me?.assignments ?? []}
         // Personal links only: a venue QR has not identified anybody yet.
         hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined}

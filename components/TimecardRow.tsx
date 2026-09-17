@@ -127,7 +127,13 @@ export default function TimecardRow({
     setTimecard(t => ({ ...t, [field]: !before }))
     const { data, error } = await supabase
       .from('timecards')
-      .update({ [field]: !before })
+      // A PM changing a travel flag becomes its author, exactly as correcting
+      // a crew-entered punch stamps source 'staff' (0041). Otherwise a day the
+      // PM has overridden still reads as the crew member's claim — and the
+      // crew screen would let them undo the PM's decision.
+      .update(field === 'pay_as_half_day'
+        ? { [field]: !before }
+        : { [field]: !before, travel_source: 'staff' })
       .eq('id', timecard.id)
       .select('id')
     if (error || !data || data.length === 0) {
@@ -194,6 +200,7 @@ export default function TimecardRow({
         travel_out_day: false,
         pay_as_half_day: false,
         absence: null,
+        travel_source: 'staff',
       })
       .eq('id', timecard.id)
 

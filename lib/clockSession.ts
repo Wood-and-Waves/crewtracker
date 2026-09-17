@@ -27,6 +27,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInZone } from '@/lib/showStatus'
 import { isClockLinkExpired, pickShowDay } from '@/lib/clockLinks'
 import type { Punch } from '@/lib/punches'
+import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -36,6 +37,15 @@ export type ClockAssignment = {
   room: string
   role: string | null
   isTravelDay: boolean
+  /** The two HYBRID travel legs: additive to the hours actually worked. */
+  travelInDay: boolean
+  travelOutDay: boolean
+  /**
+   * Who set the travel flags (0041). Crew may undo what they said themselves
+   * and never what the PM said — the same rule the punch screen already runs
+   * on. Attribution only; payroll must never read it.
+   */
+  travelSource: 'staff' | 'crew'
   /** no_show | cancelled | null — the day was booked but not worked (0027). */
   absence: 'no_show' | 'cancelled' | null
   /**
@@ -62,6 +72,15 @@ export type ClockView = {
   selectedDate: string
   /** Every work day of the show, ascending — the day arrows walk this. */
   days: string[]
+  /**
+   * What the SHOW is doing on the day being shown. Not a statement about this
+   * person — it is what lets the travel offer decide which of the three kinds
+   * of travel this would be, instead of asking (lib/crewTravel.ts).
+   */
+  selectedActivities: Activity[]
+  /** The days THIS person is staffed on, ascending. Their first and last decide
+   *  the direction of travel when the show's own day does not. */
+  myDays: string[]
   /** organizations.timecard_rounding_minutes: the grid crew times snap to. */
   roundingMinutes: number
   finalized: boolean
@@ -83,6 +102,17 @@ export type ClockView = {
  * control to the phone's clock; deriving it from UTC is the bug this app has
  * already shipped twice.
  */
+/** The dates on a set of timecard rows, ascending and de-duplicated. */
+function datesOf(rows: any[] | null): string[] {
+  const out = new Set<string>()
+  for (const row of rows ?? []) {
+    const room = Array.isArray(row.rooms) ? row.rooms[0] : row.rooms
+    const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
+    if (wd?.date) out.add(wd.date as string)
+  }
+  return [...out].sort()
+}
+
 export async function loadClockView(
   token: string,
   requestedDate?: string,
@@ -107,7 +137,7 @@ export async function loadClockView(
   // by somebody standing at a loading dock (Dan, 2026-09-17: "Why would it take
   // the crew timecards so long to load on their individual links?"). The work
   // days come back with their ids so the chosen day needs no second lookup.
-  const [{ data: show }, { data: org }, { data: allDays }, { data: crew }] = await Promise.all([
+  const [{ data: show }, { data: org }, { data: allDays }, { data: crew }, { data: myCards }] = await Promise.all([
     // Explicit columns: shows carries show_notes, job_number and
     // client_company, none of which are the crew member's business.
     admin.from('shows')
@@ -115,10 +145,20 @@ export async function loadClockView(
       .eq('id', link.show_id).maybeSingle(),
     admin.from('organizations')
       .select('name, timecard_rounding_minutes').eq('id', link.organization_id).maybeSingle(),
-    admin.from('work_days').select('id, date').eq('show_id', link.show_id).order('date'),
+    admin.from('work_days').select('id, date, activities').eq('show_id', link.show_id).order('date'),
     link.crew_member_id
       ? admin.from('crew_members').select('full_name').eq('id', link.crew_member_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    // Every day of the show this person is on, for the travel offer: their
+    // first and last day decide which way they are travelling when the show's
+    // own day does not say (lib/crewTravel.ts). Declined rows are not theirs.
+    link.crew_member_id
+      ? admin.from('timecards')
+          .select('rooms!inner ( work_days!inner ( date ) )')
+          .eq('crew_member_id', link.crew_member_id)
+          .eq('show_id', link.show_id)
+          .neq('booking_status', 'declined')
+      : Promise.resolve({ data: [] as any[] }),
   ])
   if (!show) return null
 
@@ -143,6 +183,9 @@ export async function loadClockView(
     today,
     selectedDate,
     days,
+    selectedActivities: normalizeActivities(
+      (allDays ?? []).find(d => d.date === selectedDate)?.activities),
+    myDays: datesOf(myCards),
     roundingMinutes: org?.timecard_rounding_minutes ?? 1,
     finalized: !!show.finalized_at,
     // Derived from the show, never from link.expires_at — see isClockLinkExpired.
@@ -240,7 +283,7 @@ async function assignmentsFor(
   // catches a repeat.
   const { data: mine } = await admin
     .from('timecards')
-    .select('id, role, is_travel_day, absence, room_id, punches ( id, timecard_id, punch_type, punched_at, source )')
+    .select('id, role, is_travel_day, travel_in_day, travel_out_day, travel_source, absence, room_id, punches ( id, timecard_id, punch_type, punched_at, source )')
     .eq('crew_member_id', crewMemberId)
     .in('room_id', roomIds)
     .neq('booking_status', 'declined')
@@ -252,6 +295,9 @@ async function assignmentsFor(
     room: roomName.get(t.room_id) || 'Room',
     role: t.role ?? null,
     isTravelDay: t.is_travel_day === true,
+    travelInDay: t.travel_in_day === true,
+    travelOutDay: t.travel_out_day === true,
+    travelSource: (t.travel_source === 'crew' ? 'crew' : 'staff') as 'staff' | 'crew',
     absence: t.absence === 'no_show' || t.absence === 'cancelled' ? t.absence : null,
     punches: (punches || [])
       .filter((p: any) => p.timecard_id === t.id)
@@ -282,11 +328,18 @@ export async function loadClockViewForProfile(
   // the organization and this person's directory entry need the show's
   // organization_id and follow. Same reasoning as the link path above — see the
   // note there. Two waits instead of four.
-  const [{ data: show }, { data: allDays }] = await Promise.all([
+  const [{ data: show }, { data: allDays }, { data: myCards }] = await Promise.all([
     admin.from('shows')
       .select('id, name, venue, city_state, organization_id, timezone_identifier, finalized_at, end_date')
       .eq('id', showId).maybeSingle(),
-    admin.from('work_days').select('id, date').eq('show_id', showId).order('date'),
+    admin.from('work_days').select('id, date, activities').eq('show_id', showId).order('date'),
+    // Their own days, found through the directory entry their login is linked
+    // to (0028), so this rides in the same batch instead of waiting for it.
+    admin.from('timecards')
+      .select('rooms!inner ( work_days!inner ( date ) ), crew_members!inner ( profile_id )')
+      .eq('show_id', showId)
+      .eq('crew_members.profile_id', profileId)
+      .neq('booking_status', 'declined'),
   ])
   if (!show) return null
 
@@ -313,6 +366,9 @@ export async function loadClockViewForProfile(
     today,
     selectedDate,
     days,
+    selectedActivities: normalizeActivities(
+      (allDays ?? []).find(d => d.date === selectedDate)?.activities),
+    myDays: datesOf(myCards),
     roundingMinutes: org?.timecard_rounding_minutes ?? 1,
     finalized: !!show.finalized_at,
     expired: false,

@@ -76,6 +76,8 @@ export default async function CrewShowScreen({
       selectedDate={view.selectedDate}
       today={view.today}
       days={view.days}
+      selectedActivities={view.selectedActivities}
+      myDays={view.myDays}
       assignments={view.me.assignments}
       hoursHref={`/dashboard/shows/${showId}?v=hours`}
     />
