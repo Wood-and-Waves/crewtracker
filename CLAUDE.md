@@ -1648,6 +1648,25 @@ inserting a second one is refused by the index, which made "Book anyway" on a de
 however many times it was pressed, with a clash message that named nobody. Reviving their own row
 is what "they changed their mind" means, and it keeps THE ONE RULE: nothing is deleted.
 
+**THE DEFINITIONS EDITOR PAINTS FIRST AND SAVES A BEAT LATER** (2026-09-17), the same rule as a
+punch on the tracker. Every tap used to be its own write plus a `router.refresh()`, and a custom
+date is tapped several times in a row — so picking four days out of six was four writes and four
+full page refreshes, each re-rendering the section under the cursor (Dan: *"when I remove a day in
+custom days, it reloads and jumps each time"*). The old guard also returned early while a write
+was in flight, so a tap in that window did not even paint. Now the tap paints, the write follows
+600ms after the tapping stops, and the one refresh the flags and the tracker's open rows need
+happens at the end. The diff is against what the DATABASE holds (`savedRef`), not against what is
+on screen, because the screen is deliberately ahead of it. **A Save button was offered and Dan
+declined it** (*"works well. I think we can leave it as it"*): every other field on Edit Show
+saves itself, so a button on this one section would make the page's own "changes save
+automatically" a lie. The known trade is that a tap in the last 600ms before the tab closes is
+best-effort — it is written, but it cannot be awaited.
+
+**The fill picker's day chips are in DATE order**, with the clicked day in its own place in the
+week rather than leading the row — it led whatever its date until 2026-09-17, so a position opened
+on the Wednesday read "Wed 23 · Mon 21 · Tue 22 · Thu 24". It is still the one chip that cannot be
+dropped, and it still wears ink rather than accent to say so.
+
 **Two things deliberately did NOT move here**, so don't go looking for them: setting a person's
 travel day (the tracker's flag pills own it — the Positions panel could set it at booking time
 and no longer can), and editing day activities (the grid's day header shows each day's label and
