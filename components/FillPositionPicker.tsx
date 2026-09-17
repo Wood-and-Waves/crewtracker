@@ -159,6 +159,12 @@ export default function FillPositionPicker({
   // genuinely changes rather than on every new array identity.
   const bookingDates = [date, ...siblings.map(s => s.date)].sort().join(',')
 
+  // The day step's chips: the clicked day (no id — it is not droppable) and the
+  // definition's other open days, in DATE order rather than clicked-first.
+  const dayChips: { id: string | null; date: string }[] =
+    [{ id: null, date }, ...siblings.map(s => ({ id: s.id, date: s.date }))]
+      .sort((a, b) => a.date.localeCompare(b.date))
+
   useEffect(() => {
     let active = true
     if (!daysReady) return
@@ -463,14 +469,24 @@ export default function FillPositionPicker({
               fortnight was most of a screen — inside a panel that already sits
               below the grid. Same information, one line. */}
           <div className="flex flex-wrap gap-1.5">
-            <span
-              title="The day you clicked — always included."
-              className="rounded-field border-2 border-ink bg-ink px-2.5 py-1.5 text-xs font-semibold text-bg"
-            >
-              {fmtDay(date)}
-            </span>
-            {siblings.map(s => {
-              const on = plan.picked.has(s.id)
+            {/* IN DATE ORDER, with the clicked day in its own place in the week.
+                It used to lead the row whatever its date, so opening a position
+                on the Wednesday read "Wed 23 · Mon 21 · Tue 22 · Thu 24" — a
+                week you cannot read left to right, on the one control whose
+                whole job is saying which days somebody is doing (Dan,
+                2026-09-17). */}
+            {dayChips.map(chip => {
+              if (!chip.id) return (
+                <span
+                  key={chip.date}
+                  title="The day you clicked — always included."
+                  className="rounded-field border-2 border-ink bg-ink px-2.5 py-1.5 text-xs font-semibold text-bg"
+                >
+                  {fmtDay(chip.date)}
+                </span>
+              )
+              const s = chip
+              const on = plan.picked.has(s.id!)
               return (
                 <button
                   key={s.id}
@@ -486,7 +502,7 @@ export default function FillPositionPicker({
                   onClick={() => setPlan(p => {
                     if (!p) return p
                     const picked = new Set(p.picked)
-                    if (on) picked.delete(s.id); else picked.add(s.id)
+                    if (on) picked.delete(s.id!); else picked.add(s.id!)
                     return { ...p, picked }
                   })}
                 >
