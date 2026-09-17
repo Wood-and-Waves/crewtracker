@@ -169,9 +169,10 @@ export async function loadClockView(
   }
 
   const { data: rooms } = await admin
-    .from('rooms').select('id, name').eq('work_day_id', workDay.id)
+    .from('rooms').select('id, name, is_show_wide').eq('work_day_id', workDay.id)
   const roomIds = (rooms || []).map(r => r.id)
   const roomName = new Map((rooms || []).map(r => [r.id, r.name]))
+  const showWideNames = new Set((rooms || []).filter(r => r.is_show_wide).map(r => r.name))
   if (roomIds.length === 0) {
     return { ...base, kind: link.crew_member_id ? 'personal' : 'venue', me: emptyMe, roster: [] }
   }
@@ -195,12 +196,19 @@ export async function loadClockView(
       list.push({ crewMemberId: t.crew_member_id as string, name: t.crew_member_name || 'Unnamed' })
       grouped.set(name, list)
     }
+    // The whole show is not an answer to "which room are you in?", so it sits
+    // under the real rooms — but the people staffed on it (a PM, a producer)
+    // still have to be able to clock in, so it is never dropped (0041).
     const roster = [...grouped.entries()]
       .map(([room, people]) => ({
         room,
         people: people.sort((a, b) => a.name.localeCompare(b.name)),
       }))
-      .sort((a, b) => a.room.localeCompare(b.room))
+      .sort((a, b) => {
+        const aWide = showWideNames.has(a.room) ? 1 : 0
+        const bWide = showWideNames.has(b.room) ? 1 : 0
+        return aWide - bWide || a.room.localeCompare(b.room)
+      })
 
     return { ...base, kind: 'venue', me: null, roster }
   }

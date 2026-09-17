@@ -7,6 +7,7 @@ import { logStaffingEvent } from '@/lib/staffingEvents'
 import { compressDays } from '@/lib/readyEmail'
 import { cn } from '@/lib/cn'
 import Button from '@/components/ui/Button'
+import { SHOW_WIDE_ROOM_NAME } from '@/lib/showWideRoom'
 import Select from '@/components/ui/Select'
 
 type CrewMember = { id: string; full_name: string }
@@ -50,6 +51,12 @@ export default function StaffRoomModal({
 }) {
   const router = useRouter()
   const supabase = createClient()
+  // "Staff Whole show" and "Add to Whole show" read as a typo: the whole show
+  // (0041) is the one place whose name is a phrase rather than a proper noun,
+  // so it takes an article. A real room never does — "Staff the Plenary" would
+  // be the mistake in the other direction.
+  const placeLabel = roomName === SHOW_WIDE_ROOM_NAME ? 'the whole show' : roomName
+
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const setOpen = (v: boolean) => {
@@ -424,7 +431,7 @@ export default function StaffRoomModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-lg max-h-[85vh] flex flex-col border-2 border-ink bg-surface shadow-edge">
         <div className="p-6 pb-4 border-b border-line">
-          <h2 className="text-lg font-bold text-ink">Staff {roomName}</h2>
+          <h2 className="text-lg font-bold text-ink">Staff {placeLabel}</h2>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 pt-4">
@@ -588,11 +595,11 @@ export default function StaffRoomModal({
             <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
               <h3 className="text-lg font-bold text-ink mb-2">Already staffed elsewhere</h3>
               <p className="text-sm text-muted mb-5">
-                {pendingCrossRoom.join(', ')} {pendingCrossRoom.length === 1 ? 'is' : 'are'} already in another room today. Add to {roomName} as well?
+                {pendingCrossRoom.join(', ')} {pendingCrossRoom.length === 1 ? 'is' : 'are'} already in another room today. Add to {placeLabel} as well?
               </p>
               <div className="flex gap-3">
                 <Button variant="ghost" className="flex-1 py-3" onClick={() => setPendingCrossRoom(null)}>Cancel</Button>
-                <Button className="flex-1 py-3" onClick={doInsert} disabled={loading}>Add to {roomName}</Button>
+                <Button className="flex-1 py-3" onClick={doInsert} disabled={loading}>Add to {placeLabel}</Button>
               </div>
             </div>
           </div>

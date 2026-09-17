@@ -9,6 +9,7 @@ import { BoardPaintProvider } from '@/components/BoardPaint'
 import BoardCounts from '@/components/BoardCounts'
 import PositionDefsSection from '@/components/PositionDefsSection'
 import ShowNav from '@/components/ShowNav'
+import { orderRooms } from '@/lib/showWideRoom'
 import SendToSchedulingButton from '@/components/SendToSchedulingButton'
 import AskPencilledButton from '@/components/AskPencilledButton'
 import CrewNoticesBar from '@/components/CrewNoticesBar'
@@ -50,9 +51,12 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
   const workDayIds = days.map(d => d.workDayId)
 
   const { data: roomRows } = workDayIds.length
-    ? await supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', workDayIds).order('created_at')
+    ? await supabase.from('rooms').select('id, name, work_day_id, is_show_wide').in('work_day_id', workDayIds).order('created_at')
     : { data: [] as any[] }
-  const rooms = (roomRows ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string, workDayId: r.work_day_id as string }))
+  // buildBoard takes a room's position from where its name first appears, so
+  // ordering the input is all it takes to put the whole show above the spaces
+  // (0041). Everything else keeps the order it was entered in.
+  const rooms = orderRooms(roomRows ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string, workDayId: r.work_day_id as string }))
   const roomIds = rooms.map(r => r.id)
 
   // The screen's one round of queries: this show's slots, its live bookings,

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
+import { orderRooms } from '@/lib/showWideRoom'
 import CrewShowScreen from '@/components/CrewShowScreen'
 import { redirect, notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
@@ -107,7 +108,7 @@ export default async function ShowDetailPage({
   const [{ data: allShowRooms }, { data: organization }, { data: defRows }] = await Promise.all([
     supabase
       .from('rooms')
-      .select('id, name, work_day_id')
+      .select('id, name, work_day_id, is_show_wide')
       .in('work_day_id', workDays.map(d => d.id))
       // Insertion order, matching iOS. Unordered, multiple rooms on a day came
       // back arbitrarily and could reshuffle between refreshes.
@@ -149,7 +150,10 @@ export default async function ShowDetailPage({
   const activeIndex = requestedIndex >= 0 ? requestedIndex : (todayIndex >= 0 ? todayIndex : 0)
   const activeDay = workDays[activeIndex]
 
-  const roomsList = (allShowRooms || []).filter(r => r.work_day_id === activeDay.id)
+  // The whole show sits ABOVE the rooms (0041): it is usually created after
+  // them, so insertion order alone would file the person running the show under
+  // the spaces they are running.
+  const roomsList = orderRooms((allShowRooms || []).filter(r => r.work_day_id === activeDay.id))
 
   // PUNCHES: the active day's in full, earlier days' WRAPS only, later days'
   // not at all. Until 2026-09-06 every punch on the whole show was fetched
