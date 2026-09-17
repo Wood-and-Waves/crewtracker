@@ -2,13 +2,13 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import Button from '@/components/ui/Button'
 import { BAND } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import ScheduleBoard from '@/components/ScheduleBoard'
 import { BoardPaintProvider } from '@/components/BoardPaint'
 import BoardCounts from '@/components/BoardCounts'
 import PositionDefsSection from '@/components/PositionDefsSection'
+import ShowNav from '@/components/ShowNav'
 import SendToSchedulingButton from '@/components/SendToSchedulingButton'
 import AskPencilledButton from '@/components/AskPencilledButton'
 import CrewNoticesBar from '@/components/CrewNoticesBar'
@@ -114,7 +114,7 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
 
   return (
     <div className="p-4 md:p-10 lg:mx-auto lg:max-w-[1500px]">
-      <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to the tracker</Link>
+      <ShowNav showId={id} current="schedule" schedulingOn />
 
       {/* The screen's ONE solid band. Everything below is light strips and rules. */}
       <div className={cn(BAND, 'mt-2 flex flex-wrap items-center justify-between gap-3 px-4 py-3')}>
@@ -123,9 +123,6 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
           <p className="truncate text-xs opacity-80">
             Scheduling{dates ? ` · ${dates}` : ''}{show.venue ? ` · ${show.venue}` : ''}
           </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Link href={`/dashboard/shows/${id}/edit`}><Button variant="ghost" size="sm">Edit Show</Button></Link>
         </div>
       </div>
 

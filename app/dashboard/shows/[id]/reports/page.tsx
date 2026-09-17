@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser, canSeeFinancials as canSeeFinancialsFor, isPmOnShow } from '@/lib/session'
+import { getCurrentUser, canSeeFinancials as canSeeFinancialsFor, canUseScheduling, isPmOnShow } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
+import ShowNav from '@/components/ShowNav'
 import Link from 'next/link'
 import {
   straightTimeHours, overtimeHours, doubleTimeHours,
@@ -93,6 +94,9 @@ export default async function ShowReportPage({
   // belongs to the PM (Section 3, 2026-09-06).
   if (!(await isPmOnShow(supabase, id))) redirect(`/dashboard/shows/${id}`)
 
+  // Only offer the Scheduling screen to a company that has the module.
+  const schedulingOn = canUseScheduling(user)
+
   // Financials only show in exports if BOTH the show tracks dollar amounts
   // AND the current user has permission to view pay rates.
   const canSeeFinancials = canSeeFinancialsFor(user, show.show_financials)
@@ -169,7 +173,7 @@ export default async function ShowReportPage({
   if (!rulesetRow) {
     return (
       <div className="p-6 md:p-10">
-        <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
+        <ShowNav showId={id} current="reports" schedulingOn={schedulingOn} />
         <h1 className="text-2xl font-bold mt-4">{show.name}</h1>
         <p className="text-muted mt-2">No payroll ruleset found for this show.</p>
       </div>
@@ -356,7 +360,7 @@ export default async function ShowReportPage({
 
   return (
     <div className="p-6 md:p-10">
-      <Link href={`/dashboard/shows/${id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
+      <ShowNav showId={id} current="reports" schedulingOn={schedulingOn} />
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">{show.name} — Report</h1>

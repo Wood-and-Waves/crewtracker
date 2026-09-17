@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES } from '@/lib/timezones'
@@ -10,6 +9,7 @@ import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import PositionDefsSection, { type DefRow, type SlotFlag } from '@/components/PositionDefsSection'
+import ShowNav from '@/components/ShowNav'
 import SendToSchedulingButton from '@/components/SendToSchedulingButton'
 import AskPencilledButton from '@/components/AskPencilledButton'
 import PmField, { type PmState } from '@/components/PmField'
@@ -340,7 +340,7 @@ export default function EditShowClient({
 
   return (
     <div className="p-6 md:p-10 max-w-4xl pb-16">
-      <Link href={`/dashboard/shows/${show.id}`} className="text-sm text-muted hover:text-ink">← Back to Show</Link>
+      <ShowNav showId={show.id} current="edit" schedulingOn={!!scheduling} />
       <div className="mt-2 mb-6 flex flex-wrap items-baseline justify-between gap-x-4">
         <h1 className="font-display text-2xl font-bold uppercase tracking-wide">Edit Show Details</h1>
         <p className="font-mono text-[10.5px] font-semibold uppercase tracking-wide text-muted">

@@ -898,20 +898,8 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   is assuming. And **`lib/payroll.ts` must not learn about any of this**: this is a projection of
   what might happen, the calculator is the record of what did, and the day the two share a code
   path is the day an estimate can move somebody's pay.
-- **THE FOUR SHOW SCREENS DO NOT LINK TO EACH OTHER** (Dan, 2026-09-17: *"When I am in edit
-  show or scheduling, the only place I can go is back to the tracker then to the edit show or
-  scheduling. How can we make direct links while in these pages?"*). A show has four screens —
-  tracker, Scheduling, Edit Show, Reports — and only the TRACKER carries links to the others, so
-  it is a hub everything routes through. What exists today, which is nearly the shape but not
-  quite: the Scheduling screen has an **Edit Show** button beside its title, Edit Show has only a
-  muted sentence ("Open the Scheduling screen") buried inside its Scheduling section, well down a
-  long page and rendered only when the module is on, and neither screen mentions Reports at all.
-  Build: the same small row of links on all four, showing where you are and offering the other
-  three — the tracker's header cluster is already that control, so this is mostly moving it into
-  one shared piece rather than designing something. Two things to get right: the links must be
-  PERMISSION-AWARE (a scheduler has no business being offered Reports, and a crew-side login sees
-  none of this), and Reports on an unstarted show is an empty screen, so think about whether it is
-  offered before there are punches. Small, and it pays back on every show.
+- ~~The four show screens do not link to each other.~~ **DONE 2026-09-17** — see
+  `components/ShowNav.tsx` and the note in the Scheduling screen section.
 - **Delete a show** (Dan, 2026-09-07). There is Archive and there is no Delete. Wanted, with a
   real guard against an accident: a warning that spells out what goes with it (every day, room,
   timecard and punch; positions; booking invites; clock links; the PM invitation) and a typed
@@ -1647,6 +1635,20 @@ longer on Northwind" — because a person with no days left must not be sent an 
 inserting a second one is refused by the index, which made "Book anyway" on a decliner impossible
 however many times it was pressed, with a clash message that named nobody. Reviving their own row
 is what "they changed their mind" means, and it keeps THE ONE RULE: nothing is deleted.
+
+**EVERY SCREEN OF A SHOW LINKS TO THE OTHER THREE** (`components/ShowNav.tsx`, 2026-09-17). A
+show has four screens and only the TRACKER carried links to the others, so it was a hub
+everything routed through: Edit Show to Scheduling meant two hops through a screen you did not
+want (Dan: *"the only place I can go is back to the tracker then to the edit show or
+scheduling"*). The nav REPLACES the old "← Back to …" line on Scheduling, Edit Show and Reports
+rather than sitting beside it — the tracker is one of the four, so a back link to it would say
+the same thing twice — and keeps a "← Shows" out to the list. The current screen renders as a
+marked span, not a link. **The Scheduling item is gated on the module** (`canUseScheduling`, or
+on Edit Show the presence of its `scheduling` prop, which is omitted when the module is off);
+everything else is safe to offer because all three screens already refuse anyone who is not
+PM-side. **The tracker deliberately does NOT use it**: its desktop header already carries the
+same cluster beside Add Room, and its phone layout carries those places as icons in a compact
+strip — show day is not the screen to redesign for symmetry.
 
 **THE DEFINITIONS EDITOR PAINTS FIRST AND SAVES A BEAT LATER** (2026-09-17), the same rule as a
 punch on the tracker. Every tap used to be its own write plus a `router.refresh()`, and a custom
