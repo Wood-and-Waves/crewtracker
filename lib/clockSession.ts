@@ -101,7 +101,13 @@ export async function loadClockView(
 
   if (!link) return null
 
-  const [{ data: show }, { data: org }] = await Promise.all([
+  // EVERYTHING THE LINK ALONE CAN ASK FOR, AT ONCE. These four reads only need
+  // ids the link row already carries, so waiting for one before starting the
+  // next bought nothing — and this page is opened on a phone, on venue wifi,
+  // by somebody standing at a loading dock (Dan, 2026-09-17: "Why would it take
+  // the crew timecards so long to load on their individual links?"). The work
+  // days come back with their ids so the chosen day needs no second lookup.
+  const [{ data: show }, { data: org }, { data: allDays }, { data: crew }] = await Promise.all([
     // Explicit columns: shows carries show_notes, job_number and
     // client_company, none of which are the crew member's business.
     admin.from('shows')
@@ -109,15 +115,16 @@ export async function loadClockView(
       .eq('id', link.show_id).maybeSingle(),
     admin.from('organizations')
       .select('name, timecard_rounding_minutes').eq('id', link.organization_id).maybeSingle(),
+    admin.from('work_days').select('id, date').eq('show_id', link.show_id).order('date'),
+    link.crew_member_id
+      ? admin.from('crew_members').select('full_name').eq('id', link.crew_member_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
   if (!show) return null
 
   const timeZone = show.timezone_identifier || 'America/Chicago'
   const today = todayInZone(timeZone)
 
-  // Every work day of the show, so the arrows know where they can go.
-  const { data: allDays } = await admin
-    .from('work_days').select('date').eq('show_id', show.id).order('date')
   const days = (allDays ?? []).map(d => d.date as string)
 
   // A requested day is honoured only if it is genuinely a day OF THIS SHOW.
@@ -143,22 +150,19 @@ export async function loadClockView(
     revoked: !!link.revoked_at,
   }
 
-  // Resolved BEFORE the early returns below. A personal link must still know
+  // Read in the batch above, but checked here: a personal link must still know
   // whose it is on a day they are not working — otherwise the masthead renders
   // a blank name and the day arrows look like somebody else's screen.
-  const { data: crew } = link.crew_member_id
-    ? await admin.from('crew_members').select('full_name').eq('id', link.crew_member_id).maybeSingle()
-    : { data: null }
   if (link.crew_member_id && !crew) return null
 
   const emptyMe = link.crew_member_id
     ? { crewMemberId: link.crew_member_id, name: crew!.full_name, assignments: [] as ClockAssignment[] }
     : null
 
-  // The selected day's work day. A show that isn't running that day has none,
-  // which is a legitimate state ("nothing on"), not an error.
-  const { data: workDay } = await admin
-    .from('work_days').select('id').eq('show_id', show.id).eq('date', selectedDate).maybeSingle()
+  // The selected day's work day, out of the list already fetched rather than a
+  // second query for a row we have. A show that isn't running that day has
+  // none, which is a legitimate state ("nothing on"), not an error.
+  const workDay = (allDays ?? []).find(d => d.date === selectedDate) ?? null
 
   if (!workDay) {
     return { ...base, kind: link.crew_member_id ? 'personal' : 'venue', me: emptyMe, roster: [] }
@@ -224,24 +228,24 @@ async function assignmentsFor(
   roomIds: string[],
   roomName: Map<string, string>,
 ): Promise<ClockAssignment[]> {
+  // THE PUNCHES COME BACK WITH THE TIMECARDS, in one request. Reading the
+  // cards and then asking for their punches was two round trips where the
+  // second could not start until the first landed, on the slowest connection
+  // any screen in this app runs on.
+  //
+  // `source` is NOT optional here, whatever the Punch type says: the crew
+  // screen decides from it whether a punch is this person's to edit, and
+  // omitting it made every punch read as PM-entered — locking crew out of
+  // their own times. ClockAssignment.punches requires it so the compiler
+  // catches a repeat.
   const { data: mine } = await admin
     .from('timecards')
-    .select('id, role, is_travel_day, absence, room_id')
+    .select('id, role, is_travel_day, absence, room_id, punches ( id, timecard_id, punch_type, punched_at, source )')
     .eq('crew_member_id', crewMemberId)
     .in('room_id', roomIds)
     .neq('booking_status', 'declined')
 
-  const timecardIds = (mine || []).map(t => t.id)
-  const { data: punches } = timecardIds.length
-    ? await admin.from('punches')
-        // `source` is NOT optional here, whatever the Punch type says: the crew
-        // screen decides from it whether a punch is this person's to edit, and
-        // omitting it made every punch read as PM-entered — locking crew out of
-        // their own times. ClockAssignment.punches requires it so the compiler
-        // catches a repeat.
-        .select('id, timecard_id, punch_type, punched_at, source')
-        .in('timecard_id', timecardIds)
-    : { data: [] as any[] }
+  const punches = (mine || []).flatMap((t: any) => (t.punches ?? []))
 
   return (mine || []).map(t => ({
     timecardId: t.id,
@@ -274,9 +278,16 @@ export async function loadClockViewForProfile(
   if (!UUID.test(showId) || !UUID.test(profileId)) return null
   const admin = createAdminClient()
 
-  const { data: show } = await admin.from('shows')
-    .select('id, name, venue, city_state, organization_id, timezone_identifier, finalized_at, end_date')
-    .eq('id', showId).maybeSingle()
+  // The show and its days need only the id we were handed, so they go together;
+  // the organization and this person's directory entry need the show's
+  // organization_id and follow. Same reasoning as the link path above — see the
+  // note there. Two waits instead of four.
+  const [{ data: show }, { data: allDays }] = await Promise.all([
+    admin.from('shows')
+      .select('id, name, venue, city_state, organization_id, timezone_identifier, finalized_at, end_date')
+      .eq('id', showId).maybeSingle(),
+    admin.from('work_days').select('id, date').eq('show_id', showId).order('date'),
+  ])
   if (!show) return null
 
   const [{ data: org }, { data: crew }] = await Promise.all([
@@ -288,7 +299,6 @@ export async function loadClockViewForProfile(
 
   const timeZone = show.timezone_identifier || 'America/Chicago'
   const today = todayInZone(timeZone)
-  const { data: allDays } = await admin.from('work_days').select('date').eq('show_id', show.id).order('date')
   const days = (allDays ?? []).map(d => d.date as string)
   const selectedDate = pickShowDay(days, today, requestedDate)
 
@@ -311,8 +321,7 @@ export async function loadClockViewForProfile(
   }
   const me = { crewMemberId: crew.id, name: crew.full_name, assignments: [] as ClockAssignment[] }
 
-  const { data: workDay } = await admin
-    .from('work_days').select('id').eq('show_id', show.id).eq('date', selectedDate).maybeSingle()
+  const workDay = (allDays ?? []).find(d => d.date === selectedDate) ?? null
   if (!workDay) return { ...base, me }
   const { data: rooms } = await admin.from('rooms').select('id, name').eq('work_day_id', workDay.id)
   const roomIds = (rooms || []).map(r => r.id)
