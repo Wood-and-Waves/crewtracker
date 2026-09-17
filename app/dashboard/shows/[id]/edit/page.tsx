@@ -42,7 +42,10 @@ export default async function EditShowPage({
   const workDayIds = (workDays || []).map(d => d.id)
 
   const { data: rooms } = workDayIds.length > 0
-    ? await supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', workDayIds)
+    // Insertion order, like the tracker and the Scheduling screen. Unordered,
+    // the rows come back arbitrarily and the Positions list can reshuffle
+    // between refreshes.
+    ? await supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', workDayIds).order('created_at')
     : { data: [] }
 
   const roomIds = (rooms || []).map(r => r.id)

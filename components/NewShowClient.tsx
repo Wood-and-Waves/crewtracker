@@ -517,6 +517,7 @@ export default function NewShowClient({
               days={gridDays}
               defs={defs}
               onChange={setDefs}
+              organizationId={organizationId}
             />
           </div>
         )}

@@ -26,7 +26,7 @@ export default async function NewShowPage() {
   }
 
   const [{ data: roleRows }, { data: presets }] = await Promise.all([
-    supabase.from('av_roles').select('name').order('sort_order'),
+    supabase.from('av_roles').select('name').order('name'),
     supabase.from('payroll_presets').select('*').eq('organization_id', user.organizationId).order('sort_order'),
   ])
 

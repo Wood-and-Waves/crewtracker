@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import RoleSelect from '@/components/RoleSelect'
 import Select from '@/components/ui/Select'
 import { cn } from '@/lib/cn'
 import {
@@ -24,25 +26,31 @@ function shortDay(date: string) {
 }
 
 export default function PositionDefsEditor({
-  rooms, roles, days, defs, onChange, readOnly = false,
+  rooms, roles, days, defs, onChange, organizationId, readOnly = false,
 }: {
   rooms: { key: string; name: string }[]
   roles: string[]
   days: GridDay[]
   defs: PositionDef[]
   onChange: (next: PositionDef[]) => void
+  /** Without it the role picker cannot add a role, and does not offer to. */
+  organizationId?: string
   readOnly?: boolean
 }) {
+  // A role added from a picker is saved to the company's list at once, but the
+  // `roles` prop came from the server render and will not carry it until this
+  // page reloads — and on New Show there is nothing to reload, because the show
+  // does not exist yet. So the new names are held here and merged in, which
+  // keeps both hosts free of any new state plumbing.
+  const [addedRoles, setAddedRoles] = useState<string[]>([])
+  const allRoles = [...roles, ...addedRoles.filter(r => !roles.includes(r))]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+
   const update = (key: string, patch: Partial<PositionDef>) =>
     onChange(defs.map(d => (d.key === key ? { ...d, ...patch } : d)))
   const remove = (key: string) => onChange(defs.filter(d => d.key !== key))
   const add = (roomKey: string) =>
-    onChange([...defs, { key: crypto.randomUUID(), roomKey, role: roles[0] ?? '', count: 1, dayKind: 'all', customDates: [] }])
-
-  const roleOptions = (current: string) => {
-    const list = roles.includes(current) || !current ? roles : [current, ...roles]
-    return [...(current ? [] : [{ value: '', label: 'Pick a role…' }]), ...list.map(r => ({ value: r, label: r }))]
-  }
+    onChange([...defs, { key: crypto.randomUUID(), roomKey, role: allRoles[0] ?? '', count: 1, dayKind: 'all', customDates: [] }])
 
   return (
     <div className="flex flex-col gap-5">
@@ -72,14 +80,14 @@ export default function PositionDefsEditor({
                     className="w-14 rounded-field border border-line bg-surface-2 px-2 py-1.5 text-right text-sm text-ink tabular-nums outline-none focus:border-accent"
                   />
                   <span className="text-xs text-muted">×</span>
-                  <Select
-                    ariaLabel="Role"
-                    size="sm"
+                  <RoleSelect
                     className="min-w-[160px]"
                     value={d.role}
+                    roles={allRoles}
+                    organizationId={organizationId}
                     disabled={readOnly}
                     onChange={v => update(d.key, { role: v })}
-                    options={roleOptions(d.role)}
+                    onRoleAdded={r => setAddedRoles(prev => (prev.includes(r) ? prev : [...prev, r]))}
                   />
                   <span className="text-xs text-muted">on</span>
                   <Select

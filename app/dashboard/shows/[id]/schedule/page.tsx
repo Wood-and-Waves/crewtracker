@@ -208,6 +208,7 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
           defs={(defRows ?? []) as any[]}
           flags={[]}
           locked={locked}
+          organizationId={user.organizationId || undefined}
         />
       </div>
     </div>

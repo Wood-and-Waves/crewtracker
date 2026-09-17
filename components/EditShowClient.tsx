@@ -74,6 +74,13 @@ export default function EditShowClient({
   const router = useRouter()
   const supabase = createClient()
 
+  // The rooms in the order they were ENTERED IN, which is what the tracker and
+  // the Scheduling grid both show. This list was alphabetical until 2026-09-17,
+  // so a show read one way here and another everywhere else (Dan, adding
+  // positions to a show he had just built). A name takes the position of its
+  // first appearance; the page reads rooms in insertion order to make that true.
+  const roomNamesInOrder = [...new Set((rooms as any[]).map(r => r.name as string))]
+
   // Day activities (0032). Deliberately NOT gated on a finalized show: that
   // lock covers timecards and punches, not work days.
   const [dayActs, setDayActs] = useState<Record<string, Activity[]>>(
@@ -539,12 +546,13 @@ export default function EditShowClient({
       {positions && (
         <PositionDefsSection
           showId={show.id}
-          roomNames={[...new Set((rooms as any[]).map(r => r.name as string))].sort((a, b) => a.localeCompare(b))}
+          roomNames={roomNamesInOrder}
           roles={positions.roles}
           days={workDays.map((wd: any) => ({ date: wd.date, activities: wd.activities ?? [] }))}
           defs={positions.defs}
           flags={positions.flags}
           locked={!!show.finalized_at}
+          organizationId={organizationId}
         />
       )}
 

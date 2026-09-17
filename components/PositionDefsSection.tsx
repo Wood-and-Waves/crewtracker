@@ -37,7 +37,7 @@ function fmt(date: string) {
 }
 
 export default function PositionDefsSection({
-  showId, roomNames, roles, days, defs: initialDefs, flags, locked,
+  showId, roomNames, roles, days, defs: initialDefs, flags, locked, organizationId,
 }: {
   showId: string
   /** Room NAMES across the show (a room is a per-day row; the definition is keyed by name). */
@@ -47,6 +47,8 @@ export default function PositionDefsSection({
   defs: DefRow[]
   flags: SlotFlag[]
   locked: boolean
+  /** Lets the role picker add a role that is not on the list yet. */
+  organizationId?: string
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -122,7 +124,7 @@ export default function PositionDefsSection({
       {roomNames.length === 0 ? (
         <p className="py-2 text-xs text-muted">Add a room on the tracker first.</p>
       ) : (
-        <PositionDefsEditor rooms={rooms} roles={roles} days={days} defs={defs} onChange={onChange} readOnly={locked || busy} />
+        <PositionDefsEditor rooms={rooms} roles={roles} days={days} defs={defs} onChange={onChange} organizationId={organizationId} readOnly={locked || busy} />
       )}
 
       {flags.length > 0 && (
