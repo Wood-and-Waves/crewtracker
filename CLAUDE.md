@@ -755,24 +755,36 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
   time, not a grid.
 - ~~A DEMO COMPANY on production.~~ **DONE 2026-09-08** — see "The demo company" below.
-- **The Google sign-in screen shows a Supabase project ref, not CrewTracker** (Dan, 2026-09-09,
-  screenshotting it: "the crewtracker oauth login looks sketchy with that non-descript address").
-  It reads *"Sign in to continue to nfrvxkwemtittrqboebl.supabase.co"*, which is the truth — the
-  OAuth callback really is hosted there — and it looks exactly like a phishing page to anybody
-  who does not know what Supabase is. This is the first screen a new customer sees, so it matters
-  more than its size suggests, and it belongs with the legal-groundwork item: both are about
-  being trustworthy at the moment somebody is asked to hand something over.
-  **The fix is Supabase's Custom Domains add-on**, which moves auth to `auth.crewtracker.app` so
-  that is what Google prints. It is a paid add-on per project (about $10/month when last looked
-  at — check the dashboard, don't quote this). Setting the Google consent screen's app name alone
-  does NOT fix it: the host Google shows comes from the redirect URI, which is the Supabase
-  project until the custom domain exists. The change touches three places that must move
-  together — the Supabase custom domain, the Authorized redirect URI in Google Cloud Console, and
-  Supabase Auth's Site URL / redirect allowlist — and getting one wrong breaks sign-in for
-  everybody, so do it deliberately and test Google sign-in immediately afterwards. Nothing in the
-  app's code changes: every auth redirect already derives from `window.location.origin`.
-- ~~A crew member's own week: one screen with their hours.~~ **DONE 2026-09-09** — see "Their
-  own hours" below.
+- ~~The Google sign-in screen shows a Supabase project ref, not CrewTracker.~~ **DONE 2026-09-17,
+  and NOT by paying for it.** It read *"Sign in to continue to nfrvxkwemtittrqboebl.supabase.co"*
+  — true, since the OAuth callback really was hosted there, and indistinguishable from a phishing
+  page to anybody who does not know what Supabase is, on the first screen a new customer meets.
+  The documented fix was Supabase's Custom Domains add-on (~$10/month). Dan asked whether paying
+  was the only way. It was not.
+  **Google's sign-in now happens ON OUR OWN PAGE** (`components/GoogleSignIn.tsx`): Google's
+  account chooser opens over `/login`, hands us an ID token, and `signInWithIdToken` trades it for
+  a session. Nobody is redirected anywhere, so the name Google prints is ours. Live on
+  crewtracker.app since 2026-09-17 and verified on a real iPhone — Safari allows the popup, which
+  was the risk worth proving.
+  **It degrades to the old redirect button rather than to nothing**, because this is the front
+  door: no `NEXT_PUBLIC_GOOGLE_CLIENT_ID` renders exactly what it rendered before, and a
+  five-second timer hands back if Google's script cannot be reached (a blocked script, an
+  extension, venue wifi behind a captive portal). **Turning it off is deleting that one Vercel
+  variable and redeploying** — no code change, which is the rollback.
+  Things that cost an hour to learn and should not cost it twice: the nonce goes to Google
+  HASHED and to Supabase RAW, and getting that backwards is the subtle way it breaks; the client
+  needs **Authorized JavaScript origins**, which is a DIFFERENT box from the redirect URIs sitting
+  under it and takes no path (`https://crewtracker.app`, never `.../auth/callback`); an empty
+  origins list produces "Access blocked: no registered origin, Error 401: invalid_client"; the
+  client id also has to be listed in Supabase → Authentication → Providers → Google → **Client
+  IDs** (comma-separated) on EACH project, dev and production; and **"Skip nonce checks" must stay
+  OFF**. A preview on `*.vercel.app` will always print the raw address rather than the app name,
+  because Google will not let anyone claim a domain millions of sites share — that is not a fault,
+  and it is why this could only be finally proven on the real domain.
+  **The add-on is still worth considering for one thing this does not fix**: the magic-link and
+  password-reset EMAILS still carry the Supabase host inside the link, which is a worse place for
+  an anonymous address than any sign-in screen, because reset emails are the most impersonated
+  thing online.
 - **A "book and confirm" button for the scheduler** (Dan, 2026-09-09, in his words: "book and
   confirm button for the scheduler"). Today filling a position is two acts: `FillPositionPicker`
   books somebody as **Not Asked**, and confirming them is a second trip — the chip's menu, or the
@@ -2061,7 +2073,7 @@ act that ships to customers, and any pending migrations go through the steps abo
 
 ## Environment variables
 
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings. `RESEND_API_KEY` (every email). `CRON_SECRET` (Vercel-only, not in `.env.local` — locks down the keepalive cron endpoint; see Notes). **`DEV_EMAIL_TO`** — the one inbox every email goes to while the app is pointed at a NON-production database (see "One door for email" below). Set in `.env.local` and in Vercel's **Preview** scope; production neither has it nor needs it.
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to browser) — in `.env.local` and Vercel project settings. `RESEND_API_KEY` (every email). **`NEXT_PUBLIC_GOOGLE_CLIENT_ID`** — the Google OAuth *web* client id, which is public by design (it is in the page source of every site offering Google sign-in; the SECRET is the private half and lives only in Supabase). Present = Google signs people in ON our page; absent = the old redirect button. Deleting it from Vercel and redeploying is the rollback. `CRON_SECRET` (Vercel-only, not in `.env.local` — locks down the keepalive cron endpoint; see Notes). **`DEV_EMAIL_TO`** — the one inbox every email goes to while the app is pointed at a NON-production database (see "One door for email" below). Set in `.env.local` and in Vercel's **Preview** scope; production neither has it nor needs it.
 
 ## One door for email (2026-09-08)
 
