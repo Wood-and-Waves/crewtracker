@@ -168,7 +168,12 @@ export default function ClockPunch({
         travelOutDay: !!body.travel_out_day,
         travelSource: travelling ? 'crew' : 'staff',
       }))
-      router.refresh()
+      // NO router.refresh() HERE. Nothing else on this screen depends on the
+      // travel state, and a refresh in flight can land in the middle of the
+      // punch somebody makes next — which showed up as a time that saved to the
+      // database and then did not appear on the screen. Paint first, and
+      // refresh only when something else has to catch up.
+      
     } catch {
       setError('No connection. Nothing was saved — try again.')
     }
@@ -374,7 +379,12 @@ export default function ClockPunch({
                   const pmEntered = !!done && done.source !== 'crew'
                   // The app's own eligibility rule, matching the server. Wrap
                   // needs only a Start, so a day with no second meal still ends.
-                  const legal = isEligibleForBatch(row.punches, row.isTravelDay, type, row.absence)
+                  // A TRAVEL DAY NO LONGER BLOCKS A PUNCH — passing the flag
+                  // here disabled every cell on a day somebody had just marked
+                  // as travel, which is precisely the thing that was supposed
+                  // to become possible. The server stopped refusing these; this
+                  // is the same rule on the screen, and the two must agree.
+                  const legal = isEligibleForBatch(row.punches, false, type, row.absence)
                   const tappable = !pmEntered && (legal || !!done)
                   const available = !done && legal && !isNext
 
