@@ -159,13 +159,13 @@ export default function ClockPunch({
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'That did not save.'); setBusy(false); return }
-      // Paint from what the server actually did, not from what was asked.
-      const kind = body.kind as 'travel' | 'travel_in' | 'travel_out' | null
+      // Paint from what the server actually did, not from what was asked: which
+      // of the three columns it set follows this day's own times.
       setRows(prev => prev.map(r => r.timecardId !== row.timecardId ? r : {
         ...r,
-        isTravelDay: kind === 'travel',
-        travelInDay: kind === 'travel_in',
-        travelOutDay: kind === 'travel_out',
+        isTravelDay: !!body.is_travel_day,
+        travelInDay: !!body.travel_in_day,
+        travelOutDay: !!body.travel_out_day,
         travelSource: travelling ? 'crew' : 'staff',
       }))
       router.refresh()
@@ -353,21 +353,17 @@ export default function ClockPunch({
                   </div>
                 </div>
               </div>
-            ) : row.isTravelDay ? (
-              <div className={RULE_MAJOR}>
-                <div className="p-3">
-                  <div className="rounded-field bg-accent/10 py-8 text-center">
-                    <p className="font-display text-xl font-bold uppercase tracking-wide text-accent">
-                      ✈ Travel Day
-                    </p>
-                    <p className="mt-1 px-6 text-sm text-muted">
-                      Nothing to clock today — your hours are handled by your PM.
-                    </p>
-                  </div>
-                </div>
-              </div>
             ) : (
             <div className={RULE_MAJOR}>
+              {travelSet && (
+                // A travel day keeps its punch grid (Dan, 2026-09-17: "make all
+                // travel days able to have time as well"). This used to be a
+                // banner INSTEAD of the grid, which is exactly what stopped a
+                // travel day carrying any time.
+                <p className="border-b border-line px-3 py-2 font-display text-[13px] font-bold uppercase tracking-wide text-accent">
+                  ✈ Travel Day
+                </p>
+              )}
               <div className="grid grid-cols-3 gap-2 p-3">
                 {types.map(type => {
                   const done = row.punches.find(p => p.punch_type === type)
@@ -451,17 +447,14 @@ export default function ClockPunch({
                     Your PM set the travel on this day.
                   </p>
                 ) : offer ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setTravel(row, true)}
-                      className="w-full rounded-field border-2 border-accent px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-ink disabled:opacity-60"
-                    >
-                      {busy ? 'Saving…' : `✈ ${offer.label}`}
-                    </button>
-                    <p className="mt-1 text-center text-xs text-muted">{offer.detail}</p>
-                  </>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setTravel(row, true)}
+                    className="w-full rounded-field border-2 border-accent px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-ink disabled:opacity-60"
+                  >
+                    {busy ? 'Saving…' : `✈ ${offer.label}`}
+                  </button>
                 ) : null}
               </div>
             )}

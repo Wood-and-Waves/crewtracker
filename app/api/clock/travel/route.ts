@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isClockLinkExpired } from '@/lib/clockLinks'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 import { normalizeActivities } from '@/lib/dayActivities'
-import { travelOffer, travelBlockedReason } from '@/lib/crewTravel'
+import { travelOffer, travelFlags, NO_TRAVEL } from '@/lib/crewTravel'
 
 // A crew member saying they travelled, on their own day.
 //
@@ -126,15 +126,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Travel is not offered on that day.' }, { status: 400 })
   }
 
-  if (travelling && offer) {
-    const blocked = travelBlockedReason(offer.kind, (card.punches ?? []).length)
-    if (blocked) return NextResponse.json({ error: blocked }, { status: 400 })
-  }
+  // A TRAVEL DAY MAY CARRY TIME, and which of the three columns gets set
+  // follows whether it does — see lib/crewTravel.ts for why that is a payroll
+  // rule and not a presentation one. Nothing is refused: a day with times on it
+  // becomes travel-and-work rather than being turned away.
+  const flags = travelling
+    ? travelFlags(offer!.direction, (card.punches ?? []).length > 0)
+    : NO_TRAVEL
 
-  const flags = {
-    is_travel_day: travelling && offer?.kind === 'travel',
-    travel_in_day: travelling && offer?.kind === 'travel_in',
-    travel_out_day: travelling && offer?.kind === 'travel_out',
+  const write = {
+    ...flags,
     // Back to the default once nothing is set, so an untouched day never looks
     // like somebody's claim.
     travel_source: travelling ? 'crew' : 'staff',
@@ -143,10 +144,10 @@ export async function POST(request: NextRequest) {
   // Verified write: an UPDATE that matches nothing comes back successful with
   // no rows, which would otherwise read as a save that never happened.
   const { data: saved, error } = await admin
-    .from('timecards').update(flags).eq('id', card.id).select('id')
+    .from('timecards').update(write).eq('id', card.id).select('id')
   if (error || !saved?.length) {
     return NextResponse.json({ error: error?.message ?? 'That did not save.' }, { status: 400 })
   }
 
-  return NextResponse.json({ ok: true, kind: travelling ? offer!.kind : null })
+  return NextResponse.json({ ok: true, ...flags })
 }

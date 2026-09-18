@@ -1,35 +1,46 @@
 import type { Activity } from '@/lib/dayActivities'
 
-// "I travelled today", said once, by the person it happened to.
+// "Travel Day", said once, by the person it happened to.
 //
 // Dan, 2026-09-17: "There is not a way to mark a day as travel in the crews log
-// page. I have to do it as PM." True, and deliberate until now — timecard
-// writes need the edit-timecards permission and crew have no door. The reason
-// given was that flags change pay; but a crew member can already punch in at
-// 6am and out at 11pm, which changes pay a great deal more. A travel day is the
-// same kind of claim about the same day, and the PM still reviews it.
+// page. I have to do it as PM." Timecard writes need the edit-timecards
+// permission and crew had no door. The reason given was that flags change pay —
+// but a crew member can already punch in at 6am and out at 11pm, which changes
+// pay a great deal more. A travel day is the same kind of claim about the same
+// day, and the PM still reviews it.
 //
-// THE CREW MEMBER IS NEVER ASKED WHICH KIND OF TRAVEL IT IS. There are three —
-// a travel day with no work, and travel-in / travel-out, which are hybrids
-// ADDED to the hours actually worked — and a single "did you travel?" button
-// would silently pick one and be wrong about half the time. Dan: "I don't like
-// the question being asked. Is there a simpler way? We already know types of
-// days. Would that help at all?" It does: the app knows what the show is doing
-// that day and where the day sits in this person's own run, which is enough to
-// decide. So there is no question, only a sentence that is already true.
+// THE CREW MEMBER IS ASKED NOTHING AND TOLD NOTHING. One button, two words.
+// Dan again, having seen the first cut: "Can we just simplify and make all
+// travel days able to have time as well? Also, remove the extra 'helping' words
+// below the button. And just change the button to 'Travel Day' with the
+// airplane."
 //
-// lib/dayActivities.ts has reasoned about this since it was written — travel on
-// a load-in day is the trip out, travel on a load-out day is the trip home. All
-// this does is offer that reading to the person doing the travelling.
+// WHICH OF THE THREE COLUMNS GETS SET IS DERIVED, NEVER ASKED. There are three
+// and they are not interchangeable:
+//   · is_travel_day    — travelled, did not work. Paid at the travel rate.
+//   · travel_in_day    — travelled AND worked. ADDED to the hours.
+//   · travel_out_day   — the same, going home.
+// The direction comes from the day (lib/dayActivities.ts has read travel on a
+// load-out day as the trip home since it was written) and from where the day
+// sits in this person's own run. Whether it is a hybrid at all comes from
+// whether the day has times on it.
+//
+// THAT LAST PART IS LOAD-BEARING AND IS NOT A STYLE CHOICE. totalPay returns 0
+// for a day with no start and end punch, and that check sits ABOVE the line
+// that adds travel pay — so a day flagged travel_in_day with no times pays
+// NOTHING, while the same day flagged is_travel_day pays the travel rate.
+// Making every travel day a hybrid, which is the obvious way to let them all
+// carry time, would quietly stop paying people for travel days they did not
+// clock. Deriving it instead means a travel day can carry times without anybody
+// choosing a column, and payroll never changes.
 
-export type TravelKind = 'travel' | 'travel_in' | 'travel_out'
+export type TravelDirection = 'in' | 'out'
 
 export type TravelOffer = {
-  kind: TravelKind
-  /** What the button says. First person, past tense where it has happened. */
+  /** Which way they are going. Only reaches the database when times exist. */
+  direction: TravelDirection
+  /** Two words. There is deliberately nothing under it. */
   label: string
-  /** What it means, one line, under the button. */
-  detail: string
 }
 
 export type TravelDayFacts = {
@@ -37,72 +48,81 @@ export type TravelDayFacts = {
   activities: Activity[]
   /** Is this the first day this person is staffed on the show? */
   firstOfRun: boolean
-  /** Their last? A one-day run is both, and travel out wins — see below. */
+  /** Their last? A one-day run is both, and going home wins. */
   lastOfRun: boolean
 }
 
+export const TRAVEL_LABEL = 'Travel Day'
+
 /**
- * What to offer this person on this day, or null for nothing.
+ * What pressing the button would mean on this day, or null for nothing.
  *
- * NOT EVERY DAY GETS A BUTTON. Offering "I travelled in today" on day three of
- * a five-day run is noise, and a control that is usually wrong teaches people
- * to ignore it. Travel really happens on the days the show calls travel, and on
- * the first and last day of somebody's own run — which is exactly Dan's case
- * from 2026-09-15: the person who could not travel on the show's travel day and
- * arrives on the load-in instead.
+ * NOT EVERY DAY GETS ONE. Offering it on day three of a five-day run is noise,
+ * and a control that is usually wrong teaches people to ignore it. Travel
+ * really happens on the days the show calls travel, and on the first and last
+ * day of somebody's own run — which covers the case this started from: the
+ * person who could not travel on the show's travel day and arrives on the
+ * load-in instead.
  */
 export function travelOffer(facts: TravelDayFacts): TravelOffer | null {
   const { activities, firstOfRun, lastOfRun } = facts
   const has = (a: Activity) => activities.includes(a)
-  const works = has('load_in') || has('rehearsal') || has('show') || has('load_out')
 
-  // A day the show spends travelling, with nothing else on it: the whole day is
-  // the journey, and there is nothing to clock. This is the one kind that
-  // REPLACES the day's work rather than adding to it.
-  if (has('travel') && !works) {
-    return {
-      kind: 'travel',
-      label: 'I travelled today',
-      detail: 'A travel day — no hours to clock.',
-    }
-  }
-
-  // Going home. A load-out day that also travels is the trip home, which is how
-  // the day label has always read it; the last day of their own run is the same
-  // thing from the person's side. Checked BEFORE the trip out, so that on a
-  // one-day show — where both are true — it reads as going home, which is the
-  // half somebody remembers to record.
+  // Going home. Checked first so that a one-day run — first and last at once —
+  // reads as the trip home, which is the half somebody remembers to record.
   if (lastOfRun || (has('travel') && has('load_out') && !has('load_in'))) {
-    return {
-      kind: 'travel_out',
-      label: 'I travel out today',
-      detail: 'Added to the hours you work today.',
-    }
+    return { direction: 'out', label: TRAVEL_LABEL }
   }
-
-  // Coming in. Their first day, whatever the show calls it — which covers
-  // somebody who could not make the show's travel day and came in on the
-  // load-in instead.
+  // Coming in: their first day whatever the show calls it, or any day the show
+  // itself is travelling.
   if (firstOfRun || has('travel')) {
-    return {
-      kind: 'travel_in',
-      label: 'I travelled in today',
-      detail: 'Added to the hours you work today.',
-    }
+    return { direction: 'in', label: TRAVEL_LABEL }
   }
-
   return null
 }
 
 /**
- * Setting a plain travel day on a day that already has punches would throw away
- * hours somebody worked — the screen replaces the punch grid with a banner and
- * payroll stops counting the day. The hybrids are additive, so they are fine
- * alongside punches.
+ * The three columns, from the direction and whether the day has times on it.
  *
- * Returns the refusal to show, or null if it may go ahead.
+ * No times — the day was the journey, so it is a travel day and paid as one.
+ * Times — they travelled AND worked, so the leg is ADDED to those hours. The
+ * person never sees this distinction; it follows their own punches.
  */
-export function travelBlockedReason(kind: TravelKind, punchCount: number): string | null {
-  if (kind !== 'travel' || punchCount === 0) return null
-  return 'You have times on this day already. Ask your PM to change it.'
+export function travelFlags(direction: TravelDirection, hasTimes: boolean): {
+  is_travel_day: boolean
+  travel_in_day: boolean
+  travel_out_day: boolean
+} {
+  return {
+    is_travel_day: !hasTimes,
+    travel_in_day: hasTimes && direction === 'in',
+    travel_out_day: hasTimes && direction === 'out',
+  }
+}
+
+export const NO_TRAVEL = { is_travel_day: false, travel_in_day: false, travel_out_day: false }
+
+/**
+ * A day already marked as travel, whose times have just changed, moving between
+ * "the day was the journey" and "travelled and worked".
+ *
+ * Returns the flags to write, or null when nothing needs to change. This is
+ * what lets a travel day carry time at all: without it, adding the first punch
+ * to a travel day would leave it paid at the travel rate with the hours
+ * ignored, and clearing the last one would leave a hybrid that pays nothing.
+ */
+export function travelFlagsAfterTimeChange(
+  current: { is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean },
+  hasTimes: boolean,
+): { is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean } | null {
+  const marked = current.is_travel_day || current.travel_in_day || current.travel_out_day
+  if (!marked) return null
+  // The direction is already recorded unless this was a plain travel day, in
+  // which case they are arriving somewhere to work — the trip out.
+  const direction: TravelDirection = current.travel_out_day ? 'out' : 'in'
+  const next = travelFlags(direction, hasTimes)
+  const same = next.is_travel_day === current.is_travel_day
+    && next.travel_in_day === current.travel_in_day
+    && next.travel_out_day === current.travel_out_day
+  return same ? null : next
 }
