@@ -247,6 +247,8 @@ app/
   page.tsx                     — public marketing landing page (logged-in visitors redirect straight to /dashboard); styles scoped via page.module.css so they can't leak into the app
   icon.png / favicon.ico       — real app icons (Next's file-based convention, auto-wired)
   join-beta/page.tsx           — "Join the Beta" interest form (emails Dan via Resend, writes nothing to the DB)
+  terms/page.tsx               — PUBLIC terms of service, noindex, no account needed (2026-09-16)
+  privacy/page.tsx             — PUBLIC privacy policy, same shape. Both render lib/legalDocs.ts
   auth/callback/route.ts       — OAuth callback; also finalizes invite acceptance
   auth/reset-password/page.tsx — sets a new password after a recovery-link redirect
   dashboard/
@@ -325,6 +327,9 @@ components/
   CrewHoursList.tsx              — a crew member's own days and hours, the second view on both crew screens (?v=hours)
   CrewNoticesBar.tsx             — the standing version of the same thing on the Scheduling screen: whose days changed and nobody told them, with Tell them / Already told them
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
+  ShowNav.tsx                    — the four screens of a show (tracker / Scheduling / Edit Show / Reports) on every one of them, current marked; replaces the old "← Back to …" line. NOT on the tracker, which already has the cluster
+  GoogleSignIn.tsx               — Google's own account chooser, opened OVER /login so nobody is redirected to the Supabase address. Falls back to the redirect button without NEXT_PUBLIC_GOOGLE_CLIENT_ID or if Google cannot be reached
+  LegalDocument.tsx / LegalShell.tsx — the hand-rolled markdown renderer for the terms and privacy text, and the frame around it (no AppShell: readers have no account)
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
   crewCall.ts   — position counting (summarizeCall/describeCallSize) + day scopes
@@ -352,6 +357,9 @@ lib/
   sendEmail.ts  — the one door every email leaves through; redirects to DEV_EMAIL_TO off production
   siteOrigin.ts — the origin for every link the app EMAILS; fixed per environment, never the Host header
   cn.ts         — tiny classnames-joiner helper used across the ui/ primitives
+  legalDocs.ts  — THE canonical terms and privacy text (TERMS_MD / PRIVACY_MD). The pages
+                  render it and `npm run legal` writes docs/legal/DRAFT-*.md FROM it, so the
+                  page and the file can never drift. Edit here, never the .md
   dayActivities.ts — what the show does each day: five activities, any set; label and tint DERIVED; the legacy day_type mapping (fromLegacy/toLegacy). lib/dayTypes.ts is a shim over it.
   positionDefs.ts — positions "by kind of day": the browser twin of sync_position_slots() (defWants/derivedCounts/describeDefDays), so New Show previews slot counts before the show exists
   pmInviteEmail.ts / pmInvite.ts — the PM invitation and "they declined" emails, and the service-role loader plus acceptPmInvite/declinePmInvite behind the public page; explicit columns, never select('*')
@@ -369,7 +377,7 @@ lib/
                   summarizeUntold (pure) and fetchUntold, behind CrewNoticesBar
   digestEmail.ts  — the evening digest's copy (describeEvent, sendDigestEmail)
   daysChangedEmail.ts — the crew change notice's email (sendDaysChangedEmail)
-proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, /book, /clock + /api/clock, /pm + /api/pm/accept, /api/digest, the keepalive cron, and exactly "/")
+proxy.ts        — auth middleware (protects all routes except /login, /auth/*, /invite/*, /join-beta, /book, /clock + /api/clock, /pm + /api/pm/accept, /api/digest, /terms, /privacy, the keepalive cron, and exactly "/")
 scripts/
   run-sql.mjs   — runs a .sql file; dev by default, --prod for production (npm run db:sql)
   db-dump.mjs   — pg_dump wrapper, always production (npm run db:dump / db:schema)
@@ -377,11 +385,13 @@ scripts/
   db-migrate.mjs— applies sql/migrations/ in order, once each (npm run db:migrate)
   db-seed.mjs   — fills a DEV database with generated fake data (npm run db:seed)
   dev-set-password.mjs — sets a DEV account's password when the generated one is lost
+  legal-export.mts — writes docs/legal/DRAFT-*.md FROM lib/legalDocs.ts (npm run legal).
+                  One direction only: the code is the source, the files are the output
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 561 assertions as of 2026-09-09
-                  (payroll 42 + schedule 298 + clock 90 + rls 131).
+                  helper, no framework. 609 assertions as of 2026-09-17
+                  (payroll 42 + schedule 346 + clock 90 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -654,7 +664,13 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   the design. Do not rebuild it until the earlier steps of that flow exist.
 - **Legal groundwork before the first outside beta tester** (Dan, 2026-09-07: "research IP for
   this site… how do I set up terms to protect myself?"). Not code, but it gates handing out
-  logins. The pieces, in the order that matters: (1) an LLC or similar so a claim lands on the
+  logins.
+  **BOTH DOCUMENTS ARE NOW READABLE PAGES** — `/terms` and `/privacy`, live on crewtracker.app
+  since 2026-09-17, signed-out and `noindex`, nothing linking to them. `lib/legalDocs.ts` is the
+  source and `npm run legal` regenerates the .md files FROM it, so the page and the file cannot
+  drift; edit the TypeScript, never the markdown. They still open with a DRAFT — NOT IN FORCE
+  banner and still carry `⟨blanks⟩` (governing-law state, notice periods, contact address,
+  minimum age), so publishing them is not the same as adopting them. The pieces, in the order that matters: (1) an LLC or similar so a claim lands on the
   company, not on Dan; (2) **Terms of Service** — DRAFTED,
   `docs/legal/DRAFT-terms-of-service.md`: the beta clause (as-is, may change or end), who owns
   what, and the one that carries the real exposure — **the app calculates, the customer pays
@@ -717,6 +733,23 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   shape. Never per-accept emails (three schedulers × thirty crew = ninety emails per show)
   and not browser push (a service worker + permission prompts + a key: a project, not an
   evening). Roughly one evening, inline.
+- **CREW MARKING THEIR OWN TRAVEL WAS BUILT AND ROLLED BACK (2026-09-17). Read this before
+  building it again.** Dan asked for it ("There is not a way to mark a day as travel in the crews
+  log page"), it was built — one button, the kind of travel DERIVED from what the show is doing
+  that day plus where the day sits in that person's own run, so nobody is asked a question — and
+  then he stopped it himself: *"I am worried someone would click travel day, then enter the time
+  they were traveling and cause a double dip situation by accident."*
+  **He is right, and it is structural.** Travel pay is a FLAT amount (half or full day); the punch
+  clock is paid by the hour. A day carrying both invites somebody to clock their drive and be paid
+  for the trip twice. No wording fixes that.
+  **The trap underneath, which cost real time to find**: `totalPay` returns 0 for a day with no
+  start and end punch, and that check sits ABOVE the line adding travel pay — so making every
+  travel day the travel-AND-work kind (the obvious way to let them all carry time) would silently
+  stop paying people for travel days they did not clock.
+  **If it comes back, the shape that works** is letting the SHOW's day decide whether there is a
+  clock at all — none on a day that is only travel — which makes the mistake impossible rather
+  than discouraged. For now the answer is the one Dan chose: crew record times, the PM records
+  travel, which is what the app has always done. Reverted in bce9c7f; the code is in git history.
 - **ONE PERSON'S DAY IS NOT THE SHOW'S DAY — travel, on the Scheduling screen** (Dan,
   2026-09-15: *"What if someone could not travel in on the travel day? So the next day because
   travel just for them. How do we depict that in the schedule screen? The change is easy in the
@@ -800,6 +833,22 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   their yes". It could instead mean "book them and send the request in one press", which is a
   different button (book + email, leaving them Asked) and worth having too — possibly both, as a
   small menu on the row rather than one more button.
+- **THE SHOW-WIDE ROOM WAS BUILT AND ROLLED BACK (2026-09-17).** Dan picked option 3 below (a
+  room FLAGGED as being the whole show), it was built and verified end to end — migration 0041,
+  `lib/showWideRoom.ts`, an option on Add Room, ordering above the rooms — and then he stopped it
+  after seeing it: *"Why do I need to schedule a production manager and then put them in as a
+  person to have time tracked. Why would that not be connected?"*
+  **That question is the real work, and it is not about rooms.** Naming a PM points at a LOGIN;
+  a timecard points at a DIRECTORY ENTRY; the two are linked only by matching email inside one
+  company (0028). Checked on production: every named PM has ZERO directory entries and ZERO
+  timecards, so the two halves have never once been connected. Some of that separation is right —
+  not every PM is on your payroll, and naming somebody should not quietly add cost to a show — but
+  making a person say it twice, in two places, with nothing joining them, is not.
+  **The shape to build when this returns**: offer the second step at the moment of the first
+  ("Also put Ray on the sheet?"), creating and linking a directory entry if he has none, both
+  directions, offered and never automatic — the crew-change-notice pattern. The missing piece
+  underneath is that a PM login with no directory entry has no way to get one.
+  Reverted in 561b793; the code and the migration are in git history.
 - **A PM WORKS AND GETS PAID, AND HAS NOWHERE TO STAND** (Dan, 2026-09-15: "Production
   manager doesnt always belong to a room, but needs to track time. How can we differentiate if
   they are over all and not in a room, and if they are production manager over the 'Plenary'
@@ -1136,6 +1185,17 @@ Other things that are load-bearing and were each verified:
   required field turns a forgotten column into a compile error.
 - **POST only**, both routes, and both allowlisted in `proxy.ts` (`/clock`, `/api/clock`).
   Slack unfurls every link pasted into a channel, and these links exist to be pasted there.
+- **THE LOADER IS THREE WAITS, NOT EIGHT** (2026-09-17). Dan: "Why would it take the crew
+  timecards so long to load on their individual links?" Measured on production before touching
+  anything: a static page answers in ~0.2s of server time, this page with a BAD token — one
+  query, then the error card — in ~0.6s, and a real link in ~1.1s. So half the wait was ours.
+  It was eight queries, seven of them waiting on the one before, on the slowest connection any
+  screen in this app runs on. The link row already carries `show_id` and `organization_id`, so
+  the show, the organization, the work days and the crew member's name go out in ONE batch; the
+  days query returns ids as well as dates, so the chosen day needs no second lookup; and the
+  punches come back EMBEDDED in the timecards query. 1030ms → 490ms measured with the app's own
+  loader against dev, and ~1.4s → ~0.6s warm on the live site. The signed-in crew path got the
+  same treatment. Anything added here goes in an existing batch rather than after it.
 - Service role means the `day_rate` column lockdown does not apply. `lib/clockSession.ts` uses
   explicit column lists and **never `select('*')`** — the same convention, and the same lack of
   a lint rule, as `lib/bookingInvite.ts`.
@@ -1498,8 +1558,8 @@ named, twice.
 
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
-existing PM-invite and booking-message preview scripts. Test count: payroll 42 + schedule 298 +
-clock 72 + rls 131 = 543 assertions as of 2026-09-09.
+existing PM-invite and booking-message preview scripts. Test count as of 2026-09-17:
+payroll 42 + schedule 346 + clock 90 + rls 131 = 609 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
