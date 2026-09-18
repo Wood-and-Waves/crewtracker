@@ -15,7 +15,6 @@
 // must: Slack does not render markdown links, so a bare URL is the only format
 // that survives the paste.
 
-import { travelOffer, travelFlags, travelFlagsAfterTimeChange, NO_TRAVEL } from '@/lib/crewTravel'
 import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow, pickShowDay, stepDays } from '../../lib/clockLinks.ts'
 import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, type Punch } from '../../lib/punches.ts'
 import { punchRefusal } from '../../lib/clockPunch.ts'
@@ -246,14 +245,7 @@ console.log('\n=== punchRefusal: the one crew-punch decision both routes share =
   check('a fresh start is allowed', punchRefusal([], false, null, 'start', undefined), null)
   check('M1 In without M1 Out is refused (the two-check rule)',
     typeof punchRefusal(started, false, null, 'meal_in', undefined), 'string')
-  // A TRAVEL DAY NO LONGER REFUSES ANYTHING (Dan, 2026-09-17: "make all travel
-  // days able to have time as well"). It used to replace the punch grid with a
-  // banner and turn every punch away; now the day carries the time and the
-  // FLAGS follow it — a travel day with times becomes travel-and-work, which is
-  // the only shape payroll pays for both the trip and the hours.
-  check('a travel day takes punches like any other', punchRefusal([], true, null, 'start', undefined), null)
-  check('and still applies the order rule on one',
-    typeof punchRefusal(started, true, null, 'meal_in', undefined), 'string')
+  check('a travel day refuses everything', typeof punchRefusal([], true, null, 'start', undefined), 'string')
   check('a cancelled day refuses everything', typeof punchRefusal([], false, 'cancelled', 'start', undefined), 'string')
   check('a no-show day refuses everything', typeof punchRefusal([], false, 'no_show', 'start', undefined), 'string')
   check('correcting your own punch skips the order rule',
@@ -384,64 +376,6 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   check('the org rounding is applied, not the raw clock',
     summarizeCrewHours([{ date: '2026-10-06', room: 'R', role: null, timecard: card({}, odd) }], RULES, 15, fmt)
       .days[0].hours, 9.75)
-}
-
-// ---- "Travel Day", decided from the day and from their own times ----------
-{
-  const offer = (activities: any[], firstOfRun = false, lastOfRun = false) =>
-    travelOffer({ activities: activities as any, firstOfRun, lastOfRun })
-
-  // ONE BUTTON, TWO WORDS. The crew member is never asked which kind it is.
-  check('the button says the same thing on every day it appears',
-    [offer(['travel'])?.label, offer(['travel', 'load_in'])?.label, offer(['show'], false, true)?.label],
-    ['Travel Day', 'Travel Day', 'Travel Day'])
-
-  // Direction still comes from the day, it just never reaches the crew member.
-  check('travel on a load-in day is the trip out', offer(['travel', 'load_in'])?.direction, 'in')
-  check('travel on a load-out day is the trip home', offer(['travel', 'load_out'])?.direction, 'out')
-  check('their first day is the trip in even with no travel on the show day',
-    offer(['load_in'], true, false)?.direction, 'in')
-  check('their last day is the trip home', offer(['show', 'load_out'], false, true)?.direction, 'out')
-  check('a one-day run reads as going home', offer(['show'], true, true)?.direction, 'out')
-
-  // A control that is usually wrong teaches people to ignore it.
-  check('the middle of a run is offered nothing', offer(['show'], false, false), null)
-  check('a plain load-in mid-run is offered nothing',
-    offer(['load_in', 'rehearsal'], false, false), null)
-
-  // WHICH COLUMN GETS SET FOLLOWS THEIR OWN TIMES, and this is what stops the
-  // simplification becoming a pay bug: totalPay returns 0 for a day with no
-  // start and end punch, ABOVE the line that adds travel pay — so a travel leg
-  // on a day with no times would pay nothing at all.
-  check('a travel day with no times is a travel day',
-    travelFlags('in', false),
-    { is_travel_day: true, travel_in_day: false, travel_out_day: false })
-  check('a travel day with times is the trip out, added to the hours',
-    travelFlags('in', true),
-    { is_travel_day: false, travel_in_day: true, travel_out_day: false })
-  check('going home, with times',
-    travelFlags('out', true),
-    { is_travel_day: false, travel_in_day: false, travel_out_day: true })
-  check('going home, with none, is still just a travel day',
-    travelFlags('out', false),
-    { is_travel_day: true, travel_in_day: false, travel_out_day: false })
-
-  // The same rule again when the TIMES change rather than the button: adding
-  // the first punch to a travel day, or clearing the last one.
-  const pure = { is_travel_day: true, travel_in_day: false, travel_out_day: false }
-  const legOut = { is_travel_day: false, travel_in_day: false, travel_out_day: true }
-  check('the first time on a travel day makes it travel-and-work',
-    travelFlagsAfterTimeChange(pure, true),
-    { is_travel_day: false, travel_in_day: true, travel_out_day: false })
-  check('clearing the last time makes it a travel day again',
-    travelFlagsAfterTimeChange(legOut, false),
-    { is_travel_day: true, travel_in_day: false, travel_out_day: false })
-  check('a leg keeps its direction when times come and go',
-    travelFlagsAfterTimeChange(travelFlagsAfterTimeChange(legOut, false)!, true)?.travel_in_day, true)
-  check('nothing to do when the day is not marked as travel',
-    travelFlagsAfterTimeChange(NO_TRAVEL, true), null)
-  check('nothing to do when it already matches',
-    travelFlagsAfterTimeChange(legOut, true), null)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

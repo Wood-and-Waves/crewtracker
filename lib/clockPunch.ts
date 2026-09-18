@@ -4,7 +4,6 @@ import {
   roundWallTime, clearBlockedReason, type Punch, type PunchType,
 } from '@/lib/punches'
 import type { Absence } from '@/lib/payroll'
-import { travelFlagsAfterTimeChange } from '@/lib/crewTravel'
 import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
 
 // Every rule of a crew member's own punch, in ONE place, used by both
@@ -46,10 +45,7 @@ export function punchRefusal(
 ): string | null {
   if (absence === 'cancelled') return 'That day was cancelled, so there are no punches to record. Talk to your PM if that is wrong.'
   if (absence === 'no_show') return 'That day is marked as a no-show. Talk to your PM if that is wrong.'
-  // A TRAVEL DAY MAY CARRY TIME (Dan, 2026-09-17: "make all travel days able to
-  // have time as well"). Punching on one is not a refusal any more — the day
-  // becomes travel-AND-work instead, which is a change to the flags rather than
-  // to the punch, and is made below once the punch has landed.
+  if (isTravelDay) return 'That day is marked as a travel day, so there are no punches to record.'
   // A punch the PM entered is theirs. Crew may fix their OWN mistake but must
   // never overwrite a correction — which is exactly what the source column is for.
   if (mine && mine.source !== 'crew') {
@@ -61,7 +57,7 @@ export function punchRefusal(
   // separate rule and isEligibleForBatch is where this app keeps it (the
   // two-check rule, CLAUDE.md). Skipped when correcting an existing punch:
   // chronology is the right judge then.
-  if (!mine && !isEligibleForBatch(all, false, type, absence)) {
+  if (!mine && !isEligibleForBatch(all, isTravelDay, type, absence)) {
     const requirement: PunchType | null =
       type === 'start' ? null
       : type === 'end' ? 'start'
@@ -74,25 +70,6 @@ export function punchRefusal(
     return `${why} Ask your PM if that’s not right.`
   }
   return null
-}
-
-/**
- * A travel day whose times have just changed moves between "the day was the
- * journey" (paid at the travel rate) and "travelled and worked" (the leg added
- * to the hours). Best effort: the punch has already landed, so a failure here
- * must never make the punch look refused — it is logged and left for the PM.
- */
-async function followTimes(
-  admin: SupabaseClient<any>,
-  timecardId: string,
-  current: { is_travel_day: boolean; travel_in_day: boolean; travel_out_day: boolean },
-) {
-  const { count } = await admin
-    .from('punches').select('id', { count: 'exact', head: true }).eq('timecard_id', timecardId)
-  const next = travelFlagsAfterTimeChange(current, (count ?? 0) > 0)
-  if (!next) return
-  const { error } = await admin.from('timecards').update(next).eq('id', timecardId)
-  if (error) console.error('travel flags did not follow the times', timecardId, error.message)
 }
 
 export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchRequest): Promise<CrewPunchResult> {
@@ -115,7 +92,7 @@ export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchReques
   // supplies the date, so the caller never gets to name one.
   const { data: timecard } = await admin
     .from('timecards')
-    .select('id, crew_member_id, is_travel_day, travel_in_day, travel_out_day, absence, rooms!inner ( work_days!inner ( date, show_id ) )')
+    .select('id, crew_member_id, is_travel_day, absence, rooms!inner ( work_days!inner ( date, show_id ) )')
     .eq('id', timecardId)
     .maybeSingle()
   const room = Array.isArray((timecard as any)?.rooms) ? (timecard as any).rooms[0] : (timecard as any)?.rooms
@@ -145,7 +122,6 @@ export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchReques
     if (error || !gone || gone.length === 0) {
       return refuse(500, error?.message ?? 'That did not clear. Try again, or tell your PM.')
     }
-    await followTimes(admin, timecardId, timecard)
     return { status: 200, body: { ok: true, cleared: type } }
   }
 
@@ -186,6 +162,5 @@ export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchReques
   if (written.error || !written.data || written.data.length === 0) {
     return refuse(500, written.error?.message ?? 'That did not save. Try again, or tell your PM.')
   }
-  await followTimes(admin, timecardId, timecard)
   return { status: 200, body: { ok: true, punchType: type, punchedAt: now.toISOString() } }
 }
