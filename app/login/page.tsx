@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { readableAuthError } from '@/lib/authError'
 import { useEffect, useState } from 'react'
 import Logo from '@/components/Logo'
+import GoogleSignIn from '@/components/GoogleSignIn'
 
 const inputCls =
   'w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
@@ -17,6 +18,13 @@ export default function LoginPage() {
   // Only the magic-link path reaches this now; signup was removed.
   const [magicSent, setMagicSent] = useState(false)
   const [resetSent, setResetSent] = useState(false)
+  // Google's own sign-in happens ON THIS PAGE when a client id is configured,
+  // so the person never leaves crewtracker.app and Google prints our name
+  // rather than the Supabase project's address. Without the id — or if Google
+  // cannot be reached — the original redirect button below takes over, because
+  // this is the front door and it must always have a way through.
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+  const [googleOnPage, setGoogleOnPage] = useState(!!googleClientId)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -143,6 +151,13 @@ export default function LoginPage() {
         </div>
 
         {/* Google SSO */}
+        {googleOnPage && googleClientId ? (
+          <GoogleSignIn
+            clientId={googleClientId}
+            onError={setError}
+            onUnavailable={() => setGoogleOnPage(false)}
+          />
+        ) : (
         <button
           onClick={signInWithGoogle}
           className="flex w-full items-center justify-center gap-3 rounded-field bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 mb-6"
@@ -155,6 +170,7 @@ export default function LoginPage() {
           </svg>
           Continue with Google
         </button>
+        )}
 
         <div className="flex items-center gap-3 mb-6">
           <div className="h-px flex-1 bg-line" />
