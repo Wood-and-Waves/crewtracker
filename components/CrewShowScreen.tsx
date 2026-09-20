@@ -78,6 +78,7 @@ export default async function CrewShowScreen({
       days={view.days}
       assignments={view.me.assignments}
       hoursHref={`/dashboard/shows/${showId}?v=hours`}
+      contact={view.contact}
     />
   )
 }

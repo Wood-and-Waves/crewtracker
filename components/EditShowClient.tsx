@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { applyRulesetChange, pickRulesetValues } from '@/lib/ruleset'
 import { SHOW_TIMEZONES } from '@/lib/timezones'
+import { formatPhone } from '@/lib/phone'
 import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
@@ -119,6 +120,8 @@ export default function EditShowClient({
   const [name, setName] = useState(show.name)
   const [venue, setVenue] = useState(show.venue || '')
   const [cityState, setCityState] = useState(show.city_state || '')
+  const [contactName, setContactName] = useState(show.onsite_contact_name || '')
+  const [contactPhone, setContactPhone] = useState(show.onsite_contact_phone || '')
   const [clientCompany, setClientCompany] = useState(show.client_company || '')
   const [jobNumber, setJobNumber] = useState(show.job_number || '')
   const [showNotes, setShowNotes] = useState(show.show_notes || '')
@@ -429,6 +432,42 @@ export default function EditShowClient({
             value={cityState}
             onChange={e => setCityState(e.target.value)}
             onBlur={() => saveTextField('city_state', cityState, show.city_state)}
+            className={inputCls}
+          />
+        </section>
+
+        {/* WHO THE CREW RING. Sits with the venue because it is the same kind
+            of fact — where the show is and who is standing there — and it is
+            the crew clock screen that renders it, as tappable Call and Text.
+            Per show rather than per person (Dan, 2026-09-20): the useful
+            number is whoever is on site that week, which is not always the
+            show's app-level PM. Nothing shows to the crew without a NUMBER. */}
+        <section className="mb-6">
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">On-Site Contact (Optional)</p>
+          <p className="mb-3 text-xs text-muted">
+            Shown to the crew on their clock-in screen, with Call and Text buttons. Needs a
+            number to appear.
+          </p>
+          <input
+            placeholder="Name (e.g. Dan Smith)"
+            value={contactName}
+            onChange={e => setContactName(e.target.value)}
+            onBlur={() => saveTextField('onsite_contact_name', contactName, show.onsite_contact_name)}
+            className={`${inputCls} mb-3`}
+          />
+          <input
+            type="tel"
+            inputMode="tel"
+            placeholder="Mobile (e.g. 214-555-0148)"
+            value={contactPhone}
+            onChange={e => setContactPhone(e.target.value)}
+            onBlur={() => {
+              // Normalised on save the way the crew directory does it, so one
+              // show does not read "2145550148" and the next "(214) 555-0148".
+              const tidy = formatPhone(contactPhone)
+              setContactPhone(tidy)
+              saveTextField('onsite_contact_phone', tidy, show.onsite_contact_phone)
+            }}
             className={inputCls}
           />
         </section>

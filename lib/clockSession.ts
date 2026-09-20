@@ -71,6 +71,15 @@ export type ClockView = {
   me: { crewMemberId: string; name: string; assignments: ClockAssignment[] } | null
   /** Venue links only: today's rooms and who is in them, names only. */
   roster: { room: string; people: { crewMemberId: string; name: string }[] }[]
+  /**
+   * Who to ring on this show, if anybody was named. Per SHOW rather than per
+   * person (Dan's call, 2026-09-20): the number a crew member needs is whoever
+   * is on site that week, which is not always the app-level PM.
+   *
+   * Null when no phone was entered — a name with no number is not a contact,
+   * and a block that cannot be tapped is worse than no block.
+   */
+  contact: { name: string; phone: string } | null
 }
 
 /**
@@ -83,6 +92,20 @@ export type ClockView = {
  * control to the phone's clock; deriving it from UTC is the bug this app has
  * already shipped twice.
  */
+/**
+ * The show's on-site contact, or null.
+ *
+ * A NUMBER IS WHAT MAKES IT A CONTACT. With a name and no phone there is
+ * nothing to tap, and a block that looks tappable and is not is worse than no
+ * block at all — so the phone is what decides, and the name falls back to a
+ * plain word when only the number was entered.
+ */
+function onsiteContact(show: { onsite_contact_name?: string | null; onsite_contact_phone?: string | null }) {
+  const phone = (show.onsite_contact_phone ?? '').trim()
+  if (!phone) return null
+  return { name: (show.onsite_contact_name ?? '').trim() || 'Your PM', phone }
+}
+
 export async function loadClockView(
   token: string,
   requestedDate?: string,
@@ -111,7 +134,7 @@ export async function loadClockView(
     // Explicit columns: shows carries show_notes, job_number and
     // client_company, none of which are the crew member's business.
     admin.from('shows')
-      .select('id, name, venue, city_state, timezone_identifier, finalized_at, end_date')
+      .select('id, name, venue, city_state, timezone_identifier, finalized_at, end_date, onsite_contact_name, onsite_contact_phone')
       .eq('id', link.show_id).maybeSingle(),
     admin.from('organizations')
       .select('name, timecard_rounding_minutes').eq('id', link.organization_id).maybeSingle(),
@@ -148,6 +171,7 @@ export async function loadClockView(
     // Derived from the show, never from link.expires_at — see isClockLinkExpired.
     expired: isClockLinkExpired(show.end_date, timeZone),
     revoked: !!link.revoked_at,
+    contact: onsiteContact(show),
   }
 
   // Read in the batch above, but checked here: a personal link must still know
@@ -284,7 +308,7 @@ export async function loadClockViewForProfile(
   // note there. Two waits instead of four.
   const [{ data: show }, { data: allDays }] = await Promise.all([
     admin.from('shows')
-      .select('id, name, venue, city_state, organization_id, timezone_identifier, finalized_at, end_date')
+      .select('id, name, venue, city_state, organization_id, timezone_identifier, finalized_at, end_date, onsite_contact_name, onsite_contact_phone')
       .eq('id', showId).maybeSingle(),
     admin.from('work_days').select('id, date').eq('show_id', showId).order('date'),
   ])
@@ -318,6 +342,7 @@ export async function loadClockViewForProfile(
     expired: false,
     revoked: false,
     roster: [] as ClockView['roster'],
+    contact: onsiteContact(show),
   }
   const me = { crewMemberId: crew.id, name: crew.full_name, assignments: [] as ClockAssignment[] }
 

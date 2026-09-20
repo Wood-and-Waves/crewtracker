@@ -13,6 +13,7 @@ import {
 import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 import Select from '@/components/ui/Select'
+import OnsiteContact from '@/components/OnsiteContact'
 import type { ClockAssignment } from '@/lib/clockSession'
 
 // Somebody's own day. Built to read as the tracker, because it is the same job.
@@ -36,7 +37,7 @@ import type { ClockAssignment } from '@/lib/clockSession'
 
 export default function ClockPunch({
   token, showId, endpoint = '/api/clock/punch', showName, venue, crewName, timeZone, roundingMinutes,
-  selectedDate, today, days, assignments, hoursHref,
+  selectedDate, today, days, assignments, hoursHref, contact,
 }: {
   /** The link's token. Absent when reached from a login (Section 3), which
    *  sends `showId` to /api/clock/punch-me instead. */
@@ -61,6 +62,8 @@ export default function ClockPunch({
   /** Their whole run with hours — the screen's second view (Dan, 2026-09-08).
    *  Absent on the venue-QR path, where nobody has been identified yet. */
   hoursHref?: string
+  /** The show's on-site contact, when one was entered. Null renders nothing. */
+  contact?: { name: string; phone: string } | null
 }) {
   const router = useRouter()
   const [rows, setRows] = useState(assignments)
@@ -380,6 +383,10 @@ export default function ClockPunch({
       <p className="px-4 text-center text-xs text-muted">
         Bookmark this page — it&apos;s yours for the whole show.
       </p>
+
+      {/* Below the punches, not above them: clocking in is why somebody opened
+          this, and ringing the PM is what they do when that has not worked. */}
+      {contact && <OnsiteContact name={contact.name} phone={contact.phone} />}
 
       {/* The tracker's editor, minus the date field. A true overlay, which is
           one of the two things Open Paper still lets keep a box. */}

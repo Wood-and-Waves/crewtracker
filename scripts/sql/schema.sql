@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vRiZr0JdlcLsTQ7XCIWUcw1RH5aG9LGVKvDNloDodCTvGWzsau3S6kNKYiKYxbE
+\restrict zUgH1GuY4vsy6w1wmGig9BT72yvKiXreOMetldzQP2FavcN2bovUUt5WfJQ8hrt
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -1682,7 +1682,9 @@ CREATE TABLE "public"."shows" (
     "pm_accepted_at" timestamp with time zone,
     "sent_to_scheduling_at" timestamp with time zone,
     "sent_to_scheduling_by" "uuid",
-    "ready_email_sent_at" timestamp with time zone
+    "ready_email_sent_at" timestamp with time zone,
+    "onsite_contact_name" "text",
+    "onsite_contact_phone" "text"
 );
 
 
@@ -1691,6 +1693,20 @@ CREATE TABLE "public"."shows" (
 --
 
 COMMENT ON COLUMN "public"."shows"."finalized_at" IS 'Set when the Final Report is sent. Non-null means times are locked.';
+
+
+--
+-- Name: COLUMN "shows"."onsite_contact_name"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."shows"."onsite_contact_name" IS 'Who the crew ring on this show. Shown on the crew clock screen; falls back to nothing.';
+
+
+--
+-- Name: COLUMN "shows"."onsite_contact_phone"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."shows"."onsite_contact_phone" IS 'Their mobile, as typed. Rendered as tel: and sms: links on the crew clock screen.';
 
 
 --
@@ -4542,5 +4558,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vRiZr0JdlcLsTQ7XCIWUcw1RH5aG9LGVKvDNloDodCTvGWzsau3S6kNKYiKYxbE
+\unrestrict zUgH1GuY4vsy6w1wmGig9BT72yvKiXreOMetldzQP2FavcN2bovUUt5WfJQ8hrt
 

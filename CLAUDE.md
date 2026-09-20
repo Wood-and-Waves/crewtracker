@@ -329,6 +329,8 @@ components/
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
   ShowNav.tsx                    — the four screens of a show (tracker / Scheduling / Edit Show / Reports) on every one of them, current marked; replaces the old "← Back to …" line. NOT on the tracker, which already has the cluster
   GoogleSignIn.tsx               — Google's own account chooser, opened OVER /login so nobody is redirected to the Supabase address. Falls back to the redirect button without NEXT_PUBLIC_GOOGLE_CLIENT_ID or if Google cannot be reached
+  OnsiteContact.tsx              — who the crew ring, on their own clock screen: name, number, and
+                                  real `tel:`/`sms:` targets. Plain links, no JS, so they work before hydration
   LegalDocument.tsx / LegalShell.tsx — the hand-rolled markdown renderer for the terms and privacy text, and the frame around it (no AppShell: readers have no account)
   ArchiveShowButton.tsx / PersonalSettingsClient.tsx / OrgSettingsClient.tsx / AVRolesEditor.tsx — Settings goes two-column on desktop
 lib/
@@ -474,14 +476,18 @@ scripts/
                        which under the caller's own RLS matched only their own
                        row — so a non-admin could read exactly one profile,
                        their own. Permissions stay admin-only. No rows.
+                       · 0041 shows.onsite_contact_name / _phone: who the crew
+                       ring, shown as tappable Call and Text on the crew clock.
+                       `shows` is TABLE-granted so the columns inherit their
+                       grants — no column grant, unlike timecards. No rows.
                        · 0037 sync_position_slots() makes a slot's role follow its definition;
                        deleting a definition drops its UNFILLED slots first (BEFORE DELETE
                        trigger — the FK's set-null used to orphan them as "legacy" slots the
                        sync then ignored, so a removed position kept counting). No rows.
                        ALL applied to BOTH databases (0018–0020 shipped
                        2026-09-05, 0021–0027 2026-09-06, 0028–0037 2026-09-07,
-                       0038–0039 2026-09-08, 0040 2026-09-09). Nothing is
-                       dev-only.
+                       0038–0039 2026-09-08, 0040 2026-09-09, 0041
+                       2026-09-20). Nothing is dev-only.
     applied/         — the 24 pre-migration-system scripts. Historical reference; never re-run.
     checks/          — read-only diagnostics (integrity sweep, policy checks). Safe to run anytime.
                        rls-cost.sql measures the hottest read and the punch UPDATE plan AS A
@@ -495,7 +501,7 @@ scripts/
 - `profiles` — id (= auth.uid), organization_id, full_name, email, base_role, use_24_hour_time (bool), shoulder_surfer_mode (bool), + permission booleans
 - `subscriptions` — one per org, auto-created via `handle_new_organization()` trigger
 - `invitations` — token-based invites; `token`/`expires_at` have DB defaults
-- `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to); the scheduling-queue trio (0035): `sent_to_scheduling_at` / `sent_to_scheduling_by` (send-to-scheduling stamp — nobody OWNS a sent show, every member with `can_manage_scheduling` sees it) and `ready_email_sent_at` (the ready-email claim, see piece C below). `scheduler_id`, `call_approved_at`, `call_approved_by` are **history** — the single-scheduler handoff they supported is gone; nothing reads or writes them since 0035, they're kept only because 0035 backfills `sent_to_scheduling_at` FROM `call_approved_at` and dropping the source columns first would lose that.
+- `shows` — id, organization_id, name, venue, start_date, end_date, timezone_identifier (default America/Chicago), archived (bool), client_company, job_number, show_notes, show_financials (bool, gates $ visibility), city_state, created_by, plus the Final Report sign-off trio: `finalized_at` (non-null = times locked), `finalized_by`, `final_report_recipients` (audit snapshot of who it went to); the scheduling-queue trio (0035): `sent_to_scheduling_at` / `sent_to_scheduling_by` (send-to-scheduling stamp — nobody OWNS a sent show, every member with `can_manage_scheduling` sees it) and `ready_email_sent_at` (the ready-email claim, see piece C below). `onsite_contact_name` / `onsite_contact_phone` (0041) are who the crew ring on this show, rendered as tappable Call/Text on the crew clock — per SHOW on purpose, because the useful number is whoever is on site that week and that is not always `pm_profile_id`, which is about ACCESS. `scheduler_id`, `call_approved_at`, `call_approved_by` are **history** — the single-scheduler handoff they supported is gone; nothing reads or writes them since 0035, they're kept only because 0035 backfills `sent_to_scheduling_at` FROM `call_approved_at` and dropping the source columns first would lose that.
 - `show_assignments` — links users to specific shows (the PM-side access list); carries a denormalized `organization_id` (see Past incidents); `source` (`manual|pm`, 0034) says whether an admin granted it by hand or the person accepted a PM invitation — replacing the PM deletes only `pm` rows
 - `staffing_events` — (0035) the digest's diary: show_id, organization_id (trigger-filled, same shape as `show_assignments`), at, kind (`booked|accepted|declined|released|days_changed|moved|extended`), crew_member_id/name, role, days, actor, sent_at. Select for anyone who can see the show; insert needs `can_edit_timecards` too (0036 — a staffing event is a staffing act); only the digest cron (service role) marks `sent_at`.
 - `position_defs` — (0034) show_id, room_name, role, count 1–99, day_kind (`all|show|load|custom`), custom_dates, sort_order. "2 stagehands, Ballroom, load-in and load-out". `sync_position_slots(show_id)` derives `crew_call_positions` rows from these against `work_days.activities`: tops up wanted room-days, deletes only UNFILLED extras, never a booked person. Filled slots whose day no longer fits are the `position_slot_flags` view. `crew_call_positions.position_def_id` (null = a legacy or one-off slot the sync never touches).
@@ -1090,6 +1096,19 @@ pinned by tests in `scripts/test/clock.mts`. The database enforces neither.
 ignores that control's `step` and offers every minute, which defeats the grid — and the same
 control's intrinsic min-width overran its own dialog on a real phone. Offering only grid minutes
 makes the rule structural instead of a correction applied afterwards.
+
+**WHO THE CREW RING IS ON THEIR OWN SCREEN** (0041, 2026-09-20). Dan: *"What if we added a PM
+contact information on the individual time card. That could be helpful. Mobile tapable."* Somebody
+looking at a punch that will not take had no way from that screen to reach anybody.
+**PER SHOW, not per person** — his call when asked, and the right one: the number a crew member
+needs is whoever is ON SITE that week, which is not always `shows.pm_profile_id` (that field is
+about ACCESS and an invitation). It also means a production office can put the floor lead's mobile
+on the sheet without giving them a login. `profiles` has no phone column and did not gain one.
+**A NUMBER IS WHAT MAKES IT A CONTACT**: with a name and no phone there is nothing to tap, so the
+phone decides whether the block renders at all, and the name falls back to "Your PM". The href is
+stripped to digits (`tel:2145550148`) because a formatted one is not reliably dialled; the display
+keeps `formatPhone`. Plain `<a>` links, no JavaScript, so they work on the server-rendered page
+before hydration — which matters on venue wifi, the one place this screen is used.
 
 **AND SO DOES THE VENUE CODE** (2026-09-20). `pickShowDay` fixed the PAGE in 2026-09-08 and
 `/api/clock/identify` was left demanding a work day dated strictly today — so scanning the QR the
@@ -2055,7 +2074,14 @@ like everything else.
 
 ## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
 
-**Latest run: 2026-09-09, 0040 (crew_told_at).** Backup
+**Latest run: 2026-09-20, 0041 (onsite contact).** Backup
+(`backups/crewtracker-2026-09-20T22-11-56.sql`) → `db:migrate --prod` → `db:grants`
+(header-only diff, which is the proof `shows` is table-granted and the new columns needed no
+column grant) → `db:schema` (the two columns and their comments, nothing else) → commit both →
+merge `scheduling` → `main`. Writes no existing rows: both columns are nullable and a show
+without them renders no contact block.
+
+**Previous run: 2026-09-09, 0040 (crew_told_at).** Backup
 (`backups/crewtracker-2026-09-09T20-05-07.sql`) → `db:migrate --prod` →
 `db:grants` (header-only diff: the column needs no grant, `staffing_events` is
 table-granted) → `db:schema` → commit both → merge `scheduling` → `main`.

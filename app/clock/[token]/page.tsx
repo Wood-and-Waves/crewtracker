@@ -198,6 +198,7 @@ export default async function ClockPage({
         assignments={view.me?.assignments ?? []}
         // Personal links only: a venue QR has not identified anybody yet.
         hoursHref={view.me ? `/clock/${view.token}?v=hours` : undefined}
+        contact={view.contact}
       />
     </Working>
   )
