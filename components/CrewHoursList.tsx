@@ -151,8 +151,8 @@ export default function CrewHoursList({
             <span className="text-sm text-muted">
               {hours(summary.dayRates)} {summary.dayRates === 1 ? 'day rate' : 'day rates'}
               {summary.travelDays > 0 && ` · ${hours(summary.travelDays)} travel`}
-              {summary.overtime > 0 && ` · OT ${hours(summary.overtime)}`}
-              {summary.doubleTime > 0 && ` · DT ${hours(summary.doubleTime)}`}
+              {summary.overtime > 0 && ` · ${hours(summary.overtime)} OT`}
+              {summary.doubleTime > 0 && ` · ${hours(summary.doubleTime)} DT`}
             </span>
             <span className="font-mono text-2xl font-bold tabular-nums text-ink">{hours(summary.totalHours)}</span>
           </div>

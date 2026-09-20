@@ -1257,7 +1257,7 @@ error in somebody's favour. Pinned by a test that adds the bands on every worked
 **The bands appear only when there IS a split** — "ST 8" beside "8" is noise on the one screen
 that has to stay scannable in a loading dock. OT and DT wear `--ot`; "Short turnaround" stays a
 note, because the band says only DT and why the whole day is double time is the useful part.
-**The run's line is DAY RATES, TRAVEL and overtime** — "3 day rates · 2 travel · OT 5" beside the
+**The run's line is DAY RATES, TRAVEL and overtime** — "3 day rates · 2 travel · 5 OT" beside the
 hours. **A TRAVEL DAY IS NOT A DAY RATE**: it is paid its own flat travel amount, often half a
 day and a separate line on an invoice, so it is counted beside them and never folded in (Dan,
 2026-09-20, checking a real show: *"It has 3 day rates and 2 travel days plus overtime"* — the
