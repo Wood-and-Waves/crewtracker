@@ -1091,6 +1091,15 @@ ignores that control's `step` and offers every minute, which defeats the grid �
 control's intrinsic min-width overran its own dialog on a real phone. Offering only grid minutes
 makes the rule structural instead of a correction applied afterwards.
 
+**AND SO DOES THE VENUE CODE** (2026-09-20). `pickShowDay` fixed the PAGE in 2026-09-08 and
+`/api/clock/identify` was left demanding a work day dated strictly today — so scanning the QR the
+evening before a load-in listed day one's whole roster and then refused every name on it (Dan, on
+PwC CIPs: *"There isn't anything scheduled, but he should be able to get in at least"*). The route
+now picks the same day the page did. It is not a loosening: the named person must still hold a
+live timecard on the day it picks, which is what stops a venue code minting a link for any
+`crew_member_id` somebody can guess. **Two rules for one screen is the bug**; if a third reader of
+"which day is this" appears, it uses `pickShowDay` too.
+
 **A crew screen opens on a day of the SHOW, not on a dead date** (`pickShowDay` / `stepDays` in
 `lib/clockLinks.ts`, fixed 2026-09-08). Today wins while the show is running — that is the point
 of the screen — but a link opened before the run started landed on today, which is not a work

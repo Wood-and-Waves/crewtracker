@@ -159,7 +159,7 @@ export default async function ClockPage({
     if (view.roster.length === 0) {
       return <Message
         title={view.showName}
-        body="Nothing is scheduled on this show today." />
+        body="Nothing is scheduled on this show." />
     }
     return (
       <Working>

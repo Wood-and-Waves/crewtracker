@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayInZone } from '@/lib/showStatus'
-import { clockLinkExpiry, isClockLinkExpired } from '@/lib/clockLinks'
+import { clockLinkExpiry, isClockLinkExpired, pickShowDay } from '@/lib/clockLinks'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 
 // Turning a VENUE code into somebody's own personal link.
@@ -64,14 +64,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'This code has expired. Ask your PM for a new one.' }, { status: 400 })
   }
 
-  // The named person must actually be working today. Without this the venue
-  // code would mint a link for any crew_member_id in the org that somebody
-  // could name — and a link that outlives the show they were never on.
+  // THE DAY IS THE SHOW'S NEAREST, NOT STRICTLY TODAY — the same pickShowDay
+  // the page itself uses. The page was already offering day one's roster
+  // before a show started, and this route was still demanding a work day
+  // dated today, so scanning the venue code the day before the load-in listed
+  // everybody's name and then refused every one of them (Dan, 2026-09-20, on
+  // PwC CIPs the evening before day one: "There isn't anything scheduled, but
+  // he should be able to get in at least"). Two rules for one screen is how
+  // that happens; there is now one.
+  //
+  // This does not loosen who may be identified. The named person must still
+  // hold a live timecard on the day it picks, which is what stops the venue
+  // code minting a link for any crew_member_id somebody can name.
   const timeZone = show.timezone_identifier || 'America/Chicago'
-  const { data: workDay } = await admin
-    .from('work_days').select('id').eq('show_id', show.id).eq('date', todayInZone(timeZone)).maybeSingle()
+  const { data: allDays } = await admin
+    .from('work_days').select('id, date').eq('show_id', show.id).order('date')
+  const dates = (allDays ?? []).map(d => d.date as string)
+  const workDay = dates.length
+    ? (allDays ?? []).find(d => d.date === pickShowDay(dates, todayInZone(timeZone))) ?? null
+    : null
   if (!workDay) {
-    return NextResponse.json({ error: 'Nothing is scheduled on this show today.' }, { status: 400 })
+    return NextResponse.json({ error: 'Nothing is scheduled on this show.' }, { status: 400 })
   }
 
   const { data: rooms } = await admin.from('rooms').select('id').eq('work_day_id', workDay.id)
@@ -83,7 +96,9 @@ export async function POST(request: NextRequest) {
     : { data: [] as { id: string }[] }
 
   if (!staffed || staffed.length === 0) {
-    return NextResponse.json({ error: "You're not on the call for today on this show." }, { status: 400 })
+    // Names the DAY rather than saying "today", which would be wrong on every
+    // day but one now that the day is picked rather than assumed.
+    return NextResponse.json({ error: `You're not on the call on this show for ${workDay.date}.` }, { status: 400 })
   }
 
   // Already has one? Hand it back rather than rotating it — the whole point is
