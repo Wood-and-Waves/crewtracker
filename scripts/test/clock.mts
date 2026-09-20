@@ -16,7 +16,7 @@
 // that survives the paste.
 
 import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type ClockLinkRow, pickShowDay, stepDays } from '../../lib/clockLinks.ts'
-import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, type Punch } from '../../lib/punches.ts'
+import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, PUNCH_LABELS, CREW_PUNCH_LABELS, type Punch } from '../../lib/punches.ts'
 import { punchRefusal } from '../../lib/clockPunch.ts'
 import { summarizeCrewHours, type CrewHoursInput } from '../../lib/crewHours.ts'
 
@@ -254,6 +254,38 @@ console.log('\n=== punchRefusal: the one crew-punch decision both routes share =
   check('a PM-entered punch cannot be changed',
     typeof punchRefusal(pmStart, false, null, 'start', pmStart[0]), 'string')
   check('wrap after start is allowed', punchRefusal(started, false, null, 'end', undefined), null)
+}
+
+console.log('\n=== the crew read Meal 1, the PM reads M1 ===')
+// Dan, 2026-09-20: "M1 and M2 have shown a little bit of confusion." The crew
+// screen spells them out; the tracker keeps the shorthand because its desktop
+// grid is eight equal columns and the long form does not fit one. Both maps
+// are pinned so neither drifts into the other's surface.
+{
+  check('the crew screen spells the first meal out', CREW_PUNCH_LABELS.meal_out, 'Meal 1 Out')
+  check('and the second', CREW_PUNCH_LABELS.meal2_in, 'Meal 2 In')
+  check('Start and Wrap are the same words either way',
+    [CREW_PUNCH_LABELS.start, CREW_PUNCH_LABELS.end], [PUNCH_LABELS.start, PUNCH_LABELS.end])
+  check('the tracker keeps the shorthand', PUNCH_LABELS.meal_out, 'M1 Out')
+
+  // The refusals a crew member reads have to match the cells they are looking
+  // at, or the screen says Meal 1 and the error underneath says M1.
+  const started: Punch[] = [{ id: 'a', punch_type: 'start', punched_at: '2026-09-01T13:00:00Z' }]
+  check('the refusal names the punch the way the cell does',
+    punchRefusal(started, false, null, 'meal_in', undefined),
+    'Your Meal 1 Out isn\u2019t recorded yet. Ask your PM if that\u2019s not right.')
+  check('so does a chronology refusal',
+    getChronologyError(new Date('2026-09-01T12:00:00Z'), 'meal_out', started, CREW_PUNCH_LABELS),
+    'Meal 1 Out must be after Start.')
+  check('and a blocked clear',
+    clearBlockedReason(
+      [...started, { id: 'b', punch_type: 'meal_out', punched_at: '2026-09-01T18:00:00Z' },
+       { id: 'c', punch_type: 'meal_in', punched_at: '2026-09-01T19:00:00Z' }],
+      'meal_out', CREW_PUNCH_LABELS),
+    'Clear Meal 1 In first \u2014 it needs Meal 1 Out.')
+  // The default is still the PM's, so nothing on the tracker moved.
+  check('the tracker still reads M1', getChronologyError(new Date('2026-09-01T12:00:00Z'), 'meal_out', started),
+    'M1 Out must be after Start.')
 }
 
 console.log('\n--- which day a crew screen opens on ---')

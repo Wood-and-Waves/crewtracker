@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  PUNCH_ORDER, PUNCH_LABELS, getChronologyError, isEligibleForBatch, isWrapped,
+  PUNCH_ORDER, CREW_PUNCH_LABELS, getChronologyError, isEligibleForBatch, isWrapped,
   roundWallTime, clearBlockedReason, type Punch, type PunchType,
 } from '@/lib/punches'
 import type { Absence } from '@/lib/payroll'
@@ -49,11 +49,11 @@ export function punchRefusal(
   // A punch the PM entered is theirs. Crew may fix their OWN mistake but must
   // never overwrite a correction — which is exactly what the source column is for.
   if (mine && mine.source !== 'crew') {
-    return `Your ${PUNCH_LABELS[type]} was set by your PM, so it can't be changed here. Ask them.`
+    return `Your ${CREW_PUNCH_LABELS[type]} was set by your PM, so it can't be changed here. Ask them.`
   }
   // ORDER, which chronology does NOT cover. getChronologyError only checks
   // that the times of punches that EXIST run forwards; it is happy to accept
-  // an M1 In when there is no M1 Out. "The previous punch must exist" is a
+  // a Meal 1 In when there is no Meal 1 Out. "The previous punch must exist" is a
   // separate rule and isEligibleForBatch is where this app keeps it (the
   // two-check rule, CLAUDE.md). Skipped when correcting an existing punch:
   // chronology is the right judge then.
@@ -65,7 +65,7 @@ export function punchRefusal(
     const why = isWrapped(all) && type !== 'end'
       ? 'You’ve already wrapped for today.'
       : requirement
-        ? `Your ${PUNCH_LABELS[requirement]} isn’t recorded yet.`
+        ? `Your ${CREW_PUNCH_LABELS[requirement]} isn’t recorded yet.`
         : 'That isn’t available right now.'
     return `${why} Ask your PM if that’s not right.`
   }
@@ -111,11 +111,11 @@ export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchReques
   // ---- Clearing a punch the crew member entered themselves ----------------
   if (clear) {
     if (mine && mine.source !== 'crew') {
-      return refuse(400, `Your ${PUNCH_LABELS[type]} was set by your PM, so it can't be cleared here. Ask them.`)
+      return refuse(400, `Your ${CREW_PUNCH_LABELS[type]} was set by your PM, so it can't be cleared here. Ask them.`)
     }
     if (!mine) return refuse(400, 'There is nothing recorded to clear.')
     // Removing from the middle of a day would orphan whatever comes after it.
-    const blocked = clearBlockedReason(all, type)
+    const blocked = clearBlockedReason(all, type, CREW_PUNCH_LABELS)
     if (blocked) return refuse(400, blocked)
     // Verified delete: a delete matching no row returns success with zero rows.
     const { data: gone, error } = await admin.from('punches').delete().eq('id', mine.id).select('id')
@@ -145,7 +145,7 @@ export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchReques
   // type matches TimeEntryModal: replacing a punch must not be blocked by the
   // value it is replacing.
   const others: Punch[] = all.filter(p => p.punch_type !== type)
-  const chronologyError = getChronologyError(now, type, others)
+  const chronologyError = getChronologyError(now, type, others, CREW_PUNCH_LABELS)
   if (chronologyError) return refuse(400, chronologyError)
 
   // Update-or-insert, never a blind insert: nothing in the database prevents a

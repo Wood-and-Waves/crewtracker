@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  PUNCH_LABELS, formatPunchTime, nextPunchType, visiblePunchTypes,
+  CREW_PUNCH_LABELS, formatPunchTime, nextPunchType, visiblePunchTypes,
   isEligibleForBatch, roundWallTime,
   type Punch, type PunchType,
 } from '@/lib/punches'
@@ -348,7 +348,7 @@ export default function ClockPunch({
                         'block text-[11px] font-semibold uppercase leading-none tracking-wide',
                         isNext ? 'text-accent-ink opacity-90' : available ? 'text-accent' : 'text-muted',
                       )}>
-                        {PUNCH_LABELS[type]}
+                        {CREW_PUNCH_LABELS[type]}
                       </span>
 
                       {done ? (
@@ -387,7 +387,7 @@ export default function ClockPunch({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm border-2 border-ink bg-surface p-6 shadow-edge">
             <h2 className="font-display text-2xl font-bold uppercase text-ink">
-              {PUNCH_LABELS[editing.type]}
+              {CREW_PUNCH_LABELS[editing.type]}
             </h2>
             <p className="mb-4 mt-1 text-xs text-muted">
               {dayLabel}

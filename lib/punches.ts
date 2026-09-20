@@ -19,6 +19,31 @@ export const PUNCH_LABELS: Record<PunchType, string> = {
 }
 
 /**
+ * The same punches, spelled out for the CREW.
+ *
+ * Dan, 2026-09-20, after a show: "M1 and M2 have shown a little confusion."
+ * They are shorthand a PM learns on their first day; a crew member meets them
+ * once, on a phone, and has to guess. The tracker keeps the abbreviations
+ * because its desktop grid is eight equal columns and "Meal 1 Out" does not
+ * fit in one of them (see lib/trackerLayout.ts) — the crew screen is three
+ * chunky cells serving one person, and has the room.
+ *
+ * Kept as a second map rather than a rename so the two audiences can differ
+ * without either one guessing: a new punch type added to PUNCH_ORDER must be
+ * named in BOTH, and the Record type says so at compile time.
+ */
+export const CREW_PUNCH_LABELS: Record<PunchType, string> = {
+  start: 'Start',
+  meal_out: 'Meal 1 Out',
+  meal_in: 'Meal 1 In',
+  meal2_out: 'Meal 2 Out',
+  meal2_in: 'Meal 2 In',
+  meal3_out: 'Meal 3 Out',
+  meal3_in: 'Meal 3 In',
+  end: 'Wrap',
+}
+
+/**
  * Meal breaks in order, as [out, in] pairs.
  *
  * The single place that knows how many meals exist. Payroll deduction, meal
@@ -181,20 +206,24 @@ function getPunch(punches: Punch[], type: PunchType): Date | null {
  * Walks outward from the punch's own position so the message names the nearest
  * conflict, which is the one a PM can act on.
  */
-export function getChronologyError(time: Date, type: PunchType, punches: Punch[]): string | null {
+export function getChronologyError(
+  time: Date, type: PunchType, punches: Punch[],
+  /** CREW_PUNCH_LABELS when a crew member is reading it. */
+  labels: Record<PunchType, string> = PUNCH_LABELS,
+): string | null {
   const idx = PUNCH_ORDER.indexOf(type)
 
   for (let i = idx - 1; i >= 0; i--) {
     const earlier = getPunch(punches, PUNCH_ORDER[i])
     if (earlier && time <= earlier) {
-      return `${PUNCH_LABELS[type]} must be after ${PUNCH_LABELS[PUNCH_ORDER[i]]}.`
+      return `${labels[type]} must be after ${labels[PUNCH_ORDER[i]]}.`
     }
   }
 
   for (let i = idx + 1; i < PUNCH_ORDER.length; i++) {
     const later = getPunch(punches, PUNCH_ORDER[i])
     if (later && time >= later) {
-      return `${PUNCH_LABELS[type]} must be before ${PUNCH_LABELS[PUNCH_ORDER[i]]}.`
+      return `${labels[type]} must be before ${labels[PUNCH_ORDER[i]]}.`
     }
   }
 
@@ -248,7 +277,11 @@ export function isEligibleForBatch(punches: Punch[], isTravelDay: boolean, type:
 //
 // Returns null when the clear is safe, or the reason it is not, phrased for
 // whoever is about to be refused.
-export function clearBlockedReason(punches: Punch[], type: PunchType): string | null {
+export function clearBlockedReason(
+  punches: Punch[], type: PunchType,
+  /** CREW_PUNCH_LABELS when a crew member is reading it. */
+  labels: Record<PunchType, string> = PUNCH_LABELS,
+): string | null {
   const remaining = punches.filter(p => p.punch_type !== type)
   for (const p of remaining) {
     // 'end' needs a start, not the meal before it; 'start' needs nothing.
@@ -257,7 +290,7 @@ export function clearBlockedReason(punches: Punch[], type: PunchType): string | 
       : p.punch_type === 'end' ? 'start'
       : PUNCH_ORDER[PUNCH_ORDER.indexOf(p.punch_type) - 1]
     if (requirement && !has(remaining, requirement)) {
-      return `Clear ${PUNCH_LABELS[p.punch_type]} first — it needs ${PUNCH_LABELS[type]}.`
+      return `Clear ${labels[p.punch_type]} first — it needs ${labels[type]}.`
     }
   }
   return null

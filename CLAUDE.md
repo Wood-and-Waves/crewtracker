@@ -390,8 +390,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 609 assertions as of 2026-09-17
-                  (payroll 42 + schedule 346 + clock 90 + rls 131).
+                  helper, no framework. 617 assertions as of 2026-09-20
+                  (payroll 42 + schedule 346 + clock 98 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1113,6 +1113,21 @@ initialises once, so navigating days reused the instance: the header updated fro
 cells still held the PREVIOUS day's timecard ids, and punching silently wrote to the wrong day —
 overwriting a real punch. Caught only by reading the database rather than the screen.
 
+**THE CREW READ "MEAL 1", THE PM READS "M1"** (2026-09-20). Dan, after a show: *"M1 and M2
+have shown a little bit of confusion."* They are shorthand a PM learns on their first day; a crew
+member meets them once, on a phone, and has to guess. `CREW_PUNCH_LABELS` in `lib/punches.ts` is
+the crew's copy — Meal 1 Out, Meal 2 In — used by the punch cells, the editor heading, and every
+refusal a crew member reads (`lib/clockPunch.ts`, plus `getChronologyError` and
+`clearBlockedReason`, which now take the label map as an argument defaulting to the PM's). **The
+messages had to move with the cells**: a screen saying Meal 1 with an error underneath saying M1
+is worse than either on its own. **The tracker keeps the abbreviations** because its desktop grid
+is eight equal columns and "Meal 1 Out" does not fit one (see `lib/trackerLayout.ts`), and so do
+the CSV and the PDF; the crew screen is three chunky cells serving one person and has the room —
+measured at 320px, the narrowest phone: 71px of label in an 85px cell. A new punch type must be
+named in BOTH maps, which the `Record<PunchType, string>` type enforces. Still shorthand, and
+deliberately not changed here: the crew HOURS view ("M1 break 60 min", `lib/crewHours.ts`) and the
+texted timesheet (`lib/timesheet.ts`), both via `mealLabel`.
+
 **A travel day replaces the punch grid with a banner**, mirroring `TimecardRow`. Without it
 every cell is disabled showing "—" and the crew member sees six dead squares with nothing saying
 why. Plain `is_travel_day` only — `travel_in_day`/`travel_out_day` are HYBRID days additive to
@@ -1559,7 +1574,7 @@ named, twice.
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
 existing PM-invite and booking-message preview scripts. Test count as of 2026-09-17:
-payroll 42 + schedule 346 + clock 90 + rls 131 = 609 assertions.
+payroll 42 + schedule 346 + clock 98 + rls 131 = 617 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
