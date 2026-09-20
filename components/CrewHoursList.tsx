@@ -150,6 +150,7 @@ export default function CrewHoursList({
           <div className="mt-3 flex items-baseline justify-between gap-3">
             <span className="text-sm text-muted">
               {hours(summary.dayRates)} {summary.dayRates === 1 ? 'day rate' : 'day rates'}
+              {summary.travelDays > 0 && ` · ${hours(summary.travelDays)} travel`}
               {summary.overtime > 0 && ` · OT ${hours(summary.overtime)}`}
               {summary.doubleTime > 0 && ` · DT ${hours(summary.doubleTime)}`}
             </span>

@@ -357,6 +357,14 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   check('a day started but never wrapped is Missing, not zero',
     [out.days[2].missing, out.days[2].hours], [true, null])
   check('and the screen knows to say so', out.anyMissing, true)
+  // A day started and never wrapped earns NO rate yet: there are no hours to
+  // read and no way to tell a half day from a full one, so the count waits for
+  // the wrap rather than guessing. It appears the moment the day is closed.
+  const open = summarizeCrewHours([
+    { date: '2026-10-01', room: 'R', role: null, timecard: card({}, worked) },
+    { date: '2026-10-02', room: 'R', role: null, timecard: card({}, [worked[0]]) },
+  ], RULES, 1, fmt)
+  check('an unwrapped day earns no rate yet', open.dayRates, 1)
   // Absent beats everything, the same precedence lib/payroll.ts applies.
   check('a cancelled day says so and shows no times',
     [out.days[3].label, out.days[3].hours, out.days[3].start], ['Cancelled', null, null])
@@ -367,10 +375,13 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   // Only days with hours are worked days; travel and absent are not.
   check('the total counts worked days only, and totals the PAID hours',
     [out.workedDays, out.totalHours], [1, 10])
-  // DAY RATES: a worked day earns one and so does a travel day; the day that
-  // was started and never wrapped earns none yet, and the cancelled day is
-  // settled by its own rule. One worked + one travel here.
-  check('the run counts its day rates', out.dayRates, 2)
+  // DAY RATES ARE WORKED DAYS ONLY. A travel day is paid its own flat travel
+  // amount — often half a day, and a separate line on an invoice — so it is
+  // counted beside them, never inside them (Dan, 2026-09-20, on a real show:
+  // "It has 3 day rates and 2 travel days plus overtime"). This run is one
+  // worked day, one travel day, one never wrapped, one cancelled.
+  check('day rates count worked days only', out.dayRates, 1)
+  check('and travel is counted beside them, not inside', out.travelDays, 1)
   check('a half day is half a rate, as the texted timesheet counts it',
     summarizeCrewHours([{ date: '2026-10-11', room: 'R', role: null,
       timecard: card({ pay_as_half_day: true }, [
@@ -427,9 +438,9 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   check('a travel-in leg is noted', hybrid.days[0].notes.includes('Travel in'), true)
   check('and still has its paid hours', hybrid.days[0].hours, 10)
   check('the travel-leg day is counted', hybrid.travelDays, 1)
-  // A worked day carrying a travel leg earns BOTH: the day rate and the leg,
-  // which is flat pay of its own.
-  check('and earns a rate for the day and one for the leg', hybrid.dayRates, 2)
+  // A worked day carrying a travel leg is ONE day rate plus a travel leg, and
+  // the two are reported separately for the same reason.
+  check('a travel leg does not add a day rate', hybrid.dayRates, 1)
 
   // A quiet day says nothing extra rather than printing empty detail.
   check('an ordinary day has no notes', out.days[0].notes.length, 0)

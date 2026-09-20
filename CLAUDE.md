@@ -390,8 +390,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 627 assertions as of 2026-09-20
-                  (payroll 42 + schedule 346 + clock 108 + rls 131).
+                  helper, no framework. 629 assertions as of 2026-09-20
+                  (payroll 42 + schedule 346 + clock 110 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1257,10 +1257,13 @@ error in somebody's favour. Pinned by a test that adds the bands on every worked
 **The bands appear only when there IS a split** — "ST 8" beside "8" is noise on the one screen
 that has to stay scannable in a loading dock. OT and DT wear `--ot`; "Short turnaround" stays a
 note, because the band says only DT and why the whole day is double time is the useful part.
-**The run's line is DAY RATES and overtime** — "4 day rates · OT 2 · DT 4" beside the hours. A
-worked day earns one rate, a half day half (the 0.5 the texted timesheet already counts), and
-every travel day one including the hybrid legs, since travel pay is flat per leg; a day started
-and never wrapped earns none yet.
+**The run's line is DAY RATES, TRAVEL and overtime** — "3 day rates · 2 travel · OT 5" beside the
+hours. **A TRAVEL DAY IS NOT A DAY RATE**: it is paid its own flat travel amount, often half a
+day and a separate line on an invoice, so it is counted beside them and never folded in (Dan,
+2026-09-20, checking a real show: *"It has 3 day rates and 2 travel days plus overtime"* — the
+first cut added the two together and read 5). A worked day earns one rate, a half day half (the
+0.5 the texted timesheet already counts), and a day started and never wrapped earns none yet,
+because there are no hours to read and no way to tell a half day from a full one.
 **A travel or absent day says what it is WHERE THE HOURS WOULD BE**, not as a dash with the word
 tucked under the date (Dan, 2026-09-20: *"Each travel day should be labeled as well and not the
 — in its place"*). Amber stays reserved for Missing: a travel day is not a problem to fix.
@@ -1604,7 +1607,7 @@ named, twice.
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
 existing PM-invite and booking-message preview scripts. Test count as of 2026-09-17:
-payroll 42 + schedule 346 + clock 108 + rls 131 = 627 assertions.
+payroll 42 + schedule 346 + clock 110 + rls 131 = 629 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 

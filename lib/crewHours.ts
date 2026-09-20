@@ -88,11 +88,14 @@ export type CrewHours = {
   workedDays: number
   /**
    * How many DAY RATES the run earns — what Dan asked the total to carry
-   * (2026-09-20). A worked day is one, a half day is half (the same 0.5 the
-   * texted timesheet counts), and every travel day is one, including the
-   * hybrid legs, because travel pay is a flat amount per leg. A day that was
-   * started and never wrapped earns nothing yet, and an absent day is settled
-   * by its own rule rather than a day rate.
+   * (2026-09-20). A worked day is one and a half day is half (the same 0.5 the
+   * texted timesheet counts).
+   *
+   * A TRAVEL DAY IS NOT ONE. It is paid its own flat travel amount, which is
+   * often half a day and is a different line on an invoice — so it is counted
+   * in `travelDays` and reported beside this, never folded into it. Dan, on
+   * the live screen: "It has 3 day rates and 2 travel days plus overtime."
+   * An absent day is settled by its own rule and is neither.
    */
   dayRates: number
   /** Plain travel days. Hybrid legs are counted in `travelLegs` instead. */
@@ -201,6 +204,8 @@ export function summarizeCrewHours(
     // screen in this app shows money.
     if (penalties > 0) notes.push(`${penalties} meal ${penalties === 1 ? 'penalty' : 'penalties'}`)
 
+    // A day being worked right now counts: they are on the clock, and the day
+    // rate is not withheld until they wrap.
     workedRates += tc.pay_as_half_day && worked <= 5 ? 0.5 : 1
 
     const st = paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
@@ -221,7 +226,7 @@ export function summarizeCrewHours(
   return {
     days,
     workedDays: days.filter(d => d.hours !== null).length,
-    dayRates: round2(workedRates + travelDays),
+    dayRates: round2(workedRates),
     travelDays,
     totalHours: round2(days.reduce((sum, d) => sum + (d.hours ?? 0), 0)),
     overtime: round2(overtime),
