@@ -135,11 +135,7 @@ export default function CrewHoursList({
             ))}
           </ul>
 
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-sm text-muted">
-              {summary.workedDays} {summary.workedDays === 1 ? 'day' : 'days'} worked
-              {summary.travelDays > 0 && ` · ${summary.travelDays} travel`}
-            </span>
+          <div className="mt-3 flex items-baseline justify-end">
             <span className="font-mono text-2xl font-bold tabular-nums text-ink">{hours(summary.totalHours)}</span>
           </div>
 
