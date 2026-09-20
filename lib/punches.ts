@@ -57,8 +57,11 @@ export const MEAL_PAIRS: readonly (readonly [PunchType, PunchType])[] = [
   ['meal3_out', 'meal3_in'],
 ] as const
 
-/** Short label for a meal break by index: 0 -> "M1". */
+/** Short label for a meal break by index: 0 -> "M1". The PM's shorthand. */
 export const mealLabel = (index: number) => `M${index + 1}`
+
+/** The same break spelled out for the crew: 0 -> "Meal 1". See CREW_PUNCH_LABELS. */
+export const crewMealLabel = (index: number) => `Meal ${index + 1}`
 
 /**
  * Meals always shown, whether or not anyone has taken them. Two is the layout

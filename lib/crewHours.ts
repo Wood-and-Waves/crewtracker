@@ -21,10 +21,10 @@
 
 import {
   calculateNetHours, displayMealBreakMinutes, isShortTurnaround, mealPenaltyCount,
-  paidDoubleTimeHours, paidOvertimeHours,
+  paidDoubleTimeHours, paidNetHours, paidOvertimeHours, paidStraightTimeHours,
   type PayrollRuleset, type TimecardLike,
 } from '@/lib/payroll'
-import { MEAL_PAIRS, mealLabel, type PunchType } from '@/lib/punches'
+import { MEAL_PAIRS, crewMealLabel, type PunchType } from '@/lib/punches'
 
 /** The instant of one punch, or null. Same read lib/timesheet.ts makes. */
 function punchAt(tc: TimecardLike, type: PunchType): string | null {
@@ -45,8 +45,32 @@ export type CrewHoursDay = {
    * need a word rather than a blank.
    */
   label: 'Travel' | 'No-show' | 'Cancelled' | null
-  /** Net hours, the org's rounding applied — null when there is nothing to add up. */
+  /**
+   * PAID hours for the day — the company's rule, which Dan stated plainly on
+   * 2026-09-20: "we always round up once an hour goes past :00. So :01 rounds
+   * to the next hour and it should show that." That is `paidNetHours`, which
+   * payroll has always used; this screen simply showed the raw worked figure
+   * instead, so the rounding it is paid under was invisible.
+   *
+   * Null when there is nothing to add up.
+   */
   hours: number | null
+  /**
+   * The same day in PAID bands, and they always sum to `hours` — that is the
+   * whole reason the total above is the paid one. Showing worked hours beside
+   * paid bands produced a row that did not add up (10.5 with ST 10 · OT 1).
+   * Zero on a day with nothing in that band.
+   */
+  straight: number
+  overtime: number
+  doubleTime: number
+  /**
+   * The paid total is more than the clock says, because the day rounded up.
+   * The screen owes the reader a sentence when this is true anywhere — the
+   * punch times are printed right beside the number, so the gap is visible
+   * whether or not it is explained.
+   */
+  rounded: boolean
   /** Started but never wrapped: the thing this screen exists to surface. */
   missing: boolean
   /**
@@ -64,6 +88,7 @@ export type CrewHours = {
   workedDays: number
   /** Plain travel days. Hybrid legs are counted in `travelLegs` instead. */
   travelDays: number
+  /** The sum of the PAID days above, so the list and its total agree. */
   totalHours: number
   /**
    * PAID overtime and double time, from paidOvertimeHours/paidDoubleTimeHours —
@@ -76,6 +101,8 @@ export type CrewHours = {
   doubleTime: number
   /** At least one day started and never wrapped. */
   anyMissing: boolean
+  /** At least one day was rounded up, so the footnote explaining it is owed. */
+  anyRounded: boolean
 }
 
 /** What one timecard needs to carry for this to work. */
@@ -120,16 +147,16 @@ export function summarizeCrewHours(
     }
 
     if (tc.absence) {
-      return { ...base, start: null, end: null, label: tc.absence === 'no_show' ? 'No-show' : 'Cancelled', hours: null, missing: false, notes: [] }
+      return { ...base, start: null, end: null, label: tc.absence === 'no_show' ? 'No-show' : 'Cancelled', hours: null, ...NO_BANDS, missing: false, notes: [] }
     }
     // A PLAIN travel day only. travel_in_day / travel_out_day are hybrid days
     // additive to hours actually worked, so those punch and count normally.
     if (tc.is_travel_day) {
       travelDays++
-      return { ...base, start: null, end: null, label: 'Travel', hours: null, missing: false, notes: [] }
+      return { ...base, start: null, end: null, label: 'Travel', hours: null, ...NO_BANDS, missing: false, notes: [] }
     }
     if (!startAt || !endAt) {
-      return { ...base, label: null, hours: null, missing: true, notes: [] }
+      return { ...base, label: null, hours: null, ...NO_BANDS, missing: true, notes: [] }
     }
 
     // THE SAME DETAIL THE TEXTED TIMESHEET CARRIES, in the same words — see
@@ -147,29 +174,35 @@ export function summarizeCrewHours(
       const i = punchAt(tc, inType)
       if (o && i) {
         const seconds = (new Date(i).getTime() - new Date(o).getTime()) / 1000
-        notes.push(`${mealLabel(index)} break ${displayMealBreakMinutes(seconds, ruleset)} min`)
+        notes.push(`${crewMealLabel(index)} break ${displayMealBreakMinutes(seconds, ruleset)} min`)
       }
     }
 
-    const hours = calculateNetHours(tc, ruleset, roundingMinutes)
-    if (tc.pay_as_half_day && hours <= 5) notes.push('Half day')
+    // WORKED is what the clock says; PAID is what the day rounds to. The day
+    // shows the paid figure because that is what the company pays (see the
+    // `hours` docs above) — worked is kept only to know whether to explain the
+    // difference.
+    const worked = calculateNetHours(tc, ruleset, roundingMinutes)
+    const hours = paidNetHours(tc, ruleset, roundingMinutes)
+    if (tc.pay_as_half_day && worked <= 5) notes.push('Half day')
 
     const penalties = mealPenaltyCount(tc, ruleset)
     // A COUNT, never what it is worth: that would be money, and no crew-facing
     // screen in this app shows money.
     if (penalties > 0) notes.push(`${penalties} meal ${penalties === 1 ? 'penalty' : 'penalties'}`)
 
+    const st = paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
     const ot = paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
-    overtime += ot
-    if (ot > 0) notes.push(`OT ${num(ot)}`)
-
     const dt = paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
+    overtime += ot
     doubleTime += dt
-    if (dt > 0) {
-      notes.push(isShortTurnaround(tc, allTimecards, ruleset) ? `Short turnaround ${num(dt)}` : `DT ${num(dt)}`)
-    }
+    // The BANDS carry the numbers now, so the notes no longer repeat them —
+    // "OT 1" in two places on one row is how a reader starts adding the same
+    // hour twice. Short turnaround keeps a note because the band says only
+    // "DT", and why the whole day is double time is the useful part.
+    if (dt > 0 && isShortTurnaround(tc, allTimecards, ruleset)) notes.push('Short turnaround')
 
-    return { ...base, label: null, hours, missing: false, notes }
+    return { ...base, label: null, hours, straight: st, overtime: ot, doubleTime: dt, rounded: hours > worked, missing: false, notes }
   })
 
   const round2 = (n: number) => Math.round(n * 100) / 100
@@ -181,13 +214,12 @@ export function summarizeCrewHours(
     overtime: round2(overtime),
     doubleTime: round2(doubleTime),
     anyMissing: days.some(d => d.missing),
+    anyRounded: days.some(d => d.rounded),
   }
 }
 
-/** "2", "2.5" — hours read as hours, never "2.50". */
-function num(n: number): string {
-  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100)
-}
+/** A day with no hours has no bands and nothing was rounded. */
+const NO_BANDS = { straight: 0, overtime: 0, doubleTime: 0, rounded: false }
 
 // ---------------------------------------------------------------------------
 // Loading it. SERVICE ROLE, like the rest of lib/clockSession.ts: the person

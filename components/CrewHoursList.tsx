@@ -23,9 +23,37 @@ function hours(n: number) {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100)
 }
 
+/**
+ * The day's paid hours split into bands: "ST 10 · OT 1".
+ *
+ * Only rendered when there is something to split — on an ordinary day the
+ * straight-time figure IS the number beside it, and printing "ST 8" next to
+ * "8" is noise on the one screen that has to stay scannable on a phone.
+ *
+ * Overtime wears --ot, the token the app already uses for overtime everywhere
+ * else; colour is information here, not decoration. Double time shares it
+ * rather than inventing a token — the word beside the number is what tells
+ * them apart, and a day of DT is already explained by the "Short turnaround"
+ * note underneath.
+ */
+function Bands({ straight, overtime, doubleTime }: { straight: number; overtime: number; doubleTime: number }) {
+  if (overtime <= 0 && doubleTime <= 0) return null
+  const parts: React.ReactNode[] = []
+  if (straight > 0) parts.push(<span key="st">ST {hours(straight)}</span>)
+  if (overtime > 0) parts.push(<span key="ot" className="text-ot">OT {hours(overtime)}</span>)
+  if (doubleTime > 0) parts.push(<span key="dt" className="text-ot">DT {hours(doubleTime)}</span>)
+  return (
+    <span className="mt-0.5 block font-mono text-[11px] tabular-nums text-muted">
+      {parts.map((part, i) => (
+        <span key={i}>{i > 0 && ' · '}{part}</span>
+      ))}
+    </span>
+  )
+}
+
 /** A row that links while the show is live, and is inert once it is over. */
 function RowShell({ href, children }: { href: string | null; children: React.ReactNode }) {
-  const cls = 'flex items-baseline justify-between gap-3 py-3'
+  const cls = 'flex items-start justify-between gap-3 py-3'
   return href
     ? <Link href={href} className={cn(cls, 'transition-colors hover:text-accent')}>{children}</Link>
     : <div className={cls}>{children}</div>
@@ -91,7 +119,10 @@ export default function CrewHoursList({
                   </span>
                   <span className="shrink-0 text-right">
                     {d.hours !== null ? (
-                      <span className="font-mono text-lg font-semibold tabular-nums text-ink">{hours(d.hours)}</span>
+                      <>
+                        <span className="block font-mono text-lg font-semibold tabular-nums text-ink">{hours(d.hours)}</span>
+                        <Bands straight={d.straight} overtime={d.overtime} doubleTime={d.doubleTime} />
+                      </>
                     ) : d.missing ? (
                       // The half of the question this screen exists for.
                       <span className="text-xs font-semibold uppercase tracking-wide text-ot">Missing</span>
@@ -127,8 +158,22 @@ export default function CrewHoursList({
             </div>
           )}
 
-          {summary.anyMissing && (
+          {/* THE ROUNDING IS THE COMPANY'S RULE, AND IT IS OWED A SENTENCE.
+              A day rounds UP to the next whole hour once it passes the hour
+              (Dan, 2026-09-20) — so a 10.5-hour day pays 11, and the number
+              here is a half hour more than the punch times printed beside it.
+              That gap is visible whether or not it is explained, and it is in
+              the crew member's favour, so it is worth saying out loud rather
+              than leaving them to wonder which number is wrong. */}
+          {summary.anyRounded && (
             <p className="mt-4 border-l-[3px] border-ot py-1 pl-3 text-xs text-muted">
+              Your day is paid in whole hours, always rounded up — so a day that runs past the
+              hour counts as the next one.
+            </p>
+          )}
+
+          {summary.anyMissing && (
+            <p className="mt-2 border-l-[3px] border-ot py-1 pl-3 text-xs text-muted">
               A day marked Missing was started and never wrapped.
             </p>
           )}

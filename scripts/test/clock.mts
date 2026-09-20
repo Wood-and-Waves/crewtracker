@@ -343,8 +343,13 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   ]
   const out = summarizeCrewHours(rows, RULES, 1, fmt)
 
-  check('a worked day carries its times and its hours',
-    [out.days[0].start, out.days[0].end, out.days[0].hours], ['14:00', '23:30', 9.5])
+  // 9am to 6:30pm is 9.5 worked, and the day PAYS 10: a day rounds up to the
+  // next whole hour the moment it passes one (Dan, 2026-09-20). The screen
+  // shows what is paid, and says so — see the rounding assertions below.
+  check('a worked day carries its times and its PAID hours',
+    [out.days[0].start, out.days[0].end, out.days[0].hours], ['14:00', '23:30', 10])
+  check('and marks itself as rounded, so the screen can explain it',
+    [out.days[0].rounded, out.anyRounded], [true, true])
   // A plain travel day has no punches by design — a word, not a blank.
   check('a travel day says Travel and counts nothing',
     [out.days[1].label, out.days[1].hours, out.days[1].start], ['Travel', null, null])
@@ -360,7 +365,8 @@ console.log('\n--- a crew member\'s own hours across the show ---')
       RULES, 1, fmt).days[0].label, 'No-show')
 
   // Only days with hours are worked days; travel and absent are not.
-  check('the total counts worked days only', [out.workedDays, out.totalHours], [1, 9.5])
+  check('the total counts worked days only, and totals the PAID hours',
+    [out.workedDays, out.totalHours], [1, 10])
   check('unsorted input still reads in date order',
     summarizeCrewHours([rows[2], rows[0]], RULES, 1, fmt).days.map(d => d.date),
     ['2026-10-01', '2026-10-03'])
@@ -383,11 +389,24 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   // so 10.5 becomes 11 and the overtime is a full hour, not half of one. That
   // is the rule the timesheet and Reports use, and pinning it here is the point
   // of this test: the screen must not invent a friendlier-looking number.
-  check('the day carries its worked hours', withLunch.days[0].hours, 10.5)
-  check('the meal break is named and capped', withLunch.days[0].notes.includes('M1 break 60 min'), true)
-  check('overtime is the PAID hour, not the worked half hour',
-    withLunch.days[0].notes.includes('OT 1'), true)
+  check('the day carries its PAID hours, not the 10.5 worked', withLunch.days[0].hours, 11)
+  check('the meal break is named and capped, in the crew\u2019s words',
+    withLunch.days[0].notes.includes('Meal 1 break 60 min'), true)
+  check('overtime is the PAID hour, not the worked half hour', withLunch.days[0].overtime, 1)
   check('and totalled for the run', withLunch.overtime, 1)
+
+  // THE BANDS MUST ADD TO THE DAY. This is the whole reason the day shows paid
+  // hours rather than worked: 10.5 worked beside ST 10 + OT 1 is a row that
+  // does not add up, and somebody reads it as an error in their favour or
+  // against it. Pinned for the ordinary day and for the overtime one.
+  const adds = (d: { hours: number | null; straight: number; overtime: number; doubleTime: number }) =>
+    d.straight + d.overtime + d.doubleTime === d.hours
+  check('ST + OT + DT equals the day, on an overtime day', adds(withLunch.days[0]), true)
+  check('and on an ordinary one', adds(out.days[0]), true)
+  // The numbers live in the bands now; repeating them in the notes is how one
+  // hour gets counted twice by a reader.
+  check('the notes no longer repeat the overtime',
+    withLunch.days[0].notes.some(n => n.startsWith('OT')), false)
   // A count, never what it is worth: that would be money.
   check('no dollar sign anywhere in the notes',
     withLunch.days[0].notes.some(n => n.includes('$')), false)
@@ -397,17 +416,37 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   const hybrid = summarizeCrewHours(
     [{ date: '2026-10-08', room: 'R', role: null, timecard: card({ travel_in_day: true }, worked) }], RULES, 1, fmt)
   check('a travel-in leg is noted', hybrid.days[0].notes.includes('Travel in'), true)
-  check('and still has its worked hours', hybrid.days[0].hours, 9.5)
+  check('and still has its paid hours', hybrid.days[0].hours, 10)
   check('the travel-leg day is counted', hybrid.travelDays, 1)
 
   // A quiet day says nothing extra rather than printing empty detail.
   check('an ordinary day has no notes', out.days[0].notes.length, 0)
 
-  // The company's rounding is threaded through, exactly as every other total.
+  // TWO ROUNDINGS, IN ORDER, and they are not the same rule. The org's punch
+  // grid snaps the CLOCK (9:37pm on a 15-minute grid becomes 9:45pm, giving
+  // 9.75 worked); the day then rounds UP to the next whole hour to be paid.
+  // 9.75 -> 10. Conflating them is how somebody "simplifies" one away.
   const odd = [{ punch_type: 'start', punched_at: at(14) }, { punch_type: 'end', punched_at: at(23, 37) }]
-  check('the org rounding is applied, not the raw clock',
+  check('the org grid snaps the clock, then the day rounds up to pay',
     summarizeCrewHours([{ date: '2026-10-06', room: 'R', role: null, timecard: card({}, odd) }], RULES, 15, fmt)
-      .days[0].hours, 9.75)
+      .days[0].hours, 10)
+
+  // A DAY EXACTLY ON THE HOUR DOES NOT MOVE — "once an hour goes past :00" is
+  // the rule, so :00 itself stays put and owes no explanation.
+  const exact = [{ punch_type: 'start', punched_at: at(13) }, { punch_type: 'end', punched_at: at(21) }]
+  const onTheHour = summarizeCrewHours(
+    [{ date: '2026-10-09', room: 'R', role: null, timecard: card({}, exact) }], RULES, 1, fmt)
+  check('a day landing exactly on the hour is not rounded',
+    [onTheHour.days[0].hours, onTheHour.days[0].rounded, onTheHour.anyRounded], [8, false, false])
+  check('and shows no bands, because there is nothing to split',
+    [onTheHour.days[0].overtime, onTheHour.days[0].doubleTime], [0, 0])
+
+  // One minute past is a whole hour more. Dan, 2026-09-20: ":01 rounds to the
+  // next hour and it should show that."
+  const oneMinute = [{ punch_type: 'start', punched_at: at(13) }, { punch_type: 'end', punched_at: '2026-10-01T21:01:00.000Z' }]
+  check('one minute past the hour pays the whole next hour',
+    summarizeCrewHours([{ date: '2026-10-10', room: 'R', role: null, timecard: card({}, oneMinute) }], RULES, 1, fmt)
+      .days[0].hours, 9)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

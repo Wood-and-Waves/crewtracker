@@ -390,8 +390,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 617 assertions as of 2026-09-20
-                  (payroll 42 + schedule 346 + clock 98 + rls 131).
+                  helper, no framework. 624 assertions as of 2026-09-20
+                  (payroll 42 + schedule 346 + clock 105 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1245,6 +1245,29 @@ tried: the only door to the hours was the toggle ON the punch screen, which is e
 your hours** button. A feature that survives the show is worth nothing if the screen that
 survives with it has no link to it.
 
+**THE CREW SCREEN SHOWS PAID HOURS, AND SAYS SO** (2026-09-20). Dan, asked to see regular hours
+and OT per day, then stated the rule behind it: *"we always round up once an hour goes past :00.
+So :01 rounds to the next hour and it should show that."* That rule is `paidNetHours` (a plain
+`ceil`), which payroll has always applied — the screen was simply showing the raw worked figure,
+so the rounding a crew member is PAID under was invisible to them.
+**The day's number is now the PAID one**, with `ST · OT · DT` under it, and the three always sum
+to it. That summing is the whole reason the total had to move: worked hours beside paid bands
+gives a row like "10.5 · ST 10 · OT 1", which does not add up, and a crew member reads that as an
+error in somebody's favour. Pinned by a test that adds the bands on every worked day.
+**The bands appear only when there IS a split** — "ST 8" beside "8" is noise on the one screen
+that has to stay scannable in a loading dock — but **the rounding footnote appears whenever any
+day rounded**, including a day with no overtime at all (8.5 worked pays 9). Those are two
+different conditions and conflating them hides the explanation on exactly the quiet days that
+need it. OT and DT wear `--ot`; "Short turnaround" stays a note, because the band says only DT
+and why the whole day is double time is the useful part.
+**TWO ROUNDINGS, IN ORDER, and they are not the same rule**: the org's `timecard_rounding_minutes`
+snaps the PUNCH (9:37pm → 9:45pm on a 15-minute grid), then the DAY ceilings to the next whole
+hour to be paid. Both round up, both are pinned, and neither should be "unified" into the other.
+**This screen now agrees with the Master Summary, the PDF and the CSV**, which have always shown
+paid hours — and it deliberately DISAGREES with the tracker and Reports' By Day / By Crew, which
+show raw worked hours by the convention recorded under Payroll business logic. That gap is known
+and was Dan's call: the crew are told what they are paid, the PM is shown what was clocked.
+
 **A day is one of four things, and the order matters**: absent beats travel beats missing beats
 worked, which is the same precedence `lib/payroll.ts` applies — the two must not disagree about
 what a day was. **Missing** (started, never wrapped) is the state the screen exists to surface,
@@ -1574,7 +1597,7 @@ named, twice.
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
 existing PM-invite and booking-message preview scripts. Test count as of 2026-09-17:
-payroll 42 + schedule 346 + clock 98 + rls 131 = 617 assertions.
+payroll 42 + schedule 346 + clock 105 + rls 131 = 624 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
