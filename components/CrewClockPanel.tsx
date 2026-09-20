@@ -52,6 +52,7 @@ export default function CrewClockPanel({
   const [status, setStatus] = useState('')
   const [listOpen, setListOpen] = useState(false)
   const preRef = useRef<HTMLPreElement>(null)
+  const venueUrlRef = useRef<HTMLParagraphElement>(null)
 
   // Read at render rather than baked in at build time, matching every auth
   // redirect in this app — so a preview deploy hands out preview links.
@@ -140,23 +141,33 @@ export default function CrewClockPanel({
     setBusy(false)
   }
 
-  async function copy(text: string, label: string) {
+  /**
+   * Copy, with a fallback that selects the RIGHT text.
+   *
+   * `fallback` names what to select when the clipboard is refused — no user
+   * activation, an unfocused document, a non-secure context. It matters which:
+   * the fallback used to reveal the Slack list and select that whatever had
+   * been copied, so pressing Copy on the venue link and being told to press
+   * ⌘C would have put the whole crew roster on the clipboard instead.
+   */
+  async function copy(text: string, label: string, fallback: 'list' | 'venue' = 'list') {
     try {
       await navigator.clipboard.writeText(text)
       setStatus(label); setTimeout(() => setStatus(''), 2000)
     } catch {
-      // Refused: no user activation, an unfocused document, or a non-secure
-      // context. Reveal the block and select it rather than leaving a button
-      // that silently did nothing.
-      setListOpen(true)
+      if (fallback === 'list') setListOpen(true)
       setTimeout(() => {
-        const el = preRef.current
+        const el = fallback === 'venue' ? venueUrlRef.current : preRef.current
         if (!el) return
         const range = document.createRange()
         range.selectNodeContents(el)
         const sel = window.getSelection()
         sel?.removeAllRanges(); sel?.addRange(range)
-        setStatus('Couldn’t reach the clipboard — the list is selected, so press ⌘C / Ctrl-C.')
+        setStatus(
+          fallback === 'venue'
+            ? 'Couldn’t reach the clipboard — the link is selected, so press ⌘C / Ctrl-C.'
+            : 'Couldn’t reach the clipboard — the list is selected, so press ⌘C / Ctrl-C.',
+        )
       }, 0)
     }
   }
@@ -207,6 +218,43 @@ export default function CrewClockPanel({
 
           {error && <p className="text-sm text-danger mb-2">{error}</p>}
           {status && <p className="text-sm text-good mb-2">{status}</p>}
+
+          {/* THE VENUE LINK, AS TEXT YOU CAN COPY. It existed only as a QR on a
+              printable sheet, so the only way to reach the address was to
+              point a phone at a piece of paper (Dan, 2026-09-20: "I can't get
+              it unless I scan the QR code right now"). The QR is for the wall;
+              this is for pasting into a message, testing it yourself, or
+              sending it to somebody who is not standing in the room.
+
+              Shown in full rather than behind the button alone: a link you are
+              about to hand out is worth reading first, and it is the only way
+              to tell at a glance which show's code you have copied. */}
+          {venue && !venue.revoked_at && venue.token && (
+            <div className="mb-3 border-t border-line pt-3">
+              <div className="flex items-center gap-3">
+                <span className="font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
+                  Venue link
+                </span>
+                <button
+                  className="ml-auto text-xs font-semibold uppercase tracking-wide text-accent disabled:opacity-50"
+                  onClick={() => copy(clockUrl(origin, venue.token!), 'Venue link copied.', 'venue')}
+                  disabled={busy}
+                >
+                  Copy
+                </button>
+              </div>
+              {/* Selectable, and wrapping rather than truncated: on a phone a
+                  cut-off link cannot be read OR selected by hand, and this is
+                  the fallback when the clipboard is refused. */}
+              <p ref={venueUrlRef} className="mt-1 break-all font-mono text-xs text-ink select-all">
+                {clockUrl(origin, venue.token)}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Anyone with this picks their room and name, then gets their own link. Same code the
+                printed QR carries.
+              </p>
+            </div>
+          )}
 
           {listOpen && (
             <pre ref={preRef} className="mb-3 max-h-64 overflow-auto border border-line bg-surface-2 p-3 text-xs text-ink font-mono whitespace-pre-wrap">
@@ -263,16 +311,15 @@ export default function CrewClockPanel({
             })}
           </div>
 
-          {venue && (
+          {/* Only the revoked case is left here: a live venue code now has the
+              copyable block above, and saying "a venue QR also exists" under
+              it was telling somebody about the thing they were looking at. */}
+          {venue?.revoked_at && (
             <p className="text-xs text-muted mt-3">
-              {venue.revoked_at
-                ? 'The venue QR has been revoked. '
-                : 'A venue QR also exists for this show — print it for walk-ups and anyone who never got the message. '}
-              {venue.revoked_at && (
-                <button className="font-semibold uppercase tracking-wide text-accent" onClick={() => reissue(null, venue.id)} disabled={busy}>
-                  Reissue it
-                </button>
-              )}
+              The venue QR has been revoked.{' '}
+              <button className="font-semibold uppercase tracking-wide text-accent" onClick={() => reissue(null, venue.id)} disabled={busy}>
+                Reissue it
+              </button>
             </p>
           )}
         </>

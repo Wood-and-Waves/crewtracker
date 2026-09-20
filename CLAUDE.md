@@ -1097,6 +1097,18 @@ ignores that control's `step` and offers every minute, which defeats the grid â€
 control's intrinsic min-width overran its own dialog on a real phone. Offering only grid minutes
 makes the rule structural instead of a correction applied afterwards.
 
+**THE VENUE LINK IS COPYABLE TEXT, not only a QR** (2026-09-20). It existed solely as a code on a
+printable sheet, so the only way to reach the address was to point a phone at a piece of paper
+(Dan: *"I can't get it unless I scan the QR code right now"*). Crew Clock on Edit Show now shows
+the URL in full with a Copy button: the QR is for the wall, this is for pasting into a message,
+testing it yourself, or sending it to somebody not in the room. Shown rather than hidden behind
+the button, because a link you are about to hand out is worth reading and it is the only way to
+tell which show's code you have. **`copy()` takes which text to fall back to** â€” the clipboard is
+refused often enough (no user activation, unfocused document, non-secure context) that the
+fallback matters, and it used to reveal the Slack list and select THAT whatever had been copied,
+so pressing Copy on the venue link and following the instruction would have put the whole crew
+roster on the clipboard.
+
 **WHO THE CREW RING IS ON THEIR OWN SCREEN** (0041, 2026-09-20). Dan: *"What if we added a PM
 contact information on the individual time card. That could be helpful. Mobile tapable."* Somebody
 looking at a punch that will not take had no way from that screen to reach anybody.
