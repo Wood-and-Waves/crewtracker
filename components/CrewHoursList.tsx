@@ -108,9 +108,15 @@ export default function CrewHoursList({
                 <RowShell href={dayHref ? dayHref(d.date) : null}>
                   <span className="min-w-0">
                     <span className="block text-base font-semibold text-ink">{dayLabel(d.date)}</span>
-                    <span className="block truncate text-xs text-muted">
-                      {d.label ?? (d.start && d.end ? `${d.start} – ${d.end}` : d.start ? `${d.start} – no wrap yet` : 'Not clocked in')}
-                    </span>
+                    {/* A travel or absent day says what it is on the RIGHT, where
+                        the hours would be — the dash that used to sit there told
+                        nobody anything (Dan, 2026-09-20). So the line under the
+                        date carries it only for a day that has punches to report. */}
+                    {!d.label && (
+                      <span className="block truncate text-xs text-muted">
+                        {d.start && d.end ? `${d.start} – ${d.end}` : d.start ? `${d.start} – no wrap yet` : 'Not clocked in'}
+                      </span>
+                    )}
                     {/* The same detail the texted timesheet carries, in the same
                         words — a day with nothing to add says nothing. */}
                     {d.notes.length > 0 && (
@@ -124,10 +130,11 @@ export default function CrewHoursList({
                         <Bands straight={d.straight} overtime={d.overtime} doubleTime={d.doubleTime} />
                       </>
                     ) : d.missing ? (
-                      // The half of the question this screen exists for.
+                      // The half of the question this screen exists for. Amber is
+                      // reserved for it: a travel day is not a problem to fix.
                       <span className="text-xs font-semibold uppercase tracking-wide text-ot">Missing</span>
                     ) : (
-                      <span className="text-lg text-muted">—</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted">{d.label}</span>
                     )}
                   </span>
                 </RowShell>
@@ -135,44 +142,19 @@ export default function CrewHoursList({
             ))}
           </ul>
 
-          <div className="mt-3 flex items-baseline justify-end">
+          {/* The run's line: how many DAY RATES it earns and the overtime on
+              top (Dan, 2026-09-20). OT and DT are PAID hours, ceiling-rounded
+              per day, so they will not equal the total minus a threshold —
+              that is the rule payroll runs on, and a friendlier-looking number
+              here would disagree with the timesheet and with Reports. */}
+          <div className="mt-3 flex items-baseline justify-between gap-3">
+            <span className="text-sm text-muted">
+              {hours(summary.dayRates)} {summary.dayRates === 1 ? 'day rate' : 'day rates'}
+              {summary.overtime > 0 && ` · OT ${hours(summary.overtime)}`}
+              {summary.doubleTime > 0 && ` · DT ${hours(summary.doubleTime)}`}
+            </span>
             <span className="font-mono text-2xl font-bold tabular-nums text-ink">{hours(summary.totalHours)}</span>
           </div>
-
-          {/* Overtime and double time are the run's totals, and they are PAID
-              hours — ceiling-rounded per day, so they will not always equal the
-              worked hours above minus a threshold. That is the rule payroll
-              runs on, and a friendlier-looking number here would disagree with
-              the timesheet and with Reports. */}
-          {(summary.overtime > 0 || summary.doubleTime > 0) && (
-            <div className="mt-1 flex items-baseline justify-between text-sm text-muted">
-              <span>
-                {summary.overtime > 0 && `Overtime ${hours(summary.overtime)}`}
-                {summary.overtime > 0 && summary.doubleTime > 0 && ' · '}
-                {summary.doubleTime > 0 && `Double time ${hours(summary.doubleTime)}`}
-              </span>
-            </div>
-          )}
-
-          {/* THE ROUNDING IS THE COMPANY'S RULE, AND IT IS OWED A SENTENCE.
-              A day rounds UP to the next whole hour once it passes the hour
-              (Dan, 2026-09-20) — so a 10.5-hour day pays 11, and the number
-              here is a half hour more than the punch times printed beside it.
-              That gap is visible whether or not it is explained, and it is in
-              the crew member's favour, so it is worth saying out loud rather
-              than leaving them to wonder which number is wrong. */}
-          {summary.anyRounded && (
-            <p className="mt-4 border-l-[3px] border-ot py-1 pl-3 text-xs text-muted">
-              Your day is paid in whole hours, always rounded up — so a day that runs past the
-              hour counts as the next one.
-            </p>
-          )}
-
-          {summary.anyMissing && (
-            <p className="mt-2 border-l-[3px] border-ot py-1 pl-3 text-xs text-muted">
-              A day marked Missing was started and never wrapped.
-            </p>
-          )}
 
         </>
       )}

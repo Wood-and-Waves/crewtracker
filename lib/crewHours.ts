@@ -86,6 +86,15 @@ export type CrewHours = {
   days: CrewHoursDay[]
   /** Days with hours on them. A travel or absent day is not a worked day. */
   workedDays: number
+  /**
+   * How many DAY RATES the run earns — what Dan asked the total to carry
+   * (2026-09-20). A worked day is one, a half day is half (the same 0.5 the
+   * texted timesheet counts), and every travel day is one, including the
+   * hybrid legs, because travel pay is a flat amount per leg. A day that was
+   * started and never wrapped earns nothing yet, and an absent day is settled
+   * by its own rule rather than a day rate.
+   */
+  dayRates: number
   /** Plain travel days. Hybrid legs are counted in `travelLegs` instead. */
   travelDays: number
   /** The sum of the PAID days above, so the list and its total agree. */
@@ -135,6 +144,7 @@ export function summarizeCrewHours(
   let travelDays = 0
   let overtime = 0
   let doubleTime = 0
+  let workedRates = 0
 
   const days = sorted.map((row): CrewHoursDay => {
     const tc = row.timecard
@@ -191,6 +201,8 @@ export function summarizeCrewHours(
     // screen in this app shows money.
     if (penalties > 0) notes.push(`${penalties} meal ${penalties === 1 ? 'penalty' : 'penalties'}`)
 
+    workedRates += tc.pay_as_half_day && worked <= 5 ? 0.5 : 1
+
     const st = paidStraightTimeHours(tc, allTimecards, ruleset, roundingMinutes)
     const ot = paidOvertimeHours(tc, allTimecards, ruleset, roundingMinutes)
     const dt = paidDoubleTimeHours(tc, allTimecards, ruleset, roundingMinutes)
@@ -209,6 +221,7 @@ export function summarizeCrewHours(
   return {
     days,
     workedDays: days.filter(d => d.hours !== null).length,
+    dayRates: round2(workedRates + travelDays),
     travelDays,
     totalHours: round2(days.reduce((sum, d) => sum + (d.hours ?? 0), 0)),
     overtime: round2(overtime),

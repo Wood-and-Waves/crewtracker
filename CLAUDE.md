@@ -390,8 +390,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 624 assertions as of 2026-09-20
-                  (payroll 42 + schedule 346 + clock 105 + rls 131).
+                  helper, no framework. 627 assertions as of 2026-09-20
+                  (payroll 42 + schedule 346 + clock 108 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1255,11 +1255,18 @@ to it. That summing is the whole reason the total had to move: worked hours besi
 gives a row like "10.5 · ST 10 · OT 1", which does not add up, and a crew member reads that as an
 error in somebody's favour. Pinned by a test that adds the bands on every worked day.
 **The bands appear only when there IS a split** — "ST 8" beside "8" is noise on the one screen
-that has to stay scannable in a loading dock — but **the rounding footnote appears whenever any
-day rounded**, including a day with no overtime at all (8.5 worked pays 9). Those are two
-different conditions and conflating them hides the explanation on exactly the quiet days that
-need it. OT and DT wear `--ot`; "Short turnaround" stays a note, because the band says only DT
-and why the whole day is double time is the useful part.
+that has to stay scannable in a loading dock. OT and DT wear `--ot`; "Short turnaround" stays a
+note, because the band says only DT and why the whole day is double time is the useful part.
+**The run's line is DAY RATES and overtime** — "4 day rates · OT 2 · DT 4" beside the hours. A
+worked day earns one rate, a half day half (the 0.5 the texted timesheet already counts), and
+every travel day one including the hybrid legs, since travel pay is flat per leg; a day started
+and never wrapped earns none yet.
+**A travel or absent day says what it is WHERE THE HOURS WOULD BE**, not as a dash with the word
+tucked under the date (Dan, 2026-09-20: *"Each travel day should be labeled as well and not the
+— in its place"*). Amber stays reserved for Missing: a travel day is not a problem to fix.
+**NO EXPLANATORY FOOTNOTES.** Two were written — the rounding rule and what Missing means — and
+Dan removed both: *"the 2 instructional lines at the bottom. They are not necessary."* The screen
+states the numbers and trusts the reader. Do not add another.
 **TWO ROUNDINGS, IN ORDER, and they are not the same rule**: the org's `timecard_rounding_minutes`
 snaps the PUNCH (9:37pm → 9:45pm on a 15-minute grid), then the DAY ceilings to the next whole
 hour to be paid. Both round up, both are pinned, and neither should be "unified" into the other.
@@ -1597,7 +1604,7 @@ named, twice.
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
 existing PM-invite and booking-message preview scripts. Test count as of 2026-09-17:
-payroll 42 + schedule 346 + clock 105 + rls 131 = 624 assertions.
+payroll 42 + schedule 346 + clock 108 + rls 131 = 627 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 
