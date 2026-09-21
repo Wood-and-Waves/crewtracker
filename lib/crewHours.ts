@@ -71,8 +71,27 @@ export type CrewHoursDay = {
    * whether or not it is explained.
    */
   rounded: boolean
-  /** Started but never wrapped: the thing this screen exists to surface. */
+  /**
+   * Started but never wrapped, or a day that has come and gone with nothing on
+   * it. The thing this screen exists to surface.
+   *
+   * NEVER TRUE OF A DAY THAT HAS NOT HAPPENED. A show opened on day one used to
+   * read MISSING down every row — six alarms about days nobody has reached yet
+   * (Dan, 2026-09-21, on PwC CIPs). A future day is `upcoming` instead.
+   */
   missing: boolean
+  /** A day of the show still ahead. Renders as a dash, not an alarm. */
+  upcoming: boolean
+  /**
+   * The person's OWN travel legs, which are hybrid: they travel AND work, and
+   * the travel is flat pay on top of the hours. Read BEFORE the no-punches
+   * branch, so a leg shows the moment a PM sets it rather than only once the
+   * day has been clocked out — which is exactly what made it invisible on the
+   * day it mattered. Distinct from `label: 'Travel'`, which is a whole day of
+   * travel with no work and no punch grid at all.
+   */
+  travelIn: boolean
+  travelOut: boolean
   /**
    * The same detail the texted timesheet carries, in the same words (Dan,
    * 2026-09-09) — "Lunch 60 min", "OT 2", "1 meal penalty". Empty when the day
@@ -111,7 +130,7 @@ export type CrewHours = {
    */
   overtime: number
   doubleTime: number
-  /** At least one day started and never wrapped. */
+  /** At least one day that has been REACHED carries no complete punch pair. */
   anyMissing: boolean
   /** At least one day was rounded up, so the footnote explaining it is owed. */
   anyRounded: boolean
@@ -138,6 +157,13 @@ export function summarizeCrewHours(
   ruleset: PayrollRuleset,
   roundingMinutes: number,
   fmtTime: (iso: string) => string,
+  /**
+   * Today IN THE SHOW'S ZONE — the same value every other crew-facing date
+   * decision uses, never the server's clock. Anything after it has not
+   * happened, so it cannot be missing. Omitted means nothing is upcoming,
+   * which is the behaviour before this existed.
+   */
+  today?: string,
 ): CrewHours {
   const sorted = [...input].sort((a, b) => a.date.localeCompare(b.date))
   // Short turnaround looks at the person's PREVIOUS day across rooms, so the
@@ -160,24 +186,42 @@ export function summarizeCrewHours(
     }
 
     if (tc.absence) {
-      return { ...base, start: null, end: null, label: tc.absence === 'no_show' ? 'No-show' : 'Cancelled', hours: null, ...NO_BANDS, missing: false, notes: [] }
+      return { ...base, start: null, end: null, label: tc.absence === 'no_show' ? 'No-show' : 'Cancelled', hours: null, ...NO_BANDS, ...NO_LEGS, missing: false, upcoming: false, notes: [] }
     }
     // A PLAIN travel day only. travel_in_day / travel_out_day are hybrid days
     // additive to hours actually worked, so those punch and count normally.
     if (tc.is_travel_day) {
       travelDays++
-      return { ...base, start: null, end: null, label: 'Travel', hours: null, ...NO_BANDS, missing: false, notes: [] }
+      return { ...base, start: null, end: null, label: 'Travel', hours: null, ...NO_BANDS, ...NO_LEGS, missing: false, upcoming: false, notes: [] }
     }
+
+    // THE LEGS ARE READ HERE, ABOVE THE NO-PUNCHES BRANCH, and that position is
+    // the whole fix. They used to be read further down, among the details of a
+    // finished day — so a leg a PM had just set was invisible until the person
+    // clocked out, which is the one day it needed saying (Dan, 2026-09-21:
+    // "I just marked Paul as Travel in for the day ... His individual page
+    // doesn't say anything about it"). A leg is a fact about the day the moment
+    // it is set, not a property of a completed timecard.
+    const travelIn = tc.travel_in_day === true
+    const travelOut = tc.travel_out_day === true
+    if (travelIn) travelDays++
+    if (travelOut) travelDays++
+    const legs = { travelIn, travelOut }
+
     if (!startAt || !endAt) {
-      return { ...base, label: null, hours: null, ...NO_BANDS, missing: true, notes: [] }
+      // A day still ahead is not missing anything. Without this a show opened
+      // on day one reads MISSING down every row.
+      const upcoming = !!today && row.date > today
+      return { ...base, label: null, hours: null, ...NO_BANDS, ...legs, missing: !upcoming, upcoming, notes: [] }
     }
 
     // THE SAME DETAIL THE TEXTED TIMESHEET CARRIES, in the same words — see
     // lib/timesheet.ts, which is what a PM sends from Send Hours. The numbers
     // come from the same functions, so the two cannot disagree.
+    // Legs are NOT repeated in the notes: they have their own tinted line on
+    // the screen, and saying it twice in two registers is how one trip reads
+    // as two.
     const notes: string[] = []
-    if (tc.travel_in_day) { travelDays++; notes.push('Travel in') }
-    if (tc.travel_out_day) { travelDays++; notes.push('Travel out') }
 
     // Breaks are reported CAPPED at the deduction cap, so the number shown is
     // what was actually deducted — a 3hr hold with a 60min cap reads "60 min".
@@ -219,7 +263,7 @@ export function summarizeCrewHours(
     // "DT", and why the whole day is double time is the useful part.
     if (dt > 0 && isShortTurnaround(tc, allTimecards, ruleset)) notes.push('Short turnaround')
 
-    return { ...base, label: null, hours, straight: st, overtime: ot, doubleTime: dt, rounded: hours > worked, missing: false, notes }
+    return { ...base, label: null, hours, straight: st, overtime: ot, doubleTime: dt, rounded: hours > worked, ...legs, missing: false, upcoming: false, notes }
   })
 
   const round2 = (n: number) => Math.round(n * 100) / 100
@@ -239,6 +283,9 @@ export function summarizeCrewHours(
 /** A day with no hours has no bands and nothing was rounded. */
 const NO_BANDS = { straight: 0, overtime: 0, doubleTime: 0, rounded: false }
 
+/** Travel legs belong to a day that is WORKED. An absence or a whole travel day has neither. */
+const NO_LEGS = { travelIn: false, travelOut: false }
+
 // ---------------------------------------------------------------------------
 // Loading it. SERVICE ROLE, like the rest of lib/clockSession.ts: the person
 // opening a clock link may not be signed in at all, and the unguessable token
@@ -252,6 +299,7 @@ const NO_BANDS = { straight: 0, overtime: 0, doubleTime: 0, rounded: false }
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { formatPunchTime } from '@/lib/punches'
+import { todayInZone } from '@/lib/showStatus'
 
 export type CrewHoursView = {
   showName: string
@@ -319,6 +367,7 @@ export async function loadCrewHours(
       (ruleset ?? {}) as PayrollRuleset,
       org?.timecard_rounding_minutes ?? 1,
       iso => formatPunchTime(iso, timeZone, use24Hour),
+      todayInZone(timeZone),
     ),
   }
 }

@@ -112,9 +112,19 @@ export default function CrewHoursList({
                         the hours would be — the dash that used to sit there told
                         nobody anything (Dan, 2026-09-20). So the line under the
                         date carries it only for a day that has punches to report. */}
-                    {!d.label && (
+                    {/* A day still ahead says nothing under its date: there is
+                        no time to report and "Not clocked in" on a Thursday
+                        nobody has reached reads as a reproach. */}
+                    {!d.label && !d.upcoming && (
                       <span className="block truncate text-xs text-muted">
                         {d.start && d.end ? `${d.start} – ${d.end}` : d.start ? `${d.start} – no wrap yet` : 'Not clocked in'}
+                      </span>
+                    )}
+                    {/* Their OWN travel, in the travel tint — never amber,
+                        which on this screen means something needs fixing. */}
+                    {(d.travelIn || d.travelOut) && (
+                      <span className="block text-xs text-day-travel">
+                        ✈ {d.travelIn && d.travelOut ? 'Travel in and out' : d.travelIn ? 'Travel in' : 'Travel out'}
                       </span>
                     )}
                     {/* The same detail the texted timesheet carries, in the same
@@ -133,6 +143,8 @@ export default function CrewHoursList({
                       // The half of the question this screen exists for. Amber is
                       // reserved for it: a travel day is not a problem to fix.
                       <span className="text-xs font-semibold uppercase tracking-wide text-ot">Missing</span>
+                    ) : d.upcoming ? (
+                      <span className="text-lg text-muted">—</span>
                     ) : (
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted">{d.label}</span>
                     )}

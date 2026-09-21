@@ -435,12 +435,48 @@ console.log('\n--- a crew member\'s own hours across the show ---')
   // travel DAY — those are additive to hours actually worked.
   const hybrid = summarizeCrewHours(
     [{ date: '2026-10-08', room: 'R', role: null, timecard: card({ travel_in_day: true }, worked) }], RULES, 1, fmt)
-  check('a travel-in leg is noted', hybrid.days[0].notes.includes('Travel in'), true)
+  // The leg is its own flag with its own tinted line, not a note — one trip
+  // said twice in two registers reads as two.
+  check('a travel-in leg is flagged, not noted',
+    [hybrid.days[0].travelIn, hybrid.days[0].travelOut, hybrid.days[0].notes.includes('Travel in')],
+    [true, false, false])
   check('and still has its paid hours', hybrid.days[0].hours, 10)
   check('the travel-leg day is counted', hybrid.travelDays, 1)
   // A worked day carrying a travel leg is ONE day rate plus a travel leg, and
   // the two are reported separately for the same reason.
   check('a travel leg does not add a day rate', hybrid.dayRates, 1)
+
+  // A LEG SHOWS BEFORE THE DAY IS CLOCKED, which is the whole point: it used to
+  // be read below the no-punches branch, so a leg a PM had just set stayed
+  // invisible until the person wrapped — the one day it needed saying (Dan,
+  // 2026-09-21, having just marked Paul travel-in: "His individual page doesn't
+  // say anything about it").
+  const legNotPunched = summarizeCrewHours(
+    [{ date: '2026-10-20', room: 'R', role: null, timecard: card({ travel_in_day: true }) }],
+    RULES, 1, fmt, '2026-10-20')
+  check('an unpunched day still shows its leg', legNotPunched.days[0].travelIn, true)
+  check('and counts it in the run\u2019s travel total', legNotPunched.travelDays, 1)
+  check('while earning no day rate, because nothing was worked', legNotPunched.dayRates, 0)
+
+  // UPCOMING IS NOT MISSING. A show opened on day one read MISSING down every
+  // row — six alarms about days nobody had reached (Dan, 2026-09-21).
+  const run = ['2026-10-20', '2026-10-21', '2026-10-22'].map(date => (
+    { date, room: 'R', role: null, timecard: card({}) }
+  ))
+  const midRun = summarizeCrewHours(run, RULES, 1, fmt, '2026-10-21')
+  check('a day already reached with no punches is Missing',
+    [midRun.days[0].missing, midRun.days[0].upcoming], [true, false])
+  check('today with no punches is Missing too',
+    [midRun.days[1].missing, midRun.days[1].upcoming], [true, false])
+  check('a day still ahead is upcoming, not missing',
+    [midRun.days[2].missing, midRun.days[2].upcoming], [false, true])
+  check('so the screen does not raise the alarm for it', midRun.anyMissing, true)
+  check('a whole run still ahead raises no alarm at all',
+    summarizeCrewHours(run, RULES, 1, fmt, '2026-10-19').anyMissing, false)
+  // Omitting today keeps the old behaviour, so an older caller cannot silently
+  // start calling every unworked day upcoming.
+  check('with no today, nothing is upcoming',
+    summarizeCrewHours(run, RULES, 1, fmt).days.map(d => d.upcoming), [false, false, false])
 
   // A quiet day says nothing extra rather than printing empty detail.
   check('an ordinary day has no notes', out.days[0].notes.length, 0)

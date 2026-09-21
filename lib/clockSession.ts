@@ -36,6 +36,14 @@ export type ClockAssignment = {
   room: string
   role: string | null
   isTravelDay: boolean
+  /**
+   * THE HYBRID LEGS, which are not the same thing as isTravelDay. A plain
+   * travel day has no work and no punch grid; a leg means they travel AND
+   * work, and the travel is flat pay on top of the hours — so the grid stays
+   * live and the screen only SAYS the leg is there.
+   */
+  travelIn: boolean
+  travelOut: boolean
   /** no_show | cancelled | null — the day was booked but not worked (0027). */
   absence: 'no_show' | 'cancelled' | null
   /**
@@ -264,7 +272,7 @@ async function assignmentsFor(
   // catches a repeat.
   const { data: mine } = await admin
     .from('timecards')
-    .select('id, role, is_travel_day, absence, room_id, punches ( id, timecard_id, punch_type, punched_at, source )')
+    .select('id, role, is_travel_day, travel_in_day, travel_out_day, absence, room_id, punches ( id, timecard_id, punch_type, punched_at, source )')
     .eq('crew_member_id', crewMemberId)
     .in('room_id', roomIds)
     .neq('booking_status', 'declined')
@@ -276,6 +284,8 @@ async function assignmentsFor(
     room: roomName.get(t.room_id) || 'Room',
     role: t.role ?? null,
     isTravelDay: t.is_travel_day === true,
+    travelIn: t.travel_in_day === true,
+    travelOut: t.travel_out_day === true,
     absence: t.absence === 'no_show' || t.absence === 'cancelled' ? t.absence : null,
     punches: (punches || [])
       .filter((p: any) => p.timecard_id === t.id)

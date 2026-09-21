@@ -392,8 +392,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 629 assertions as of 2026-09-20
-                  (payroll 42 + schedule 346 + clock 110 + rls 131).
+                  helper, no framework. 638 assertions as of 2026-09-21
+                  (payroll 42 + schedule 346 + clock 119 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1318,6 +1318,28 @@ paid hours — and it deliberately DISAGREES with the tracker and Reports' By Da
 show raw worked hours by the convention recorded under Payroll business logic. That gap is known
 and was Dan's call: the crew are told what they are paid, the PM is shown what was clocked.
 
+**A CREW MEMBER'S OWN TRAVEL LEG IS SHOWN, ON BOTH SCREENS** (2026-09-21). Dan, having just
+marked Paul travel-in on a live show: *"His individual page doesn't say anything about it."*
+**The cause was an ORDER of branches, not a missing feature.** `summarizeCrewHours` read the legs
+among the details of a finished day, BELOW the no-punches early return — so a leg was invisible
+until the person clocked out, on the one day it needed saying. The legs are now read above that
+branch, because a leg is a fact about the day the moment a PM sets it, not a property of a
+completed timecard. They also never reached the punch screen at all: `lib/clockSession.ts` did not
+select the two columns.
+**IT IS TWO WORDS AND A PLANE**, under the date, in `--day-travel`. Dan cut the explanatory lines
+that were drafted with it. No button, because crew cannot change it — the PM sets it, deliberately
+(see the rolled-back crew-travel item). It must never read as "today is a travel day": that is the
+plain `is_travel_day` flag, which replaces the whole grid with a banner. A LEG IS A DAY THEY WORK,
+so the grid stays live and the screen only says the leg is there. On the punch screen it is an OR
+across the day's assignments — somebody in two rooms has one trip, not two.
+**Legs are NOT repeated in `notes`**: one trip said twice in two registers reads as two.
+
+**UPCOMING IS NOT MISSING** (2026-09-21, same screenshot). Every day of a show that had not
+happened read MISSING in amber — six alarms about days nobody had reached. `CrewHoursDay.upcoming`
+is a day after today IN THE SHOW'S ZONE; it renders as a dash and says nothing under its date.
+Missing keeps its meaning for today and earlier. `summarizeCrewHours` takes `today` as an optional
+last argument, so omitting it is the old behaviour rather than a silent change for another caller.
+
 **A day is one of four things, and the order matters**: absent beats travel beats missing beats
 worked, which is the same precedence `lib/payroll.ts` applies — the two must not disagree about
 what a day was. **Missing** (started, never wrapped) is the state the screen exists to surface,
@@ -1647,7 +1669,7 @@ named, twice.
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
 existing PM-invite and booking-message preview scripts. Test count as of 2026-09-17:
-payroll 42 + schedule 346 + clock 110 + rls 131 = 629 assertions.
+payroll 42 + schedule 346 + clock 119 + rls 131 = 638 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 

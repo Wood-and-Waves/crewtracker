@@ -80,6 +80,12 @@ export default function ClockPunch({
         ?.punches.find(p => p.punch_type === editing.type)
     : undefined
 
+  // A leg on ANY of the day's assignments. Somebody in two rooms on one day has
+  // one trip, not two, so this is an OR across the rows rather than a line per
+  // room — the strip describes the DAY.
+  const travelIn = rows.some(r => r.travelIn)
+  const travelOut = rows.some(r => r.travelOut)
+
   // By DATE, not by index: on a day the show does not run — which is any day
   // before it starts — indexOf returns -1 and both arrows went dead on the very
   // screen that says "use the arrows to find your day" (Dan, 2026-09-08).
@@ -239,6 +245,20 @@ export default function ClockPunch({
                 ? `Day ${dayIndex + 1} of ${days.length}`
                 : 'Not a show day'}
           </span>
+          {/* THEIR OWN TRAVEL, under the date it belongs to.
+              Two words and a plane, which is what Dan asked for — no
+              explanation, no button, because they cannot change it: the PM
+              sets it and that is deliberate.
+              It must never read as "today is a travel day": that is the plain
+              is_travel_day flag, which replaces this whole grid with a banner.
+              A LEG IS A DAY THEY WORK — the grid stays live above, and the
+              travel is flat pay on top of the hours. Travel tint, never amber,
+              which on these screens means something needs fixing. */}
+          {(travelIn || travelOut) && (
+            <span className="mt-0.5 text-[12px] text-day-travel">
+              ✈ {travelIn && travelOut ? 'Travel in and out' : travelIn ? 'Travel in' : 'Travel out'}
+            </span>
+          )}
         </div>
         <button
           onClick={() => nextDay && goToDay(nextDay)}
