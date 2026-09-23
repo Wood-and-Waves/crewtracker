@@ -17,6 +17,36 @@ concurrently`, for example — put `-- migrate:no-transaction` on the very first
 line, and be aware the file is then responsible for its own cleanup if it fails
 partway.
 
+## Creating a table? Grant it in the same file
+
+**From 30 October 2026 Supabase stops handing new tables to the Data API on its
+own.** Until then, `ALTER DEFAULT PRIVILEGES` in `public` gave `anon`,
+`authenticated` and `service_role` every privilege on a table the moment it was
+created, so a migration could create one and it simply worked. After that date a
+table with no explicit grant is unreachable through supabase-js / PostgREST, and
+the error is `permission denied` at runtime rather than anything the migration
+itself reports.
+
+So say it out loud, in the migration that creates the table:
+
+    grant select, insert, update, delete on public.your_table to authenticated;
+    grant select, insert, update, delete on public.your_table to service_role;
+
+Grant only what the table actually needs, not the whole list — RLS decides the
+rows, but the grant decides whether the role may reach the table at all, and a
+privilege nobody uses is one more thing to reason about later. `anon` is almost
+never right here: the public routes in this app read with the SERVICE role
+behind a token, not as `anon`.
+
+`service_role` is the one that gets forgotten, because nothing in the app ever
+fails in development without it — the default privileges were covering it. It is
+what the crew clock, the digest and every admin route run as.
+
+Then **`npm run db:grants`** after the migration reaches production, so
+`scripts/sql/grants.sql` learns the new table. That file is what rebuilds a
+database's privileges from scratch, and a table missing from it comes back
+unreachable.
+
 ## The one rule
 
 **Never edit a migration that has been applied.** The runner records a checksum

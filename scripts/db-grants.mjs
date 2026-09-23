@@ -1,5 +1,6 @@
-// Generate scripts/sql/grants.sql — the exact anon/authenticated privileges,
-// written as REVOKE-then-GRANT so a rebuild lands on the same state every time.
+// Generate scripts/sql/grants.sql — the exact anon/authenticated/service_role
+// privileges, written as REVOKE-then-GRANT so a rebuild lands on the same state
+// every time.
 //
 //   npm run db:grants        read production, rewrite scripts/sql/grants.sql
 //
@@ -10,7 +11,8 @@
 // anything), so a privilege that was REVOKED is represented as an *absence* —
 // there is simply no GRANT line for it. That is fine when restoring into an
 // empty cluster, and wrong on Supabase, where ALTER DEFAULT PRIVILEGES hands
-// every newly created table to anon and authenticated before the dump's grants
+// every newly created table to anon, authenticated and service_role before the
+// dump's grants
 // are applied. Anything the dump does not mention is not removed; it is
 // inherited. Two real examples, both caught comparing crewtracker-dev to
 // production:
@@ -33,7 +35,20 @@
 import pg from 'pg'
 import { writeFileSync } from 'node:fs'
 
-const ROLES = ['anon', 'authenticated']
+// SERVICE_ROLE IS IN THIS LIST BECAUSE SUPABASE IS TAKING THE SAFETY NET AWAY
+// (their notice, 2026-09-23: from 30 October a new table in `public` gets NO
+// automatic Data API grant). Until now every table was handed to all three
+// roles by ALTER DEFAULT PRIVILEGES the instant it was created, so this file
+// never had to mention service_role and a rebuild worked anyway.
+//
+// After that date a database rebuilt from schema.sql would have tables the
+// SERVICE ROLE cannot touch — and the service role is what runs the crew clock,
+// the evening digest and every admin route. It would fail the way everything
+// else in this file's remit fails: silently, with the restore reporting no
+// errors. Checked before adding it that all 28 relations record an explicit
+// service_role entry in pg_class.relacl, so these lines are read back from
+// production rather than invented.
+const ROLES = ['anon', 'authenticated', 'service_role']
 // Postgres ACL letters -> privilege names. 'm' (MAINTAIN) is PG17+.
 const PRIV = { r:'SELECT', a:'INSERT', w:'UPDATE', d:'DELETE', D:'TRUNCATE', x:'REFERENCES', t:'TRIGGER', m:'MAINTAIN' }
 
