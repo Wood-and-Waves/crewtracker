@@ -19,6 +19,7 @@ import { clockUrl, clockLinkExpiry, isClockLinkExpired, buildSlackList, type Clo
 import { getChronologyError, isEligibleForBatch, roundWallTime, clearBlockedReason, PUNCH_LABELS, CREW_PUNCH_LABELS, type Punch } from '../../lib/punches.ts'
 import { punchRefusal } from '../../lib/clockPunch.ts'
 import { summarizeCrewHours, type CrewHoursInput } from '../../lib/crewHours.ts'
+import { buildCrewMessage } from '../../lib/timesheet.ts'
 
 let pass = 0, fail = 0
 const check = (name: string, actual: unknown, expected: unknown) => {
@@ -286,6 +287,33 @@ console.log('\n=== the crew read Meal 1, the PM reads M1 ===')
   // The default is still the PM's, so nothing on the tracker moved.
   check('the tracker still reads M1', getChronologyError(new Date('2026-09-01T12:00:00Z'), 'meal_out', started),
     'M1 Out must be after Start.')
+}
+
+console.log('\n=== the texted timesheet can carry their hours page ===')
+// Dan, 2026-09-27: send each person their own tracker link with the hours text
+// once the show is over. The hours page was already built to outlive the show
+// (it renders on an expired link and a finalized one), so this is plumbing.
+{
+  const plain = buildCrewMessage('Grant Estes', 'Children\u2019s Hunger Fund', 'SHEET')
+  const withUrl = buildCrewMessage('Grant Estes', 'Children\u2019s Hunger Fund', 'SHEET',
+    'https://crewtracker.app/clock/abc?v=hours')
+
+  check('without a link the message is exactly what it was',
+    plain.includes('See it day by day'), false)
+  check('with one, the link is in there',
+    withUrl.includes('See it day by day: https://crewtracker.app/clock/abc?v=hours'), true)
+  // POSITION IS THE DESIGN: after the totals, before "let me know if this does
+  // not match" — the link is the answer to that sentence. Below the sign-off it
+  // is buried; above the sheet it invites a tap before reading.
+  check('it sits after the sheet and before the check-my-work line',
+    withUrl.indexOf('SHEET') < withUrl.indexOf('See it day by day')
+      && withUrl.indexOf('See it day by day') < withUrl.indexOf('Please let me know'), true)
+  check('and still above the sign-off',
+    withUrl.indexOf('See it day by day') < withUrl.indexOf('Sent from CrewTracker.app'), true)
+  // Null is the no-link case the reports page passes, and must read as absent
+  // rather than printing "null".
+  check('an explicit null adds nothing',
+    buildCrewMessage('Grant', 'Show', 'SHEET', null), plain.replace('Grant Estes', 'Grant').replace('Children\u2019s Hunger Fund', 'Show'))
 }
 
 console.log('\n--- which day a crew screen opens on ---')

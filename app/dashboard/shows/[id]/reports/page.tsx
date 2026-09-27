@@ -10,6 +10,8 @@ import {
   TimecardLike, PayrollRuleset,
 } from '@/lib/payroll'
 import { buildTimesheetText, buildCrewMessage } from '@/lib/timesheet'
+import { clockUrl } from '@/lib/clockLinks'
+import { siteOrigin } from '@/lib/siteOrigin'
 import ExportCSVButton from '@/components/ExportCSVButton'
 import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
@@ -115,14 +117,33 @@ export default async function ShowReportPage({
 
   // The org settings and the room list do not depend on each other: one round
   // trip, not two. (This page was nine sequential awaits deep.)
-  const [{ data: organization }, { data: rooms }] = await Promise.all([
+  const [{ data: organization }, { data: rooms }, { data: personalLinks }] = await Promise.all([
     user.organizationId
       ? supabase.from('organizations').select('timecard_rounding_minutes, final_report_emails').eq('id', user.organizationId).single()
       : Promise.resolve({ data: null }),
     workDayIds.length > 0
       ? supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', workDayIds)
       : Promise.resolve({ data: [] }),
+    // Their own clock links, so the texted timesheet can carry a link to the
+    // hours page. PERSONAL links only — the venue QR identifies nobody. A
+    // revoked link is excluded rather than sent: revoked outranks everything,
+    // so it would land on the dead-link card.
+    supabase.from('clock_links')
+      .select('crew_member_id, token')
+      .eq('show_id', id)
+      .not('crew_member_id', 'is', null)
+      .is('revoked_at', null),
   ])
+
+  // crew_member_id -> their hours page. Built from siteOrigin, NEVER the
+  // browser's origin: this text is sent, and an origin taken from the request
+  // is the 2026-09-06 bug.
+  const hoursUrlById = new Map<string, string>(
+    (personalLinks ?? []).map((l: any) => [
+      l.crew_member_id as string,
+      `${clockUrl(siteOrigin(), l.token as string)}?v=hours`,
+    ]),
+  )
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
 
   // Recipients are only counted here so the PM can be told how many addresses
@@ -332,7 +353,7 @@ export default async function ShowReportPage({
 
   // Builds a crew member's own timesheet, server-side. Deliberately carries no
   // dollar figures, so it's always safe to hand to the crew member themselves.
-  function timesheetFor(crew: { name: string; roles: string[]; entries: any[] }) {
+  function timesheetFor(crew: { name: string; roles: string[]; entries: any[]; crewMemberId?: string | null }) {
     // Rooms are per work day, so the same room across five days is five rows
     // with five ids — dedupe on NAME or "Grand Ballroom" would appear five times.
     const roomNames: string[] = []
@@ -355,7 +376,10 @@ export default async function ShowReportPage({
       timezone,
       use24Hour: use24Hour,
     })
-    return buildCrewMessage(crew.name, show.name, text)
+    return buildCrewMessage(
+      crew.name, show.name, text,
+      crew.crewMemberId ? hoursUrlById.get(crew.crewMemberId) ?? null : null,
+    )
   }
 
   return (

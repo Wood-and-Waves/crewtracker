@@ -394,8 +394,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 638 assertions as of 2026-09-21
-                  (payroll 42 + schedule 346 + clock 119 + rls 131).
+                  helper, no framework. 643 assertions as of 2026-09-27
+                  (payroll 42 + schedule 346 + clock 124 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1270,6 +1270,25 @@ click on and see the week's hours?"* Until then both screens showed ONE day behi
 swaps the punch grid for `components/CrewHoursList.tsx`. A toggle at the top of each says which
 you are on. It is a page swap, not a tab component: nothing to hydrate, nothing to keep.
 
+**THE MASTHEAD NAMES THEM** (Dan, 2026-09-27): "AVERY FERREIRA HOURS", not "Your hours". The page
+is screenshotted, forwarded, and opened by the PM checking somebody's link, so "your" is either
+wrong or tells the reader nothing. The TOGGLE keeps "Your hours" — that is the viewer choosing a
+view, and a name on a tab would be odd. `crewName` comes from `view.me.name` at both call sites.
+
+**THE TEXTED TIMESHEET CARRIES A LINK TO IT** (2026-09-27). Dan: *"send each person's link to
+their personal tracker on the hours page when I send the text after the event is over."* The page
+already outlived the show by design, so this was plumbing: the Reports page now reads the show's
+personal `clock_links` in its existing `Promise.all` and `buildCrewMessage` takes an optional
+`hoursUrl`. **Position is the design** — after the totals and BEFORE "let me know if this does not
+match", because the link is the answer to that sentence; under the sign-off it is buried, above
+the sheet it invites a tap before reading. Pinned by a test on the ordering.
+**Revoked links are excluded** (revoked outranks everything, so it would land on the dead-link
+card) and somebody with no link simply gets the message exactly as before — links are minted by
+hand, so on a show that never used the crew clock nobody has one. **The URL comes from
+`lib/siteOrigin.ts`, never the browser's origin**: this text is SENT, which is the 2026-09-06 bug.
+Not yet built, and worth knowing: minting a link on demand when Send Hours is pressed. Minting IS
+the crew clock's opt-in, so it would have to be scoped to a show that is over or finalized.
+
 **THE WHOLE SHOW, not a calendar week.** For a normal run they are the same, and slicing seven
 days out of a ten-day show would be arbitrary.
 
@@ -1671,7 +1690,7 @@ named, twice.
 **`npm run preview:emails`** (`scripts/test/preview-show-emails.mts`) prints every email this
 piece introduced — plus the reworded handoff email — without sending one, the same shape as the
 existing PM-invite and booking-message preview scripts. Test count as of 2026-09-17:
-payroll 42 + schedule 346 + clock 119 + rls 131 = 638 assertions.
+payroll 42 + schedule 346 + clock 124 + rls 131 = 643 assertions.
 
 Plan: `docs/superpowers/plans/2026-09-07-scheduling-queue-and-pm-emails.md`.
 

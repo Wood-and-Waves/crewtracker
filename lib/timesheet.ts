@@ -181,12 +181,31 @@ export function buildTimesheetText({
  * Renamed and used everywhere, because the channel should not change what you
  * are sending somebody.
  */
-export function buildCrewMessage(crewName: string, showName: string, timesheet: string): string {
+export function buildCrewMessage(
+  crewName: string,
+  showName: string,
+  timesheet: string,
+  /**
+   * Their own hours page, when they have a live clock link (Dan, 2026-09-27:
+   * send it with the timesheet once the show is over). Sits AFTER the totals
+   * and BEFORE "let me know if this does not match" on purpose — it is the
+   * answer to that sentence: here is the summary, here it is in full, now tell
+   * me if I have it wrong. At the very bottom it is buried under the sign-off.
+   *
+   * Omitted when there is no link, or the link was revoked, so the message is
+   * exactly what it was before for everybody else.
+   *
+   * MUST be built from lib/siteOrigin.ts, never the browser's origin: this
+   * text is SENT, and that is the class of bug the 2026-09-06 fix was about.
+   */
+  hoursUrl?: string | null,
+): string {
   const firstName = crewName.trim().split(/\s+/)[0] || crewName
   return (
     `Hi ${firstName},\n\n` +
     `Here are the hours I have recorded for you for ${showName}:\n\n` +
     `${timesheet}\n` +
+    (hoursUrl ? `See it day by day: ${hoursUrl}\n\n` : '') +
     `Please let me know if this does not match your records.\n\n` +
     // "Sent FROM" — a person pressed Send Hours. The rule and the other half
     // of it ("Sent by", for what the app decides to send) are in lib/sendEmail.ts.

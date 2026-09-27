@@ -123,6 +123,7 @@ export default async function ClockPage({
         <Working>
           <CrewHoursList
             showName={hours.showName}
+            crewName={view.me.name}
             hours={hours.hours}
             dayHref={closed ? null : (date => `/clock/${view.token}?d=${date}`)}
             todayHref={closed ? null : `/clock/${view.token}`}

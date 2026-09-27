@@ -39,6 +39,7 @@ export default async function CrewShowScreen({
       return (
         <CrewHoursList
           showName={hours.showName}
+          crewName={view.me.name}
           hours={hours.hours}
           dayHref={view.finalized ? null : (date => `/dashboard/shows/${showId}?d=${date}`)}
           todayHref={view.finalized ? null : `/dashboard/shows/${showId}`}

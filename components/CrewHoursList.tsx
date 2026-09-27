@@ -60,9 +60,17 @@ function RowShell({ href, children }: { href: string | null; children: React.Rea
 }
 
 export default function CrewHoursList({
-  showName, hours: summary, dayHref, todayHref,
+  showName, crewName, hours: summary, dayHref, todayHref,
 }: {
   showName: string
+  /**
+   * WHOSE hours, in the masthead (Dan, 2026-09-27). It said "Your hours",
+   * which is only true of the person holding the link — and this page is
+   * screenshotted, forwarded, and opened by the PM checking somebody's link,
+   * where "your" is wrong or unhelpful. The name makes the page answer the
+   * question on its own.
+   */
+  crewName: string
   hours: CrewHours
   /** Where a row goes: that day's punch grid. NULL once the show is over —
    *  the hours stay readable, but there is nothing left to open. */
@@ -73,7 +81,9 @@ export default function CrewHoursList({
   return (
     <div className="mx-auto max-w-lg px-4 pb-16 pt-4">
       <div className={cn(BAND, '-mx-4 px-4 py-3')}>
-        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.15em] opacity-70">Your hours</p>
+        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.15em] opacity-70">
+          {crewName.trim() ? `${crewName.trim()} Hours` : 'Your hours'}
+        </p>
         <h1 className="font-display text-2xl font-bold uppercase tracking-tight">{showName}</h1>
       </div>
 
