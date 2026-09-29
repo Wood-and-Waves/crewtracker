@@ -97,7 +97,7 @@ export default function MobileRoomTracker({
   /** Show is finalized: punch and timecard writes are refused. */
   locked?: boolean
   /** Scheduling module available — gates the crew row's status chip and the
-   *  room band's confirmed count. Filling and positions live on the
+   *  room band's accepted count. Filling and positions live on the
    *  Scheduling screen now. */
   schedulingEnabled?: boolean
 }) {
@@ -306,7 +306,7 @@ export default function MobileRoomTracker({
                     {room.name}
                     {schedulingEnabled && crew.length > 0 && (
                       <span className="ml-3 font-sans text-xs font-normal normal-case tracking-normal opacity-80">
-                        {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} confirmed
+                        {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} accepted
                       </span>
                     )}
                   </h2>
@@ -330,7 +330,7 @@ export default function MobileRoomTracker({
                   {activeRoom!.name}
                   {schedulingEnabled && crew.length > 0 && (
                     <span className="ml-3 font-sans text-xs font-normal normal-case tracking-normal opacity-80">
-                      {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} confirmed
+                      {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} accepted
                     </span>
                   )}
                 </h2>

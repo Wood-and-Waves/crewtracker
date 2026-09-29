@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn'
 // Dan (2026-09-07): "The 3 dots are not intuitive and that is critical
 // information… Click the pencilled to have a context menu… The less extra
 // buttons on the tracker the better." Then: "Simplicity and less verbiage is
-// key." So ON THE TRACKER the menu is CONFIRMED and DECLINED, nothing else, and
+// key." So ON THE TRACKER the menu is ACCEPTED and DECLINED, nothing else, and
 // a confirmed person shows no chip at all — removing a booking stays under
 // ⋮ → Edit crew.
 //
@@ -33,7 +33,7 @@ type Status = 'pencilled' | 'invited' | 'confirmed' | 'declined'
 // the same call crew_call_positions already got — but the word on screen says
 // what is actually true of that person: they are holding a slot and nobody has
 // contacted them.
-const LABEL: Record<Status, string> = { pencilled: 'Not Asked', invited: 'Asked', confirmed: 'Confirmed', declined: 'Declined' }
+const LABEL: Record<Status, string> = { pencilled: 'Not Asked', invited: 'Asked', confirmed: 'Accepted', declined: 'Declined' }
 
 // "Thu, Oct 1" — the same shape every other date in the app wears. Weekday plus
 // a bare number rendered as "1 Thu" here, which reads as a quantity.
@@ -234,10 +234,10 @@ export default function BookingStatusChip({
           {status !== 'confirmed' && (
             <button type="button" role="menuitem" disabled={busy} onClick={() => record('confirmed')}
               className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-              Confirmed
+              Accepted
             </button>
           )}
-          {/* Confirmed and Declined are both just ANSWERS being written down, so
+          {/* Accepted and Declined are both just ANSWERS being written down, so
               they read alike; the red belongs to the one act that destroys
               something. Declined was danger-coloured until 2026-09-08 and Dan
               could not tell it from Remove at a glance. */}

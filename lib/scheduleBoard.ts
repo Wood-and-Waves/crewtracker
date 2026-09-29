@@ -373,10 +373,10 @@ export function applyBookings(board: Board, painted: PaintedBooking[]): Board {
   return applyPending(board, painted)
 }
 
-/** "12 of 20 positions confirmed · 2 people waiting · 3 open · 1 to sort out" */
+/** "12 of 20 positions accepted · 2 people waiting · 3 open · 1 to sort out" */
 export function describeBoard(s: BoardSummary): string {
   if (s.total === 0) return 'Nothing to schedule yet'
-  const parts = [`${s.confirmed} of ${s.total} positions confirmed`]
+  const parts = [`${s.confirmed} of ${s.total} positions accepted`]
   if (s.waitingPeople > 0) parts.push(`${s.waitingPeople} ${s.waitingPeople === 1 ? 'person' : 'people'} waiting`)
   if (s.open > 0) parts.push(`${s.open} open`)
   if (s.flags > 0) parts.push(`${s.flags} to sort out`)

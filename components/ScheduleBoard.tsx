@@ -41,11 +41,17 @@ function dayHead(date: string) {
 }
 
 export default function ScheduleBoard({
-  showId, board: serverBoard, locked = false,
+  showId, board: serverBoard, locked = false, showConfirmed, organizationId, canAddCrew,
 }: {
   showId: string
   board: Board
   locked?: boolean
+  /** shows.confirmed_at is set. Only reaches the fill picker, where it decides
+   *  whether the scheduler is pencilling or booking. */
+  showConfirmed: boolean
+  /** Both only reach the fill picker, for its add-someone-new panel. */
+  organizationId: string
+  canAddCrew: boolean
 }) {
   const router = useRouter()
   const [picker, setPicker] = useState<{ slotId: string; roomId: string; role: string; date: string; roomName: string } | null>(null)
@@ -230,6 +236,9 @@ export default function ScheduleBoard({
                   roomId={picker.roomId}
                   roomName={room.name}
                   date={picker.date}
+                  showConfirmed={showConfirmed}
+                  organizationId={organizationId}
+                  canAddCrew={canAddCrew}
                   onCancel={() => setPicker(null)}
                   onFilled={rows => {
                     setPicker(null)

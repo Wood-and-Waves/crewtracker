@@ -248,6 +248,44 @@ export async function isPmOnShow(
 }
 
 /**
+ * May this person WRITE to the show — rename it, retime it, mark it confirmed?
+ *
+ * A MIRROR OF THE `shows` UPDATE POLICY, and the only copy of it in TypeScript.
+ * The policy reads:
+ *
+ *   organization_id = my_organization_id()
+ *   AND my_perm('can_edit_timecards')
+ *   AND ( can_see_all_shows()          -- which is my_perm('can_edit_all_shows')
+ *         OR id IN (my show_assignments)
+ *         OR created_by = auth.uid() )
+ *
+ * **If that policy gains an arm, this moves with it.** A second copy of a
+ * visibility rule drifting from the first is a mistake this project has already
+ * made twice — `timecard_day_rates` missed the scheduler arm in 0026, and the
+ * 0035 cutover had to change the same rule in five places at once.
+ *
+ * This exists because being PM-SIDE is not the same as being able to write.
+ * `isPmOnShow` is true for a SCHEDULER once a show has been sent to them, which
+ * is what lets them open the Scheduling screen at all — but the UPDATE policy
+ * deliberately has no scheduler arm, because sending a show to scheduling and
+ * confirming it with the client are the show builder's acts. So a scheduler
+ * must see the show's state and be offered no way to change it, rather than
+ * being handed a control whose write matches no row.
+ */
+export async function canEditShow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  show: { id: string; created_by?: string | null },
+  user: CurrentUser,
+): Promise<boolean> {
+  if (!user.permissions.can_edit_timecards) return false
+  if (user.permissions.can_edit_all_shows) return true
+  if (show.created_by && show.created_by === user.id) return true
+  const { data } = await supabase
+    .from('show_assignments').select('show_id').eq('show_id', show.id).eq('profile_id', user.id).limit(1)
+  return !!data && data.length > 0
+}
+
+/**
  * A login with NO company permission at all — the `crew` preset (Section 3).
  * Such a person is only ever crew-side, so the parts of the app that exist
  * for running a company (the Directory, with everyone's phone numbers) are

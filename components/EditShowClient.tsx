@@ -17,6 +17,7 @@ import PmField, { type PmState } from '@/components/PmField'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
+import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeShowConfirmed } from '@/lib/showConfirmed'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import { cn } from '@/lib/cn'
 
@@ -126,6 +127,7 @@ export default function EditShowClient({
   const [jobNumber, setJobNumber] = useState(show.job_number || '')
   const [showNotes, setShowNotes] = useState(show.show_notes || '')
   const [showFinancials, setShowFinancials] = useState(show.show_financials || false)
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(show.confirmed_at ?? null)
   const [timezone, setTimezone] = useState(show.timezone_identifier)
 
   const [rs, setRs] = useState(ruleset)
@@ -191,6 +193,33 @@ export default function EditShowClient({
     noteSaved()
     router.refresh()
     return true
+  }
+
+  /** Is the job sold, or are we holding the dates?
+   *
+   *  GOES THROUGH THE ROUTE, NOT saveShow(). Confirming emails everybody who
+   *  has been asked or has accepted, and the route owns that send — including
+   *  the conditional UPDATE that makes the stamp a claim, so two presses cannot
+   *  send it twice. A direct write from here would be a second way to flip the
+   *  flag and a second place to forget the email.
+   *
+   *  The same switch lives on the Scheduling strip (ShowConfirmedChip), which
+   *  is the one somebody reaches for when the client rings. They share their
+   *  wording through lib/showConfirmed.ts. */
+  async function setConfirmed(next: boolean) {
+    if (next) {
+      if (!confirm(CONFIRM_SHOW_PROMPT)) return
+    } else if (!confirm(UNCONFIRM_SHOW_PROMPT)) return
+
+    const res = await fetch('/api/shows/confirm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showId: show.id, confirmed: next }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { setSaveError(data.error || "Couldn't save the show's status."); return }
+    setConfirmedAt(next ? new Date().toISOString() : null)
+    noteSaved()
+    router.refresh()
   }
 
   /** Save a text field on blur, skipping the write when nothing changed. */
@@ -594,6 +623,18 @@ export default function EditShowClient({
           organizationId={organizationId}
         />
       )}
+
+      {/* IS THE JOB SOLD? A client asks for a hold long before it is confirmed,
+          and until now the app could not tell the difference. The Scheduling
+          strip's chip is the control somebody actually reaches for; this is the
+          same switch for whoever is already in the show's settings. */}
+      <section className="mb-6">
+        <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Show Status</p>
+        <FieldRow label="Show Confirmed">
+          <Toggle checked={!!confirmedAt} onChange={setConfirmed} label="Show Confirmed" />
+        </FieldRow>
+        <p className="text-xs text-muted mt-2">{describeShowConfirmed(!!confirmedAt)}</p>
+      </section>
 
       {scheduling && (
         <section className="mb-6">

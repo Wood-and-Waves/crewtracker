@@ -58,8 +58,13 @@ const TEAM: Member[] = [
     name: 'Sasha Vine',
     email: 'dan+sasha@theaudiosmith.com',
     role: 'staff',
-    extra: { can_manage_scheduling: true },
-    sees: 'Scheduler. The Needs-scheduling queue and the Scheduling screen; books and asks crew. No pay rates, cannot build a show.',
+    // can_manage_crew_directory is what puts "+ Add someone new" in the fill
+    // picker (2026-09-29). A scheduler meets a new hire before anybody else
+    // does, so without it the demo persona hits the one wall the panel exists
+    // to remove. Still no pay rates — adding a person is not seeing what they
+    // cost.
+    extra: { can_manage_scheduling: true, can_manage_crew_directory: true },
+    sees: 'Scheduler. The Needs-scheduling queue and the Scheduling screen; books crew, asks them, and adds a new one to the directory. No pay rates, cannot build a show.',
   },
   {
     name: 'Ray Delgado',

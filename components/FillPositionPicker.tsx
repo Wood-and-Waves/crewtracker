@@ -10,6 +10,7 @@ import { describeConflicts, type BookingConflict } from '@/lib/bookingConflicts'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
 import { cn } from '@/lib/cn'
+import { formatPhone } from '@/lib/phone'
 
 // Choosing who fills one position on one day.
 //
@@ -62,6 +63,9 @@ type Candidate = {
 /** Another open slot of the same definition, on another day. */
 type SiblingSlot = { id: string; roomId: string; roomName: string; date: string }
 
+const ADD_FIELD =
+  'w-full rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
+
 function fmtDay(date: string) {
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
@@ -77,6 +81,9 @@ export default function FillPositionPicker({
   roomId,
   roomName,
   date,
+  showConfirmed,
+  organizationId,
+  canAddCrew,
   onFilled,
   onCancel,
 }: {
@@ -85,6 +92,28 @@ export default function FillPositionPicker({
   roomId: string
   roomName: string
   date: string
+  /**
+   * Has the client confirmed this show (shows.confirmed_at)? It changes the
+   * VERB only — Pencil before, Book after (Dan, 2026-09-29: "Pencil is for when
+   * a show isn't confirmed yet, but the company is asking for a hold").
+   *
+   * It does NOT change what gets written. A new booking is `pencilled` either
+   * way, because that column is the crew member's own answer and has nothing to
+   * do with the client. Copying the show's state onto the timecard would give
+   * two places to store one fact, which is how they come to disagree.
+   */
+  showConfirmed: boolean
+  /** The company the new person would belong to. Only used by the add panel. */
+  organizationId: string
+  /**
+   * May the caller add somebody to the directory (can_manage_crew_directory)?
+   *
+   * HIDDEN OUTRIGHT WITHOUT IT, with no explanation: an affordance that always
+   * fails is worse than none. The permission already exists and already gates
+   * every crew_members write in the database, so this is the UI agreeing with
+   * the policy rather than a second gate.
+   */
+  canAddCrew: boolean
   /** The rows that were written, so the grid can paint them before the page
    *  refresh lands. Verified writes, not a guess — see book(). */
   onFilled: (painted: PaintedBooking[]) => void
@@ -101,6 +130,16 @@ export default function FillPositionPicker({
   const [siblings, setSiblings] = useState<SiblingSlot[]>([])
   // Step two: the chosen person and which of those days stay ticked.
   const [plan, setPlan] = useState<{ c: Candidate; picked: Set<string> } | null>(null)
+  // Somebody who is not in the directory yet. Three fields, opened in place.
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+
+  // Pencil before the client has confirmed the show, Book after. The VERB is
+  // the whole difference — see the showConfirmed prop. Capitalised here because
+  // both call sites start a sentence with it.
+  const verb = showConfirmed ? 'Book' : 'Pencil'
   // The show this position belongs to — the picker only ever knows roomId,
   // and logging a staffing event needs the show. Read once per room.
   const [showId, setShowId] = useState<string | null>(null)
@@ -288,6 +327,65 @@ export default function FillPositionPicker({
     if (busy) return
     setError('')
     setPlan({ c, picked: new Set(siblings.map(s => s.id)) })
+  }
+
+  /**
+   * Somebody who is not in the directory yet, added and booked in one press.
+   *
+   * Dan, 2026-09-29: "I need a way to add a person from the scheduling screen.
+   * I have a new person to put here." Until now a new hire meant leaving this
+   * screen, going to the directory, adding them, coming back and finding the
+   * slot again.
+   *
+   * NOT THE ONE-FIELD QUICK-ADD that was removed from the directory on
+   * 2026-08-06. That was removed for creating stubs as an end in itself; here
+   * the end is filling a position, and name/phone/email is a real record. The
+   * whole-person screen (/dashboard/directory/new) is still where roles and
+   * rates get set — Dan: "I will add them as I need to."
+   *
+   * The directory write is VERIFIED (.select().single()), so a row refused by
+   * the crew-directory policy is reported rather than read as a success and
+   * then booked as an undefined id.
+   */
+  async function addAndBook() {
+    const trimmed = newName.trim()
+    if (!trimmed || busy) return
+    setBusy(true)
+    setError('')
+
+    // A warning, not a block — two real people genuinely do share a name. Same
+    // guard the directory's own screen uses.
+    const { data: existing } = await supabase
+      .from('crew_members').select('full_name')
+      .eq('organization_id', organizationId).ilike('full_name', trimmed).maybeSingle()
+    if (existing && !confirm(`A crew member named "${(existing as any).full_name}" already exists. Add another anyway?`)) {
+      setBusy(false)
+      return
+    }
+
+    const { data, error: insertError } = await supabase
+      .from('crew_members')
+      .insert({
+        organization_id: organizationId,
+        full_name: trimmed,
+        phone: newPhone.trim() ? formatPhone(newPhone) : null,
+        email: newEmail.trim() || null,
+      })
+      .select('id')
+      .single()
+
+    if (insertError || !data) {
+      setBusy(false)
+      setError(insertError?.message || "Couldn't add this person.")
+      return
+    }
+
+    // Straight into the slot. A brand-new person has no roles, no conflicts and
+    // has declined nothing, so the Candidate is exact rather than a guess.
+    // book() sets busy itself, so hand it a clean slate first.
+    setBusy(false)
+    setAdding(false); setNewName(''); setNewPhone(''); setNewEmail('')
+    await book({ id: (data as any).id, name: trimmed, roles: [], conflicts: [], declinedThisShow: false }, siblings)
   }
 
   async function book(c: Candidate, extra: SiblingSlot[]) {
@@ -513,7 +611,7 @@ export default function FillPositionPicker({
           </div>
           <div className="mt-3 flex items-center gap-2">
             <Button size="sm" disabled={busy} onClick={() => book(plan.c, siblings.filter(s => plan.picked.has(s.id)))}>
-              {busy ? 'Booking…' : `Book ${plan.picked.size + 1} day${plan.picked.size === 0 ? '' : 's'}`}
+              {busy ? `${verb}ing…` : `${verb} ${plan.picked.size + 1} day${plan.picked.size === 0 ? '' : 's'}`}
             </Button>
             <button type="button" className="text-xs text-muted hover:text-ink" disabled={busy} onClick={() => setPlan(null)}>Back</button>
           </div>
@@ -575,9 +673,9 @@ export default function FillPositionPicker({
                     sameRoom ? 'text-muted' : warn ? 'text-ot' : 'text-accent',
                   )}>
                     {sameRoom ? 'In room'
-                      : warn ? 'Book anyway'
-                      : siblings.length > 0 ? `Book ${siblings.length + 1} days`
-                      : 'Book'}
+                      : warn ? `${verb} anyway`
+                      : siblings.length > 0 ? `${verb} ${siblings.length + 1} days`
+                      : verb}
                   </span>
                 </button>
                 {siblings.length > 0 && !sameRoom && (
@@ -595,6 +693,46 @@ export default function FillPositionPicker({
             )
           })}
         </ul>
+      )}
+
+      {/* THE DOOR FOR SOMEBODY WHO IS NOT IN THE DIRECTORY YET. Under the list
+          rather than above it, because the overwhelmingly common case is that
+          the person is already there — and it sits below the empty state too,
+          which is exactly where a scheduler finds themselves when the person
+          they want has never worked for the company before. */}
+      {!plan && canAddCrew && (
+        adding ? (
+          <div className="mt-2 rounded-field border border-line p-2.5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">New crew member</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+                placeholder="Full name" className={ADD_FIELD} />
+              <input value={newPhone} onChange={e => setNewPhone(e.target.value)}
+                placeholder="Phone (optional)" className={ADD_FIELD} />
+              <input value={newEmail} onChange={e => setNewEmail(e.target.value)}
+                placeholder="Email (optional)" className={ADD_FIELD} />
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <Button size="sm" disabled={busy || !newName.trim()} onClick={addAndBook}>
+                {busy ? 'Adding…' : `Add and ${verb.toLowerCase()}${siblings.length > 0 ? ` ${siblings.length + 1} days` : ''}`}
+              </Button>
+              <button type="button" className="text-xs text-muted hover:text-ink" disabled={busy}
+                onClick={() => { setAdding(false); setError('') }}>Cancel</button>
+            </div>
+            {/* Said out loud so nobody hunts for a role field that is not here.
+                A phone or email is worth having now because it is what a booking
+                request needs later; roles and rates belong to the whole-person
+                screen in the Directory. */}
+            <p className="mt-2 text-[11px] text-muted">
+              Roles and rates are set in the Directory. This adds them to the company and puts them in this position.
+            </p>
+          </div>
+        ) : (
+          <button type="button" onClick={() => { setAdding(true); setError('') }}
+            className="mt-2 text-xs font-semibold text-accent hover:underline">
+            + Add someone new
+          </button>
+        )
       )}
 
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}

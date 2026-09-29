@@ -34,6 +34,8 @@ export type ShowRow = {
   dayCount: number
   status: ShowStatus
   statusLabel: string
+  /** False = holding the dates, so the row wears a second chip. */
+  confirmed: boolean
   statusTone: 'neutral' | 'live' | 'ot' | 'good' | 'danger' | 'staffing' | 'preshow' | 'archived'
   /** Headcount on the busiest day — how many people must be found. */
   peakPerDay: number
@@ -233,8 +235,12 @@ export default function ShowsListClient({
                   </div>
                 </Link>
 
-                <div>
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Chip tone={row.statusTone}>{row.statusLabel}</Chip>
+                  {/* Only the exception wears ink — a chip on every sold show
+                      would be wallpaper. Same rule as the tracker, where a crew
+                      row that has accepted shows no chip at all. */}
+                  {!row.confirmed && <Chip tone="ot">Not confirmed</Chip>}
                 </div>
 
                 {schedulingEnabled && <Crewed row={row} />}
@@ -267,7 +273,10 @@ export default function ShowsListClient({
                         </div>
                       )}
                     </div>
-                    <Chip tone={row.statusTone}>{row.statusLabel}</Chip>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Chip tone={row.statusTone}>{row.statusLabel}</Chip>
+                      {!row.confirmed && <Chip tone="ot">Not confirmed</Chip>}
+                    </div>
                   </div>
                 </Link>
 

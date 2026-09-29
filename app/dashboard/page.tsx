@@ -164,6 +164,12 @@ export default async function DashboardPage({
       status,
       statusLabel: meta.label,
       statusTone: meta.tone,
+      // A SEPARATE AXIS FROM THE STATUS CHIP, which is why it is not another
+      // ShowStatus: a show can be unsold and New, or unsold and already
+      // Staffing, and folding the two together would hide whichever mattered
+      // less that day. Read-only here — the shows list is a list, and the
+      // control belongs where the client rings (the Scheduling strip).
+      confirmed: !!show.confirmed_at,
       peakPerDay: summary.peakPerDay,
       // The busiest day decides the headline: it is the day that needs the most
       // people, so it is the one a scheduler is working to.

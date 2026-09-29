@@ -497,7 +497,7 @@ export default async function ShowDetailPage({
                   {room.name}
                   {schedulingOn && crew.length > 0 && (
                     <span className="ml-3 font-sans text-xs font-normal normal-case tracking-normal opacity-80">
-                      {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} confirmed
+                      {crew.filter(tc => tc.booking_status === 'confirmed').length} of {crew.length} accepted
                     </span>
                   )}
                 </h2>

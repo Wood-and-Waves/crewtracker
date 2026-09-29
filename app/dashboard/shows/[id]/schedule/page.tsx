@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
+import { getCurrentUser, canUseScheduling, isPmOnShow, canEditShow } from '@/lib/session'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { BAND } from '@/lib/panel'
@@ -14,6 +14,7 @@ import AskPencilledButton from '@/components/AskPencilledButton'
 import CrewNoticesBar from '@/components/CrewNoticesBar'
 import { fetchUntold } from '@/lib/crewNotices'
 import PmStatusChip from '@/components/PmStatusChip'
+import ShowConfirmedChip from '@/components/ShowConfirmedChip'
 import { buildBoard, type BoardBooking, type SlotFlag } from '@/lib/scheduleBoard'
 import { summarizeCall, describeCallSize } from '@/lib/crewCall'
 
@@ -45,6 +46,11 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
   // screen, and a bookmark must not be the way around that.
   if (!canUseScheduling(user)) redirect(`/dashboard/shows/${id}`)
   if (!(await isPmOnShow(supabase, id))) redirect(`/dashboard/shows/${id}`)
+
+  // PM-side is not the same as being able to WRITE to the show: a scheduler is
+  // PM-side on a sent show but the UPDATE policy has no scheduler arm. See
+  // canEditShow, which mirrors that policy.
+  const mayEditShow = await canEditShow(supabase, show as { id: string; created_by?: string | null }, user)
 
   const days = (workDays ?? []).map((d: any) => ({ workDayId: d.id as string, date: d.date as string, activities: (d.activities ?? []) as string[] }))
   const workDayIds = days.map(d => d.workDayId)
@@ -138,6 +144,14 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
         <BoardCounts board={board} />
         {/* The PM's answer is a chip that IS the control, like a crew row's:
             a PM says yes on the phone too. */}
+        {/* Sold, or holding the dates? The chip IS the control for anyone the
+            shows UPDATE policy allows — which is where you already are when the
+            client rings (Dan, 2026-09-29). A scheduler gets a plain chip. */}
+        <ShowConfirmedChip
+          showId={id}
+          confirmedAt={(show.confirmed_at as string | null) ?? null}
+          canEdit={mayEditShow}
+        />
         <PmStatusChip
           showId={id}
           pm={{
@@ -189,7 +203,14 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
           , then the positions go here.
         </p>
       ) : (
-        <ScheduleBoard showId={id} board={board} locked={locked} />
+        <ScheduleBoard
+          showId={id}
+          board={board}
+          locked={locked}
+          showConfirmed={!!show.confirmed_at}
+          organizationId={user.organizationId!}
+          canAddCrew={user.can('can_manage_crew_directory')}
+        />
       )}
 
       </BoardPaintProvider>

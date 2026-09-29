@@ -10,6 +10,7 @@ import { SHOW_TIMEZONES, DEFAULT_SHOW_TIMEZONE } from '@/lib/timezones'
 import Button from '@/components/ui/Button'
 import NumberedHead from '@/components/ui/NumberedHead'
 import Select from '@/components/ui/Select'
+import Toggle from '@/components/ui/Toggle'
 import { BAND } from '@/lib/panel'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
@@ -17,6 +18,7 @@ import PositionDefsEditor from '@/components/PositionDefsEditor'
 import PmField from '@/components/PmField'
 import { derivedCounts, type PositionDef } from '@/lib/positionDefs'
 import { cn } from '@/lib/cn'
+import { describeShowConfirmed } from '@/lib/showConfirmed'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
 import { roomDayIndices, validateRooms, type CallModel } from '@/lib/crewCallGrid'
 
@@ -88,6 +90,11 @@ export default function NewShowClient({
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [timezone, setTimezone] = useState(DEFAULT_SHOW_TIMEZONE)
+  // OFF BY DEFAULT, and that direction is the safe one. A show that defaulted
+  // to confirmed but was really a hold would have the scheduler telling crew
+  // they are booked on a job that may never happen; the reverse is a toggle
+  // somebody flips a day later.
+  const [showConfirmed, setShowConfirmed] = useState(false)
   // Keys are counter-based rather than randomUUID: a random id generated in a
   // useState initializer differs between the server render and hydration.
   const [rooms, setRooms] = useState<GridRoom[]>([{ key: 'room-1', name: 'Main Stage' }])
@@ -198,6 +205,14 @@ export default function NewShowClient({
           start_date: startDate,
           end_date: endDate,
           timezone_identifier: timezone,
+          // Stamped straight onto the row rather than through
+          // /api/shows/confirm: nobody is booked on a show being created, so
+          // there is nobody for the confirm email to go to.
+          //
+          // confirmed_by is left null on purpose — this screen does not set
+          // created_by either, so there is no user id to hand it, and a
+          // confirmation made at creation has no separate author to record.
+          confirmed_at: showConfirmed ? new Date().toISOString() : null,
         })
         .select('id')
         .single()
@@ -435,6 +450,12 @@ export default function NewShowClient({
                 options={SHOW_TIMEZONES}
               />
             </div>
+            <div className="mt-3 flex items-center justify-between border-b border-line pb-3">
+              <span className="text-sm text-ink">Show Confirmed</span>
+              <Toggle checked={showConfirmed} onChange={setShowConfirmed} label="Show Confirmed" />
+            </div>
+            <p className="mt-1.5 text-xs text-muted">{describeShowConfirmed(showConfirmed)}</p>
+
             <div className="mt-3">
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Production manager</p>
               <PmField organizationId={organizationId} pm={{ profileId: pm?.id ?? null, name: pm?.name ?? null, invitedAt: null, acceptedAt: null }} onPick={setPm} />

@@ -26,6 +26,7 @@ import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
+import { describeShowConfirmed, CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT } from '../../lib/showConfirmed.ts'
 import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
@@ -664,11 +665,11 @@ console.log('\n--- scheduling board ---')
       bookings: [booking({ timecardId: 'q1', slotId: 's1', status: 'invited' }), booking({ timecardId: 'q2', roomId: 'r2', slotId: 's3' })],
     }).summary.pencilledPeople, 0)
   check('the strip reads in one line',
-    describeBoard(board.summary), '1 of 5 positions confirmed · 2 people waiting · 2 open · 1 to sort out')
+    describeBoard(board.summary), '1 of 5 positions accepted · 2 people waiting · 2 open · 1 to sort out')
   check('nothing to schedule says so',
     describeBoard({ total: 0, confirmed: 0, open: 0, waitingPeople: 0, flags: 0 }), 'Nothing to schedule yet')
   check('a full show reads clean',
-    describeBoard({ total: 4, confirmed: 4, open: 0, waitingPeople: 0, flags: 0 }), '4 of 4 positions confirmed')
+    describeBoard({ total: 4, confirmed: 4, open: 0, waitingPeople: 0, flags: 0 }), '4 of 4 positions accepted')
 
   // PAINT FIRST, RECONCILE SECOND. applyBookings puts a verified write on the
   // grid before the page refresh lands, and the STRIP has to move with it —
@@ -1244,6 +1245,33 @@ console.log('\n--- days changed email ---')
     describeConflicts([clash({ status: 'invited' }), clash({ date: '2026-10-07' })]),
     'Booked on Harbour Point Gala — Tue 6 – Wed 7')
   check('no clash says nothing at all', describeConflicts([]), '')
+}
+
+// ---------------------------------------------------------------------------
+// Is the job sold, or are we holding the dates? (2026-09-29)
+// ---------------------------------------------------------------------------
+{
+  // The two sentences describe the SCHEDULER's consequence, which is the whole
+  // point of the flag — not "a box is ticked".
+  check('an unsold show tells the scheduler they are pencilling',
+    describeShowConfirmed(false),
+    'Holding the dates. The scheduler pencils crew in until this is turned on.')
+  check('a sold show tells them they are booking',
+    describeShowConfirmed(true),
+    'The client has confirmed this show, so the scheduler books crew.')
+
+  // CONFIRMING EMAILS PEOPLE AND UN-CONFIRMING DOES NOT, and both prompts have
+  // to say so — a scheduler who cannot tell which way sends mail will avoid the
+  // control entirely. If the copy is reworded, these are the two facts that
+  // must survive the rewrite.
+  check('the confirm prompt warns that crew are emailed',
+    /emailed/i.test(CONFIRM_SHOW_PROMPT), true)
+  check('the un-confirm prompt says nobody is emailed',
+    /nobody is emailed/i.test(UNCONFIRM_SHOW_PROMPT), true)
+  // The word Dan struck out. "Pencil" is a verb on the scheduler's button and
+  // never a name for a show's state.
+  check('neither prompt calls the show pencilled',
+    /pencill?ed/i.test(CONFIRM_SHOW_PROMPT + UNCONFIRM_SHOW_PROMPT), false)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
