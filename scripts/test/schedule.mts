@@ -26,7 +26,8 @@ import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
-import { describeShowConfirmed, CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT } from '../../lib/showConfirmed.ts'
+import { describeShowConfirmed, CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeUnreached } from '../../lib/showConfirmed.ts'
+import { buildShowConfirmedEmail, collectShowConfirmedRecipients } from '../../lib/showConfirmedEmail.ts'
 import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
@@ -1272,6 +1273,94 @@ console.log('\n--- days changed email ---')
   // never a name for a show's state.
   check('neither prompt calls the show pencilled',
     /pencill?ed/i.test(CONFIRM_SHOW_PROMPT + UNCONFIRM_SHOW_PROMPT), false)
+}
+
+// ---------------------------------------------------------------------------
+// The show-confirmed email (2026-09-30)
+// ---------------------------------------------------------------------------
+{
+  const row = (over: any = {}) => ({
+    crew_member_id: 'c1', crew_member_name: 'Alex Reyes', role: 'A1',
+    booking_status: 'confirmed', date: '2026-10-06', activities: ['show'],
+    is_travel_day: false, travel_in_day: false, travel_out_day: false, ...over,
+  })
+
+  // WHO HEARS ABOUT IT. Not Asked has no hold to upgrade — telling them a job
+  // is confirmed would be the first they ever heard of it.
+  check('somebody who accepted is told',
+    collectShowConfirmedRecipients([row()], new Map(), new Map()).length, 1)
+  check('somebody who was asked and has not answered is told',
+    collectShowConfirmedRecipients([row({ booking_status: 'invited' })], new Map(), new Map()).length, 1)
+  check('somebody nobody has asked is NOT told',
+    collectShowConfirmedRecipients([row({ booking_status: 'pencilled' })], new Map(), new Map()).length, 0)
+  check('a decliner is NOT told',
+    collectShowConfirmedRecipients([row({ booking_status: 'declined' })], new Map(), new Map()).length, 0)
+
+  // A person's status can differ across their days — asked for the show days,
+  // never asked for the load-in — and one accepted day makes them accepted.
+  const mixed = collectShowConfirmedRecipients(
+    [row({ booking_status: 'pencilled', date: '2026-10-05' }), row()], new Map(), new Map())
+  check('one accepted day among several makes them accepted', mixed[0].accepted, true)
+  check('and all their days are carried, not just the accepted one', mixed[0].days.length, 2)
+
+  // Two rooms on one day is ONE day, and the travel flags are ORed rather than
+  // taken from whichever row came back last.
+  const tworoom = collectShowConfirmedRecipients(
+    [row(), row({ travel_in_day: true })], new Map(), new Map())
+  check('a person in two rooms on one day is one day', tworoom[0].days.length, 1)
+  check('and their travel leg survives the other room', tworoom[0].days[0].travelIn, true)
+
+  const days = [{ date: '2026-10-06', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }]
+  const base = {
+    to: 'a@example.test', crewName: 'Alex Reyes', showName: 'Northwind',
+    organizationName: 'Wood & Waves Productions', venue: 'Hilton Anatole',
+    cityState: 'Dallas, TX', role: 'A1', days,
+  }
+
+  // THE COMPANY NAME LEADS, as in every other email this app sends: a freelancer
+  // working for six companies needs to know which one is writing.
+  check('the subject leads with the company',
+    buildShowConfirmedEmail({ ...base, accepted: true }).subject,
+    'Wood & Waves Productions: Northwind is confirmed')
+
+  const accepted = buildShowConfirmedEmail({ ...base, accepted: true })
+  check('somebody who accepted is told their dates are firm',
+    accepted.text.includes('The dates you accepted are now firm.'), true)
+  check('and is asked for nothing',
+    /accept or decline/i.test(accepted.text), false)
+
+  const asked = buildShowConfirmedEmail({
+    ...base, accepted: false, confirmUrl: 'https://x.test/book/t?a=confirm', declineUrl: 'https://x.test/book/t?a=decline',
+  })
+  check('somebody who has not answered is asked to',
+    asked.text.includes('Please accept or decline.'), true)
+  check('and gets both links', asked.text.includes('?a=confirm') && asked.text.includes('?a=decline'), true)
+  // ACCEPT and DECLINE, those two words, in those two colours — the absolutes
+  // from the 2026-09-09 copy pass.
+  check('the buttons are the house green and red',
+    asked.html.includes('#1A7F37') && asked.html.includes('#C0392B'), true)
+
+  // A DEAD LINK IS WORSE THAN NO LINK: an expired invite is dropped upstream, so
+  // the email must not then instruct somebody to press a button that is absent.
+  const stale = buildShowConfirmedEmail({ ...base, accepted: false, confirmUrl: null, declineUrl: null })
+  check('with no live invite, nobody is told to press anything',
+    /accept or decline/i.test(stale.text), false)
+  check('but the news still arrives',
+    stale.text.includes('The dates below are now firm.'), true)
+
+  // WHERE means the building AND the city — the city is the half that says
+  // whether this is a drive or a flight.
+  check('where carries both venue and city', accepted.text.includes('Hilton Anatole, Dallas, TX'), true)
+  // A person pressed the toggle, so "from" not "by".
+  check('signed off as a person-triggered send', accepted.text.includes('Sent from CrewTracker.app'), true)
+  check('and it carries no money', /\$|rate/i.test(accepted.text), false)
+
+  // Nobody unreachable is the ordinary case and says nothing at all.
+  check('everybody reachable says nothing', describeUnreached([]), '')
+  check('one unreachable person is named', describeUnreached(['Theo Lindqvist']),
+    'No email on file for Theo Lindqvist — tell them yourself.')
+  check('a crowd is summarised rather than listed',
+    describeUnreached(['Ana', 'Bo', 'Cy', 'Di']), 'No email on file for Ana, Bo and 2 others — tell them yourself.')
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

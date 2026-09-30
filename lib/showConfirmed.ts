@@ -10,6 +10,22 @@
 // standing rule from the 2026-09-09 copy pass is that every user-facing string
 // goes past him first.
 
+/**
+ * Who could not be emailed, as a sentence worth reading.
+ *
+ * Somebody with no address on file is told by NOBODY, and the person who just
+ * pressed the button is the only one in a position to ring them — so this is
+ * said out loud rather than logged. Empty string when everything went out,
+ * which is the ordinary case.
+ */
+export function describeUnreached(noEmail: string[]): string {
+  if (noEmail.length === 0) return ''
+  const names = noEmail.length <= 3
+    ? noEmail.join(', ')
+    : `${noEmail.slice(0, 2).join(', ')} and ${noEmail.length - 2} others`
+  return `No email on file for ${names} — tell them yourself.`
+}
+
 /** Asked before turning the job from a hold into a booking. */
 export const CONFIRM_SHOW_PROMPT =
   'Mark this show as confirmed?\n\n' +

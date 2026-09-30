@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { sendShowConfirmedEmails } from '@/lib/showConfirmedEmail'
 
 // Marking a show CONFIRMED — the client has sold it, so the scheduler books
 // rather than pencils, and everybody already holding the dates is told.
@@ -73,8 +75,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'You do not have permission to change this show.' }, { status: 403 })
   }
 
-  // The email goes here once its copy has been through Dan — see
-  // lib/showConfirmedEmail.ts. Until then confirming is silent, which is the
-  // safe half: a missing email is a gap, a wrong one is a message to real crew.
-  return NextResponse.json({ ok: true, confirmed: true })
+  // TELLING THE CREW HAPPENS AFTER THE STAMP, AND CANNOT UNDO IT. The claim
+  // above has already landed, so the show is confirmed whatever Resend does;
+  // sendShowConfirmedEmails never throws and reports what it managed instead.
+  // The alternative — emailing first and stamping after — is how one refused
+  // send turns into the whole crew being told twice.
+  const notice = await sendShowConfirmedEmails(createAdminClient(), showId)
+  if (notice.failed.length > 0) {
+    console.error('[showConfirmed] some notices did not send', notice.failed)
+  }
+
+  // noEmail is surfaced rather than swallowed: somebody with no address on file
+  // is not told by anybody, and the person who pressed the button is the only
+  // one in a position to pick up the phone.
+  return NextResponse.json({
+    ok: true,
+    confirmed: true,
+    emailed: notice.sent,
+    noEmail: notice.noEmail,
+    failed: notice.failed.length,
+  })
 }

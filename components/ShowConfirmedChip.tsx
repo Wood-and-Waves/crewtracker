@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
 import AnchoredPanel from '@/components/ui/AnchoredPanel'
-import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT } from '@/lib/showConfirmed'
+import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeUnreached } from '@/lib/showConfirmed'
 
 // Is this show sold, or are we holding the dates?
 //
@@ -63,6 +63,7 @@ export default function ShowConfirmedChip({
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) { setNote(data.error || 'That did not save.'); return }
+    setNote(describeUnreached(data.noEmail ?? []))
     setOpen(false)
     router.refresh()
   }
@@ -114,7 +115,7 @@ export default function ShowConfirmedChip({
           </button>
         </div>
       </AnchoredPanel>
-      {note && <span className="text-[11px] text-danger">{note}</span>}
+      {note && <span className="text-[11px] text-ot">{note}</span>}
     </span>
   )
 }

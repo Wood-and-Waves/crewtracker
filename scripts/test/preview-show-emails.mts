@@ -11,6 +11,7 @@ import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import { buildReadyEmail, compressDays } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
+import { buildShowConfirmedEmail } from '../../lib/showConfirmedEmail.ts'
 
 console.log('=== Send to scheduling ===\n')
 
@@ -117,3 +118,33 @@ const daysChangedEmpty = buildDaysChangedEmail({
 
 console.log(`Subject: ${daysChangedEmpty.subject}\n`)
 console.log(daysChangedEmpty.text)
+
+// Both halves, because no single sentence is true for both groups.
+const confirmedDays = [
+  { date: '2026-10-06', isTravelDay: false, travelIn: true, travelOut: false, activities: ['load_in'] },
+  { date: '2026-10-07', isTravelDay: false, travelIn: false, travelOut: false, activities: ['rehearsal'] },
+  { date: '2026-10-08', isTravelDay: false, travelIn: false, travelOut: true, activities: ['show', 'load_out'] },
+]
+const confirmedBase = {
+  to: 'alex@example.test',
+  showName: 'Northwind Global Sales Kickoff',
+  organizationName: 'Wood & Waves Productions',
+  venue: 'Hilton Anatole',
+  cityState: 'Dallas, TX',
+  role: 'A1',
+  days: confirmedDays,
+}
+
+console.log('\n\n=== Show confirmed (they already accepted) ===\n')
+const confAccepted = buildShowConfirmedEmail({ ...confirmedBase, crewName: 'Alex Reyes', accepted: true })
+console.log(`Subject: ${confAccepted.subject}\n`)
+console.log(confAccepted.text)
+
+console.log('\n\n=== Show confirmed (asked, still no answer) ===\n')
+const confAsked = buildShowConfirmedEmail({
+  ...confirmedBase, crewName: 'Theo Lindqvist', accepted: false,
+  confirmUrl: 'https://crewtracker.app/book/8f3c.../?a=confirm',
+  declineUrl: 'https://crewtracker.app/book/8f3c.../?a=decline',
+})
+console.log(`Subject: ${confAsked.subject}\n`)
+console.log(confAsked.text)

@@ -17,7 +17,7 @@ import PmField, { type PmState } from '@/components/PmField'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
-import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeShowConfirmed } from '@/lib/showConfirmed'
+import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeShowConfirmed, describeUnreached } from '@/lib/showConfirmed'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import { cn } from '@/lib/cn'
 
@@ -128,6 +128,8 @@ export default function EditShowClient({
   const [showNotes, setShowNotes] = useState(show.show_notes || '')
   const [showFinancials, setShowFinancials] = useState(show.show_financials || false)
   const [confirmedAt, setConfirmedAt] = useState<string | null>(show.confirmed_at ?? null)
+  // Who the confirmation could not reach. Not an error, so not setSaveError.
+  const [unreached, setUnreached] = useState('')
   const [timezone, setTimezone] = useState(show.timezone_identifier)
 
   const [rs, setRs] = useState(ruleset)
@@ -217,6 +219,7 @@ export default function EditShowClient({
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) { setSaveError(data.error || "Couldn't save the show's status."); return }
+    setUnreached(describeUnreached(data.noEmail ?? []))
     setConfirmedAt(next ? new Date().toISOString() : null)
     noteSaved()
     router.refresh()
@@ -634,6 +637,7 @@ export default function EditShowClient({
           <Toggle checked={!!confirmedAt} onChange={setConfirmed} label="Show Confirmed" />
         </FieldRow>
         <p className="text-xs text-muted mt-2">{describeShowConfirmed(!!confirmedAt)}</p>
+        {unreached && <p className="mt-1 text-xs text-ot">{unreached}</p>}
       </section>
 
       {scheduling && (
