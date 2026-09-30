@@ -17,7 +17,10 @@ import PmField, { type PmState } from '@/components/PmField'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
-import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeShowConfirmed, describeUnreached } from '@/lib/showConfirmed'
+import {
+  CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT, NOTIFY_CREW_AGAIN_PROMPT,
+  describeShowConfirmed, describeUnreached, describeCrewTold,
+} from '@/lib/showConfirmed'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import { cn } from '@/lib/cn'
 
@@ -130,6 +133,8 @@ export default function EditShowClient({
   const [confirmedAt, setConfirmedAt] = useState<string | null>(show.confirmed_at ?? null)
   // Who the confirmation could not reach. Not an error, so not setSaveError.
   const [unreached, setUnreached] = useState('')
+  const [noticeSentAt, setNoticeSentAt] = useState<string | null>(show.confirmed_notice_sent_at ?? null)
+  const [telling, setTelling] = useState(false)
   const [timezone, setTimezone] = useState(show.timezone_identifier)
 
   const [rs, setRs] = useState(ruleset)
@@ -219,8 +224,30 @@ export default function EditShowClient({
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) { setSaveError(data.error || "Couldn't save the show's status."); return }
-    setUnreached(describeUnreached(data.noEmail ?? []))
     setConfirmedAt(next ? new Date().toISOString() : null)
+    // Going back to a hold un-tells the crew, matching the route: a show sold
+    // again later is news worth sending a second time.
+    if (!next) setNoticeSentAt(null)
+    setUnreached('')
+    noteSaved()
+    router.refresh()
+  }
+
+  /** The second, deliberate press — the only thing that emails the crew. */
+  async function tellCrew() {
+    const alreadyTold = !!noticeSentAt
+    if (!confirm(alreadyTold ? NOTIFY_CREW_AGAIN_PROMPT : NOTIFY_CREW_PROMPT)) return
+
+    setTelling(true); setUnreached('')
+    const res = await fetch('/api/shows/confirm/notify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showId: show.id }),
+    })
+    const data = await res.json().catch(() => ({}))
+    setTelling(false)
+    if (!res.ok) { setSaveError(data.error || 'The emails did not send.'); return }
+    setNoticeSentAt(data.sentAt ?? new Date().toISOString())
+    setUnreached(describeUnreached(data.noEmail ?? []))
     noteSaved()
     router.refresh()
   }
@@ -637,7 +664,24 @@ export default function EditShowClient({
           <Toggle checked={!!confirmedAt} onChange={setConfirmed} label="Show Confirmed" />
         </FieldRow>
         <p className="text-xs text-muted mt-2">{describeShowConfirmed(!!confirmedAt)}</p>
-        {unreached && <p className="mt-1 text-xs text-ot">{unreached}</p>}
+
+        {/* MARKING IT CONFIRMED EMAILS NOBODY. Telling the crew is this second
+            press, on purpose (Dan, 2026-09-30) — a toggle pressed to see what
+            it does must not reach thirty freelancers. */}
+        {confirmedAt && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button variant="ghost" size="sm" disabled={telling} onClick={tellCrew}>
+              {telling ? 'Sending…' : noticeSentAt ? 'Tell the crew again' : 'Tell the crew'}
+            </Button>
+            <span className="text-xs text-muted">
+              {noticeSentAt
+                ? describeCrewTold(noticeSentAt)
+                : 'Nobody has been told yet.'}
+            </span>
+          </div>
+        )}
+
+        {unreached && <p className="mt-2 text-xs text-ot">{unreached}</p>}
       </section>
 
       {scheduling && (

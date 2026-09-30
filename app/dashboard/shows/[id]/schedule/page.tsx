@@ -150,6 +150,7 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
         <ShowConfirmedChip
           showId={id}
           confirmedAt={(show.confirmed_at as string | null) ?? null}
+          noticeSentAt={(show.confirmed_notice_sent_at as string | null) ?? null}
           canEdit={mayEditShow}
         />
         <PmStatusChip

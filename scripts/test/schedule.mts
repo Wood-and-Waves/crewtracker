@@ -26,7 +26,10 @@ import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
-import { describeShowConfirmed, CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeUnreached } from '../../lib/showConfirmed.ts'
+import {
+  describeShowConfirmed, CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
+  NOTIFY_CREW_AGAIN_PROMPT, describeUnreached, describeCrewTold,
+} from '../../lib/showConfirmed.ts'
 import { buildShowConfirmedEmail, collectShowConfirmedRecipients } from '../../lib/showConfirmedEmail.ts'
 import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
@@ -1261,14 +1264,31 @@ console.log('\n--- days changed email ---')
     describeShowConfirmed(true),
     'The client has confirmed this show, so the scheduler books crew.')
 
-  // CONFIRMING EMAILS PEOPLE AND UN-CONFIRMING DOES NOT, and both prompts have
-  // to say so — a scheduler who cannot tell which way sends mail will avoid the
-  // control entirely. If the copy is reworded, these are the two facts that
-  // must survive the rewrite.
-  check('the confirm prompt warns that crew are emailed',
-    /emailed/i.test(CONFIRM_SHOW_PROMPT), true)
+  // NEITHER TOGGLE SENDS ANYTHING (Dan, 2026-09-30: an automatic send on the
+  // confirm press "feels too risky"). Both prompts have to say so out loud —
+  // somebody pressing a toggle to see what it does must be able to read, before
+  // pressing, that it reaches nobody. If this copy is reworded, that is the
+  // fact which must survive the rewrite.
+  check('the confirm prompt promises nobody is emailed',
+    /nobody is emailed/i.test(CONFIRM_SHOW_PROMPT), true)
+  check('and points at the separate button',
+    /separate button/i.test(CONFIRM_SHOW_PROMPT), true)
   check('the un-confirm prompt says nobody is emailed',
     /nobody is emailed/i.test(UNCONFIRM_SHOW_PROMPT), true)
+
+  // The SECOND press is the one that writes to people, and it names both the
+  // group and the exclusion.
+  check('the notify prompt says it emails the crew',
+    /email the crew/i.test(NOTIFY_CREW_PROMPT), true)
+  check('and names who is left alone',
+    /left alone/i.test(NOTIFY_CREW_PROMPT), true)
+  // Sending a SECOND time is a different question: everybody gets another copy,
+  // including the people who already had one, and the prompt must not hide it.
+  check('sending again admits it goes to everyone again',
+    /including the people who were told/i.test(NOTIFY_CREW_AGAIN_PROMPT), true)
+
+  check('nobody told yet says nothing', describeCrewTold(null), '')
+  check('a told show says when', describeCrewTold('2026-10-03T12:00:00Z'), 'Crew told Oct 3')
   // The word Dan struck out. "Pencil" is a verb on the scheduler's button and
   // never a name for a show's state.
   check('neither prompt calls the show pencilled',

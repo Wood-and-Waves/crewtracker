@@ -4,7 +4,10 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Chip from '@/components/ui/Chip'
 import AnchoredPanel from '@/components/ui/AnchoredPanel'
-import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeUnreached } from '@/lib/showConfirmed'
+import {
+  CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
+  NOTIFY_CREW_AGAIN_PROMPT, describeUnreached, describeCrewTold,
+} from '@/lib/showConfirmed'
 
 // Is this show sold, or are we holding the dates?
 //
@@ -33,11 +36,20 @@ import { CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, describeUnreached } from '@
 // Pencil survives only as the verb on the fill picker's button.
 
 export default function ShowConfirmedChip({
-  showId, confirmedAt, canEdit,
+  showId, confirmedAt, noticeSentAt, canEdit,
 }: {
   showId: string
   /** Null = holding the dates. */
   confirmedAt: string | null
+  /**
+   * When the crew were last told. Null on a confirmed show means nobody has
+   * been told, which is what puts the Tell the crew button on screen.
+   *
+   * MARKING CONFIRMED SENDS NOTHING (Dan, 2026-09-30) — the two are separate
+   * presses on purpose, so a toggle pressed to see what it does cannot reach
+   * thirty freelancers.
+   */
+  noticeSentAt: string | null
   /** Does the caller pass the shows UPDATE policy? A read-only viewer gets a
    *  plain chip; see the header. */
   canEdit: boolean
@@ -49,6 +61,7 @@ export default function ShowConfirmedChip({
   const wrapRef = useRef<HTMLSpanElement | null>(null)
 
   const confirmed = !!confirmedAt
+  const told = !!noticeSentAt
 
   async function set(next: boolean) {
     if (next) {
@@ -63,6 +76,22 @@ export default function ShowConfirmedChip({
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) { setNote(data.error || 'That did not save.'); return }
+    setOpen(false)
+    router.refresh()
+  }
+
+  /** The second press: the only thing in the app that sends this email. */
+  async function tellCrew() {
+    if (!confirm(told ? NOTIFY_CREW_AGAIN_PROMPT : NOTIFY_CREW_PROMPT)) return
+
+    setBusy(true); setNote('')
+    const res = await fetch('/api/shows/confirm/notify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showId }),
+    })
+    const data = await res.json().catch(() => ({}))
+    setBusy(false)
+    if (!res.ok) { setNote(data.error || 'The emails did not send.'); return }
     setNote(describeUnreached(data.noEmail ?? []))
     setOpen(false)
     router.refresh()
@@ -86,9 +115,30 @@ export default function ShowConfirmedChip({
         className="rounded-pill focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent"
       >
         {confirmed
-          ? <span className="text-xs text-muted hover:text-ink">Confirmed ▾</span>
+          ? <span className="text-xs text-muted hover:text-ink">
+              {told ? describeCrewTold(noticeSentAt) : 'Confirmed'} ▾
+            </span>
           : <Chip tone="ot">Not confirmed ▾</Chip>}
       </button>
+
+      {/* THE SECOND PRESS, and it is a real button rather than a menu item
+          because it is the one that writes to people — Dan asked for exactly
+          this after deciding an automatic send on the toggle was too risky.
+          It appears only while there is news nobody has passed on; once the
+          crew have been told, sending again moves into the menu, where it is
+          a deliberate choice rather than a button sitting there inviting a
+          second copy. Same rule as everything else on this screen: only the
+          thing still needing attention wears ink. */}
+      {confirmed && !told && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={tellCrew}
+          className="rounded-field border-2 border-ink px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bg disabled:opacity-40"
+        >
+          {busy ? 'Sending…' : 'Tell the crew'}
+        </button>
+      )}
 
       <AnchoredPanel
         anchorRef={wrapRef}
@@ -104,10 +154,18 @@ export default function ShowConfirmedChip({
               Mark the show confirmed
             </button>
           ) : (
-            <button type="button" role="menuitem" disabled={busy} onClick={() => set(false)}
-              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-              Put it back to holding dates
-            </button>
+            <>
+              {told && (
+                <button type="button" role="menuitem" disabled={busy} onClick={tellCrew}
+                  className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+                  Tell the crew again
+                </button>
+              )}
+              <button type="button" role="menuitem" disabled={busy} onClick={() => set(false)}
+                className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+                Put it back to holding dates
+              </button>
+            </>
           )}
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}
             className="block w-full px-3 py-1.5 text-left text-xs text-muted hover:text-ink">

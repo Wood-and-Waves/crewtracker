@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { sendShowConfirmedEmails } from '@/lib/showConfirmedEmail'
+
 
 // Marking a show CONFIRMED — the client has sold it, so the scheduler books
 // rather than pencils, and everybody already holding the dates is told.
@@ -14,12 +13,15 @@ import { sendShowConfirmedEmails } from '@/lib/showConfirmedEmail'
 // scheduling is the show builder's act and so is this — so a scheduler's write
 // matches no row and is refused here rather than being checked by hand.
 //
-// THE UPDATE IS VERIFIED, and that is load-bearing twice over. An UPDATE that
-// matches no policy returns success with zero rows, so without `.select()` a
-// refusal would read as a success. And the `is('confirmed_at', null)` predicate
-// makes the stamp a CLAIM: two presses landing together both read the column as
-// null, but only the first UPDATE matches a row, so only one email is ever
-// sent. Same shape as maybeSendReadyEmail's claim in lib/showReadiness.ts.
+// THE UPDATE IS VERIFIED. An UPDATE that matches no policy returns success with
+// zero rows, so without `.select()` a refusal would read as a success.
+//
+// THIS ROUTE EMAILS NOBODY (2026-09-30). Dan: "I think we need a second button
+// to press to email the crew. Sending an autoemail when the mark show as
+// confirmed get hit feels too risky." Marking a show confirmed is internal
+// bookkeeping — the scheduler books instead of holding — and pressing a toggle
+// to see what it does must not reach thirty freelancers. Telling them is
+// app/api/shows/confirm/notify, a separate deliberate press.
 
 export async function POST(request: NextRequest) {
   let body: { showId?: string; confirmed?: boolean }
@@ -44,9 +46,11 @@ export async function POST(request: NextRequest) {
   // told an hour ago that it was on would be worse than saying nothing, and the
   // scheduler can ring the two people who care. The confirm slip says so.
   if (!confirmed) {
+    // The notice stamp is cleared with it: a show that goes back to being a
+    // hold and is later sold again is news worth sending a second time.
     const { data, error } = await supabase
       .from('shows')
-      .update({ confirmed_at: null, confirmed_by: null })
+      .update({ confirmed_at: null, confirmed_by: null, confirmed_notice_sent_at: null })
       .eq('id', showId)
       .select('id')
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -75,24 +79,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'You do not have permission to change this show.' }, { status: 403 })
   }
 
-  // TELLING THE CREW HAPPENS AFTER THE STAMP, AND CANNOT UNDO IT. The claim
-  // above has already landed, so the show is confirmed whatever Resend does;
-  // sendShowConfirmedEmails never throws and reports what it managed instead.
-  // The alternative — emailing first and stamping after — is how one refused
-  // send turns into the whole crew being told twice.
-  const notice = await sendShowConfirmedEmails(createAdminClient(), showId)
-  if (notice.failed.length > 0) {
-    console.error('[showConfirmed] some notices did not send', notice.failed)
-  }
-
-  // noEmail is surfaced rather than swallowed: somebody with no address on file
-  // is not told by anybody, and the person who pressed the button is the only
-  // one in a position to pick up the phone.
-  return NextResponse.json({
-    ok: true,
-    confirmed: true,
-    emailed: notice.sent,
-    noEmail: notice.noEmail,
-    failed: notice.failed.length,
-  })
+  return NextResponse.json({ ok: true, confirmed: true })
 }

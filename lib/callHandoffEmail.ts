@@ -67,7 +67,12 @@ export function buildCallHandoffEmail(input: CallHandoffEmailInput) {
     `Open the schedule: ${input.link}`,
     '',
     'Sent from CrewTracker.app',
-  ].filter(Boolean).join('\n')
+    // filter(l => l !== null), NOT filter(Boolean): the '' entries above are
+    // deliberate blank lines and Boolean discards every one of them, which is
+    // why this arrived as one dense block from the day it was written until
+    // 2026-09-30. The null entries are the optional rows, and they are what
+    // actually needs dropping.
+  ].filter(l => l !== null).join('\n')
 
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">

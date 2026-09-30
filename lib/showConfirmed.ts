@@ -26,10 +26,42 @@ export function describeUnreached(noEmail: string[]): string {
   return `No email on file for ${names} — tell them yourself.`
 }
 
-/** Asked before turning the job from a hold into a booking. */
+/**
+ * Asked before turning the job from a hold into a booking.
+ *
+ * IT SAYS NOBODY IS EMAILED, and that is the point (Dan, 2026-09-30: sending
+ * automatically on this press "feels too risky"). Somebody pressing a toggle to
+ * see what it does must be able to read, before they press it, that it reaches
+ * no one. Telling the crew is NOTIFY_CREW_PROMPT, a separate button.
+ */
 export const CONFIRM_SHOW_PROMPT =
   'Mark this show as confirmed?\n\n' +
-  'Everyone who has been asked or has accepted will be emailed to say it is on.'
+  'The scheduler will book crew rather than hold them. Nobody is emailed — ' +
+  'telling the crew is a separate button.'
+
+/**
+ * Asked before the second press, the one that actually writes to people.
+ *
+ * It names the group and the exclusion, because "the crew" is vaguer than what
+ * happens: somebody nobody has asked has no hold to upgrade and is left alone.
+ */
+export const NOTIFY_CREW_PROMPT =
+  'Email the crew to say this show is confirmed?\n\n' +
+  'It goes to everyone who has been asked or has accepted. ' +
+  'Anyone nobody has asked yet is left alone.'
+
+/** The same question when they have already been told once. */
+export const NOTIFY_CREW_AGAIN_PROMPT =
+  'Email the crew again?\n\n' +
+  'Everyone who has been asked or has accepted gets another copy, ' +
+  'including the people who were told the first time.'
+
+/** The button, and what it says once the crew have been told. */
+export function describeCrewTold(sentAt: string | null): string {
+  if (!sentAt) return ''
+  const when = new Date(sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return `Crew told ${when}`
+}
 
 /** Asked before putting a confirmed show back to a hold.
  *  It says nobody is emailed because nobody is — see the route. */
