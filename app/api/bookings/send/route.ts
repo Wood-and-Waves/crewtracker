@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   const [{ data: show }, { data: crew }] = await Promise.all([
     supabase
       .from('shows')
-      .select('id, name, venue, city_state, end_date, organization_id, finalized_at')
+      .select('id, name, venue, city_state, end_date, organization_id, finalized_at, confirmed_at')
       .eq('id', showId)
       .maybeSingle(),
     supabase.from('crew_members').select('id, full_name, email').eq('id', crewMemberId).maybeSingle(),
@@ -139,6 +139,10 @@ export async function POST(request: Request) {
     organizationName: org?.name ?? 'the production team',
     role,
     days: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    // Asking somebody to HOLD dates rather than booking them, when the client
+    // has not confirmed the show. One sentence in the email and the text; the
+    // days, the venue and the two buttons are the same either way.
+    showConfirmed: !!show.confirmed_at,
   }
   const smsText = buildBookingRequestText(common)
 

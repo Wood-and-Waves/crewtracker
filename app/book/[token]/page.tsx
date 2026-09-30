@@ -92,14 +92,29 @@ export default async function BookingPage({
 
   return (
     <Shell>
-      <p className="text-center text-sm text-muted">{invite.organizationName} would like to book you for</p>
+      {/* HOLD OR BOOK, matching the email that sent them here. The two used to
+          be one sentence, so a hold request linked to a page saying "book you"
+          — the contradiction landing inside a single journey. */}
+      <p className="text-center text-sm text-muted">
+        {invite.organizationName} would like to {invite.showConfirmed ? 'book' : 'hold'} you for
+      </p>
       <h1 className="mb-1 mt-1 text-center text-2xl font-extrabold text-ink">{invite.showName}</h1>
       {/* Venue AND city, matching the email that sent them here (Dan,
           2026-09-09): the building says where to go, the city says whether it
           is a drive or a flight. */}
       {(invite.venue || invite.cityState) && (
-        <p className="mb-5 text-center text-sm text-muted">
+        <p className={`${invite.showConfirmed ? 'mb-5' : 'mb-2'} text-center text-sm text-muted`}>
           {[invite.venue, invite.cityState].filter(Boolean).join(', ')}
+        </p>
+      )}
+
+      {/* A SENTENCE, NOT A CHIP. "Not confirmed" is this app's internal
+          vocabulary and this page is read by somebody who has never seen the
+          app — often on a phone, once. It also answers the question the ask
+          raises: what am I agreeing to? */}
+      {!invite.showConfirmed && (
+        <p className="mb-5 text-center text-sm text-muted">
+          The client has not confirmed this show yet.
         </p>
       )}
 

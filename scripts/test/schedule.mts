@@ -1363,5 +1363,66 @@ console.log('\n--- days changed email ---')
     describeUnreached(['Ana', 'Bo', 'Cy', 'Di']), 'No email on file for Ana, Bo and 2 others — tell them yourself.')
 }
 
+// ---------------------------------------------------------------------------
+// Hold vs book: the same ask, two different commitments (2026-09-30)
+// ---------------------------------------------------------------------------
+{
+  const days = [{ date: '2026-10-06', isTravelDay: false, travelIn: false, travelOut: false, activities: ['show'] }]
+  const base = {
+    crewName: 'Theo Lindqvist', showName: 'Northwind', organizationName: 'Wood & Waves Productions',
+    venue: 'Hilton Anatole', cityState: 'Dallas, TX', role: 'A1', days,
+  }
+  const mail = (over: any = {}) => buildBookingRequestEmail({
+    ...base, to: 'a@b.test', link: 'https://x.test/book/t',
+    confirmUrl: 'https://x.test/book/t?a=confirm', declineUrl: 'https://x.test/book/t?a=decline', ...over,
+  })
+
+  // THE DEFAULT IS BOOKED, so every existing caller and fixture says exactly
+  // what it said before this branch existed.
+  check('an unflagged ask is a booking, as it always was',
+    mail().subject, 'Wood & Waves Productions: are you available for Northwind?')
+  check('and still says book', mail().text.includes('would like to book you for Northwind.'), true)
+
+  const held = mail({ showConfirmed: false })
+  check('a hold says so in the subject',
+    held.subject, 'Wood & Waves Productions: can you hold dates for Northwind?')
+  check('and asks to hold rather than book',
+    held.text.includes('would like to hold you for Northwind.'), true)
+  check('and says the client has not confirmed',
+    held.text.includes('The client has not confirmed the show yet.'), true)
+  // A PROMISE THE SOFTWARE KEEPS: this is lib/showConfirmedEmail.ts, which goes
+  // to exactly the people who were asked or accepted. Delete that email and
+  // this sentence becomes a lie.
+  check('and promises to say when they do',
+    held.text.includes('We will let you know when they do.'), true)
+  check('the html says the same thing',
+    held.html.includes('hold</strong>') || held.html.includes('would like to hold you for'), true)
+  check('a confirmed show promises nothing of the sort',
+    mail().text.includes('We will let you know'), false)
+
+  // The buttons are identical: accepting a hold is still accepting.
+  check('a hold still carries both buttons',
+    held.html.includes('#1A7F37') && held.html.includes('#C0392B'), true)
+  check('and both links', held.text.includes('?a=confirm') && held.text.includes('?a=decline'), true)
+
+  // The texted version, in the scheduler's own first person.
+  const smsBooked = buildBookingRequestText(base)
+  const smsHeld = buildBookingRequestText({ ...base, showConfirmed: false })
+  check('the text asks availability on a confirmed show',
+    smsBooked.includes('Are you available for Northwind'), true)
+  check('and asks for a hold on an unconfirmed one',
+    smsHeld.includes('Can you hold dates for Northwind'), true)
+  // "I'll get you on the books" PROMISES A BOOKING and cannot carry over.
+  check('a confirmed ask closes by putting them on the books',
+    smsBooked.includes("I'll get you on the books."), true)
+  check('a hold closes by holding the dates instead',
+    smsHeld.includes("I'll hold the dates for you."), true)
+  check('and never claims the books', smsHeld.includes('on the books'), false)
+
+  // "Pencilled" is not a word a crew member ever reads (Dan, 2026-09-29).
+  check('nothing a crew member reads says pencilled',
+    /pencill?ed/i.test(held.text + held.html + smsHeld), false)
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`)
 process.exit(fail > 0 ? 1 : 0)

@@ -37,6 +37,16 @@ export type BookingInviteView = {
   response: 'confirmed' | 'declined' | null
   /** The show has been closed out; responding is no longer possible. */
   finalized: boolean
+  /**
+   * The client has confirmed the show. False = they are being asked to HOLD
+   * dates, and the page says so — otherwise the email that sent them here says
+   * hold and the page it links to says book, inside one journey.
+   *
+   * Named explicitly in the select above. This file runs with the SERVICE ROLE,
+   * which bypasses the day_rate column lockdown, so select('*') is forbidden
+   * here and a new column has to be asked for by name.
+   */
+  showConfirmed: boolean
 }
 
 export async function loadBookingInvite(token: string): Promise<BookingInviteView | null> {
@@ -57,7 +67,7 @@ export async function loadBookingInvite(token: string): Promise<BookingInviteVie
   const [{ data: show }, { data: crew }, { data: org }] = await Promise.all([
     // Explicit columns. `shows` carries show_notes, job_number and
     // client_company, none of which are the crew member's business.
-    admin.from('shows').select('id, name, venue, city_state, finalized_at').eq('id', invite.show_id).maybeSingle(),
+    admin.from('shows').select('id, name, venue, city_state, finalized_at, confirmed_at').eq('id', invite.show_id).maybeSingle(),
     admin.from('crew_members').select('full_name').eq('id', invite.crew_member_id).maybeSingle(),
     admin.from('organizations').select('name').eq('id', invite.organization_id).maybeSingle(),
   ])
@@ -111,5 +121,6 @@ export async function loadBookingInvite(token: string): Promise<BookingInviteVie
     respondedAt: invite.responded_at ?? null,
     response: (invite.response as 'confirmed' | 'declined' | null) ?? null,
     finalized: !!show.finalized_at,
+    showConfirmed: !!show.confirmed_at,
   }
 }

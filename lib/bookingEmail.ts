@@ -203,6 +203,16 @@ export type BookingRequestInput = {
    *  the page with the note box ready, since a decline carries a message. */
   confirmUrl: string
   declineUrl: string
+  /**
+   * Has the client confirmed the show (shows.confirmed_at)? Default TRUE, which
+   * keeps every existing caller and fixture saying exactly what it said before.
+   *
+   * ASKING SOMEBODY TO HOLD DATES IS A DIFFERENT ASK from booking them, and
+   * until 2026-09-30 the app could not say so — a scheduler wrote it by hand in
+   * every message. It changes ONE sentence; the days, the venue and the two
+   * buttons are identical, because accepting a hold is still accepting.
+   */
+  showConfirmed?: boolean
 }
 
 export function buildBookingRequestEmail(input: BookingRequestInput) {
@@ -218,7 +228,19 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   // deciding cannot answer without the second. `where` used to be
   // `venue || cityState`, so a show with both printed only the venue.
   const where = [input.venue, input.cityState].filter(Boolean).join(', ') || null
-  const subject = `${input.organizationName}: are you available for ${input.showName}?`
+  // A HOLD IS NOT A BOOKING, and the subject says which before it is opened.
+  const held = input.showConfirmed === false
+  const subject = held
+    ? `${input.organizationName}: can you hold dates for ${input.showName}?`
+    : `${input.organizationName}: are you available for ${input.showName}?`
+  // "We will let you know when they do" is a promise the software keeps: it is
+  // the show-confirmed email (lib/showConfirmedEmail.ts), which goes to exactly
+  // the people who were asked or accepted. The two messages are a pair, and if
+  // that email is ever removed this sentence becomes a lie.
+  const lead = held
+    ? `${input.organizationName} would like to hold you for ${input.showName}. `
+      + 'The client has not confirmed the show yet. We will let you know when they do.'
+    : `${input.organizationName} would like to book you for ${input.showName}.`
 
   // The day-by-day schedule sits UNDER the Dates summary rather than replacing
   // it. The summary answers "how long is this and does it involve travel"; the
@@ -233,7 +255,7 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
   const text = [
     `Hi ${first},`,
     '',
-    `${input.organizationName} would like to book you for ${input.showName}.`,
+    lead,
     '',
     input.role ? `Role:   ${input.role}` : null,
     `Dates:  ${when}`,
@@ -253,8 +275,10 @@ export function buildBookingRequestEmail(input: BookingRequestInput) {
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#18181b">
   <p style="font-size:15px;margin:0 0 16px">Hi ${escapeHtml(first)},</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 20px">
-    <strong>${escapeHtml(input.organizationName)}</strong> would like to book you for
-    <strong>${escapeHtml(input.showName)}</strong>.
+    <strong>${escapeHtml(input.organizationName)}</strong> would like to ${held ? 'hold' : 'book'} you for
+    <strong>${escapeHtml(input.showName)}</strong>.${held
+      ? ' The client has not confirmed the show yet. We will let you know when they do.'
+      : ''}
   </p>
   <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 24px">
     ${input.role ? `<tr><td style="padding:6px 0;color:#71717a;width:70px">Role</td><td style="padding:6px 0">${escapeHtml(input.role)}</td></tr>` : ''}
@@ -305,6 +329,7 @@ export function buildBookingRequestText(
   // Company names very often already end in a period ("Northwind Staging Co."),
   // and "Co.." is the kind of detail that makes a message look automated.
   const org = input.organizationName.replace(/\.$/, '')
+  const held = input.showConfirmed === false
 
   // ONE DAY PER LINE, and the day written the crew member's way — the same
   // wording as the email, so the two cannot disagree (Dan, 2026-09-09).
@@ -330,7 +355,11 @@ export function buildBookingRequestText(
   const head = [
     `Hi ${input.crewName.split(' ')[0]}, it's ${org}.`,
     '',
-    `Are you available for ${input.showName}${input.role ? ` as ${input.role}` : ''}${where ? ` at ${where}` : ''}?`,
+    // Same branch as the email, in the scheduler's own first-person voice —
+    // this is pasted into their messaging app and sent as them.
+    held
+      ? `Can you hold dates for ${input.showName}${input.role ? ` as ${input.role}` : ''}${where ? ` at ${where}` : ''}?`
+      : `Are you available for ${input.showName}${input.role ? ` as ${input.role}` : ''}${where ? ` at ${where}` : ''}?`,
     '',
   ]
 
@@ -343,7 +372,11 @@ export function buildBookingRequestText(
     ? [...schedule, '', `${dayCount} ${dayCount === 1 ? 'day' : 'days'} total.`]
     : [`${range}.${qualifiers ? ` ${qualifiers.charAt(0).toUpperCase()}${qualifiers.slice(1)}.` : ''}`]
 
-  return [...head, ...body, '', "Let me know either way and I'll get you on the books."].join('\n')
+  // "I'll get you on the books" PROMISES A BOOKING, so it cannot carry over to
+  // a hold — the whole point of the branch is that nothing is on the books yet.
+  return [...head, ...body, '', held
+    ? "Let me know either way and I'll hold the dates for you."
+    : "Let me know either way and I'll get you on the books."].join('\n')
 }
 
 export async function sendBookingRequestEmail(

@@ -56,11 +56,11 @@ const base = {
   role: 'A1',
 }
 
-function show(title: string, days: EngagementDay[]) {
-  const { subject, text } = buildBookingRequestEmail({ ...base, days, to: 'a@b.test', link: 'https://crewtracker.app/book/abc123',
+function show(title: string, days: EngagementDay[], showConfirmed = true) {
+  const { subject, text } = buildBookingRequestEmail({ ...base, days, showConfirmed, to: 'a@b.test', link: 'https://crewtracker.app/book/abc123',
     confirmUrl: 'https://crewtracker.app/book/abc123?a=confirm',
     declineUrl: 'https://crewtracker.app/book/abc123?a=decline' })
-  const sms = buildBookingRequestText({ ...base, days })
+  const sms = buildBookingRequestText({ ...base, days, showConfirmed })
   console.log(`\n${'='.repeat(72)}\n${title}\n${'='.repeat(72)}`)
   console.log(`\n--- EMAIL --- subject: ${subject}\n`)
   console.log(text)
@@ -76,3 +76,12 @@ show('NO DAY TYPES SET — must look exactly as it did before', [
   day('2026-09-12', null, 'out'),
 ])
 console.log('')
+
+// The same ask when the client has NOT confirmed the show — one sentence
+// differs in each, and the buttons are identical because accepting a hold is
+// still accepting.
+show('HOLD — the client has not confirmed the show yet', [
+  { date: '2026-10-06', isTravelDay: false, travelIn: true, travelOut: false, activities: ['load_in'] },
+  { date: '2026-10-07', isTravelDay: false, travelIn: false, travelOut: false, activities: ['rehearsal'] },
+  { date: '2026-10-08', isTravelDay: false, travelIn: false, travelOut: true, activities: ['show', 'load_out'] },
+], false)
