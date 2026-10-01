@@ -102,7 +102,19 @@ export async function POST(request: Request) {
   const thirtyDays = new Date(Date.now() + 30 * 86_400_000)
   const dayAfterShow = new Date(show.end_date + 'T00:00:00')
   dayAfterShow.setDate(dayAfterShow.getDate() + 1)
-  const expiresAt = new Date(Math.min(thirtyDays.getTime(), dayAfterShow.getTime())).toISOString()
+  const expiry = new Date(Math.min(thirtyDays.getTime(), dayAfterShow.getTime()))
+  // A REQUEST NOBODY CAN ANSWER IS WORSE THAN NO REQUEST. The expiry above is
+  // capped at the day after the show, so on a show that has already finished
+  // every link is dead the moment it is minted — the email arrives, the person
+  // presses Accept, and the page tells them the link has expired (Dan hit
+  // exactly this on 2026-10-01). Refuse instead, and say why.
+  if (expiry.getTime() <= Date.now()) {
+    return NextResponse.json(
+      { error: 'This show has already finished, so a booking request for it could not be answered.' },
+      { status: 400 },
+    )
+  }
+  const expiresAt = expiry.toISOString()
 
   // Upsert on (show_id, crew_member_id) with a FRESH token: re-asking rotates
   // the link so the previous one stops working, and clears any earlier answer

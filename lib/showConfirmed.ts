@@ -59,12 +59,6 @@ export const NOTIFY_CREW_PROMPT =
   'It goes to everyone who has been asked or has accepted. ' +
   'Anyone nobody has asked yet is left alone.'
 
-/** The same question when they have already been told once. */
-export const NOTIFY_CREW_AGAIN_PROMPT =
-  'Email the crew again?\n\n' +
-  'Everyone who has been asked or has accepted gets another copy, ' +
-  'including the people who were told the first time.'
-
 /** The button, and what it says once the crew have been told. */
 export function describeCrewTold(sentAt: string | null): string {
   if (!sentAt) return ''

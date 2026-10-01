@@ -730,14 +730,6 @@ export default function FillPositionPicker({
               <button type="button" className="text-xs text-muted hover:text-ink" disabled={busy}
                 onClick={() => { setAdding(false); setError('') }}>Cancel</button>
             </div>
-            {/* Said out loud so nobody hunts for a role field that is not here.
-                A phone or email is worth having now because it is what a booking
-                request needs later; roles and rates belong to the whole-person
-                screen in the Directory. */}
-            <p className="mt-2 text-[11px] text-muted">
-              Name and email are required — every request and notice this show sends them goes by email.
-              Roles and rates are set in the Directory.
-            </p>
           </div>
         ) : (
           <button type="button" onClick={() => { setAdding(true); setError('') }}

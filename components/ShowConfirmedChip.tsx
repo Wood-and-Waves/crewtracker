@@ -6,7 +6,7 @@ import Chip from '@/components/ui/Chip'
 import AnchoredPanel from '@/components/ui/AnchoredPanel'
 import {
   CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
-  NOTIFY_CREW_AGAIN_PROMPT, describeUnreached, describeCrewTold,
+  describeUnreached, describeCrewTold,
 } from '@/lib/showConfirmed'
 
 // Is this show sold, or are we holding the dates?
@@ -84,14 +84,14 @@ export default function ShowConfirmedChip({
   }
 
   /**
-   * Send it again, or send it at all when confirming could not.
-   *
-   * Confirming already tells the crew (see the route), so this is the retry
-   * after a failed send and the deliberate re-send when somebody is booked
-   * after the fact — not the only door it was on 2026-09-30.
+   * The RETRY, and only that. Confirming tells the crew, so the only way to
+   * reach this is a show that is confirmed with nobody told — which happens
+   * when the send failed. "Tell the crew again" was offered from the menu for
+   * a day and Dan asked what it was for (2026-10-01); the honest answer was
+   * that it was left over from building this as two presses, so it is gone.
    */
   async function tellCrew() {
-    if (!confirm(told ? NOTIFY_CREW_AGAIN_PROMPT : NOTIFY_CREW_PROMPT)) return
+    if (!confirm(NOTIFY_CREW_PROMPT)) return
 
     setBusy(true); setNote('')
     const res = await fetch('/api/shows/confirm/notify', {
@@ -163,18 +163,10 @@ export default function ShowConfirmedChip({
               Mark the show confirmed
             </button>
           ) : (
-            <>
-              {told && (
-                <button type="button" role="menuitem" disabled={busy} onClick={tellCrew}
-                  className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-                  Tell the crew again
-                </button>
-              )}
-              <button type="button" role="menuitem" disabled={busy} onClick={() => set(false)}
-                className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
-                Put it back to holding dates
-              </button>
-            </>
+            <button type="button" role="menuitem" disabled={busy} onClick={() => set(false)}
+              className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2 disabled:opacity-40">
+              Put it back to holding dates
+            </button>
           )}
           <button type="button" role="menuitem" disabled={busy} onClick={() => setOpen(false)}
             className="block w-full px-3 py-1.5 text-left text-xs text-muted hover:text-ink">

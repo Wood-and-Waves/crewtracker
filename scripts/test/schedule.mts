@@ -28,7 +28,7 @@ import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNot
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
 import {
   describeShowConfirmed, CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
-  NOTIFY_CREW_AGAIN_PROMPT, describeUnreached, describeCrewTold,
+  describeUnreached, describeCrewTold,
 } from '../../lib/showConfirmed.ts'
 import { buildShowConfirmedEmail, collectShowConfirmedRecipients } from '../../lib/showConfirmedEmail.ts'
 import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
@@ -1287,10 +1287,6 @@ console.log('\n--- days changed email ---')
     /email the crew/i.test(NOTIFY_CREW_PROMPT), true)
   check('and names who is left alone',
     /left alone/i.test(NOTIFY_CREW_PROMPT), true)
-  // Sending a SECOND time is a different question: everybody gets another copy,
-  // including the people who already had one, and the prompt must not hide it.
-  check('sending again admits it goes to everyone again',
-    /including the people who were told/i.test(NOTIFY_CREW_AGAIN_PROMPT), true)
 
   check('nobody told yet says nothing', describeCrewTold(null), '')
   check('a told show says when', describeCrewTold('2026-10-03T12:00:00Z'), 'Crew told Oct 3')

@@ -18,7 +18,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
 import {
-  CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT, NOTIFY_CREW_AGAIN_PROMPT,
+  CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
   describeShowConfirmed, describeUnreached, describeCrewTold,
 } from '@/lib/showConfirmed'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
@@ -234,10 +234,9 @@ export default function EditShowClient({
     router.refresh()
   }
 
-  /** Send it again, or send it at all when confirming could not. */
+  /** The retry, for a confirmation whose emails did not send. */
   async function tellCrew() {
-    const alreadyTold = !!noticeSentAt
-    if (!confirm(alreadyTold ? NOTIFY_CREW_AGAIN_PROMPT : NOTIFY_CREW_PROMPT)) return
+    if (!confirm(NOTIFY_CREW_PROMPT)) return
 
     setTelling(true); setUnreached('')
     const res = await fetch('/api/shows/confirm/notify', {
@@ -671,13 +670,16 @@ export default function EditShowClient({
             it does must not reach thirty freelancers. */}
         {confirmedAt && (
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button variant="ghost" size="sm" disabled={telling} onClick={tellCrew}>
-              {telling ? 'Sending…' : noticeSentAt ? 'Tell the crew again' : 'Tell the crew'}
-            </Button>
+            {/* Only when the send did not land. Confirming tells the crew, so a
+                standing re-send button is a second way to do something that
+                already happened (Dan, 2026-10-01). */}
+            {!noticeSentAt && (
+              <Button variant="ghost" size="sm" disabled={telling} onClick={tellCrew}>
+                {telling ? 'Sending…' : 'Tell the crew'}
+              </Button>
+            )}
             <span className="text-xs text-muted">
-              {noticeSentAt
-                ? describeCrewTold(noticeSentAt)
-                : 'Nobody has been told yet.'}
+              {noticeSentAt ? describeCrewTold(noticeSentAt) : 'Nobody has been told yet.'}
             </span>
           </div>
         )}
