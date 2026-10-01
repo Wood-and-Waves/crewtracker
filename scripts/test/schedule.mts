@@ -27,6 +27,7 @@ import { summarizeQueue } from '../../lib/schedulingQueue.ts'
 import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
+import { describeBookingPage } from '../../lib/bookingPage.ts'
 import {
   CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
   describeUnreached, describeCrewTold,
@@ -1471,6 +1472,43 @@ console.log('\n--- days changed email ---')
   check('a wordless failure still says who',
     summarizeAsk([ok('Ana'), { name: 'Bo', emailed: false }]),
     "Asked 1 of 2 by email. Couldn't email: Bo.")
+}
+
+// ---------------------------------------------------------------------------
+// The /book page after an answer (2026-10-01)
+// ---------------------------------------------------------------------------
+{
+  const page = (showConfirmed: boolean, response: 'confirmed' | 'declined' | null) =>
+    describeBookingPage({ organizationName: 'Wood & Waves Productions', showConfirmed, response })
+
+  // STILL DECIDING — matches the email that sent them here.
+  check('an unanswered booking asks to book',
+    page(true, null).lead, 'Wood & Waves Productions would like to book you for')
+  check('an unanswered hold asks to hold',
+    page(false, null).lead, 'Wood & Waves Productions would like to hold you for')
+  check('and a hold says the client has not confirmed', page(false, null).sayNotConfirmed, true)
+  check('while deciding there is no closing line', page(true, null).closing, null)
+
+  // ANSWERED — the page used to carry on asking in the present tense.
+  check('accepting a booking says what they are on', page(true, 'confirmed').lead, 'You are booked on')
+  check('accepting a hold says they are holding', page(false, 'confirmed').lead, 'You are holding dates for')
+  check('neither still says "would like to"',
+    /would like to/.test(page(true, 'confirmed').lead + page(false, 'confirmed').lead), false)
+  // "Accepting", not "confirming" — the word on the button they pressed, and
+  // the last place in the app still using the old one.
+  check('the thank-you matches the button', page(true, 'confirmed').closing, 'Thank you for accepting.')
+  check('and never says confirming', /confirming/i.test(page(true, 'confirmed').closing ?? ''), false)
+
+  // A HOLD STAYS A HOLD after they accept: they agreed to hold dates, not to a
+  // booking, and that is the material difference in what they said yes to.
+  check('accepting a hold still says the client has not confirmed',
+    page(false, 'confirmed').sayNotConfirmed, true)
+
+  // DECLINED — the show's own state stops being their business.
+  check('declining says so', page(false, 'declined').lead, 'You declined')
+  check('and a decliner is not told about the client',
+    page(false, 'declined').sayNotConfirmed, false)
+  check('and gets the plain thanks', page(true, 'declined').closing, 'Thanks for letting us know.')
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

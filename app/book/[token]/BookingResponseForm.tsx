@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
+import { describeBookingPage } from '@/lib/bookingPage'
 
 // Confirm or decline. The answer is POSTed — never sent by following a link.
 // Outlook Safe Links and Gmail prefetch URLs in email, so a GET carrying the
@@ -19,10 +21,14 @@ import Button from '@/components/ui/Button'
 export default function BookingResponseForm({
   token,
   alreadyResponded,
+  showConfirmed,
 }: {
   token: string
   alreadyResponded: 'confirmed' | 'declined' | null
+  /** Only used to word the line after an answer — see lib/bookingPage.ts. */
+  showConfirmed: boolean
 }) {
+  const router = useRouter()
   const [answer, setAnswer] = useState<'confirmed' | 'declined' | null>(alreadyResponded)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -43,6 +49,11 @@ export default function BookingResponseForm({
       return
     }
     setAnswer(response)
+    // THE HEADER IS SERVER-RENDERED AND NOW STALE: it still reads "would like
+    // to book you for" until the page re-renders with the answer. Paint the
+    // thank-you from local state first, then let the rest catch up — the same
+    // order every write on the tracker uses.
+    router.refresh()
   }
 
   if (answer) {
@@ -54,9 +65,7 @@ export default function BookingResponseForm({
       // just gave is not news to them.
       <div className="text-center">
         <p className="text-lg font-bold text-ink">
-          {answer === 'confirmed'
-            ? 'Thank you for confirming.'
-            : 'Thanks for letting us know.'}
+          {describeBookingPage({ organizationName: '', showConfirmed, response: answer }).closing}
         </p>
       </div>
     )
