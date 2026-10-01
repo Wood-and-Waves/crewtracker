@@ -349,7 +349,18 @@ export default function FillPositionPicker({
    */
   async function addAndBook() {
     const trimmed = newName.trim()
-    if (!trimmed || busy) return
+    const email = newEmail.trim()
+    // AN ADDRESS IS NOT OPTIONAL HERE (Dan, 2026-10-01: "I added a person
+    // without an email. This should not be possible. The app revolves around
+    // email."). Everything that happens to somebody after this moment reaches
+    // them by email — the booking request, the show-confirmed notice, their
+    // own punch link — so a person added without one is booked onto a show
+    // nobody can tell them about.
+    if (!trimmed || !email || busy) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('That email address does not look right.')
+      return
+    }
     setBusy(true)
     setError('')
 
@@ -369,7 +380,7 @@ export default function FillPositionPicker({
         organization_id: organizationId,
         full_name: trimmed,
         phone: newPhone.trim() ? formatPhone(newPhone) : null,
-        email: newEmail.trim() || null,
+        email,
       })
       .select('id')
       .single()
@@ -709,11 +720,11 @@ export default function FillPositionPicker({
                 placeholder="Full name" className={ADD_FIELD} />
               <input value={newPhone} onChange={e => setNewPhone(e.target.value)}
                 placeholder="Phone (optional)" className={ADD_FIELD} />
-              <input value={newEmail} onChange={e => setNewEmail(e.target.value)}
-                placeholder="Email (optional)" className={ADD_FIELD} />
+              <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
+                placeholder="Email" className={ADD_FIELD} />
             </div>
             <div className="mt-2 flex items-center gap-2">
-              <Button size="sm" disabled={busy || !newName.trim()} onClick={addAndBook}>
+              <Button size="sm" disabled={busy || !newName.trim() || !newEmail.trim()} onClick={addAndBook}>
                 {busy ? 'Adding…' : `Add and ${verb.toLowerCase()}${siblings.length > 0 ? ` ${siblings.length + 1} days` : ''}`}
               </Button>
               <button type="button" className="text-xs text-muted hover:text-ink" disabled={busy}
@@ -724,7 +735,8 @@ export default function FillPositionPicker({
                 request needs later; roles and rates belong to the whole-person
                 screen in the Directory. */}
             <p className="mt-2 text-[11px] text-muted">
-              Roles and rates are set in the Directory. This adds them to the company and puts them in this position.
+              Name and email are required — every request and notice this show sends them goes by email.
+              Roles and rates are set in the Directory.
             </p>
           </div>
         ) : (

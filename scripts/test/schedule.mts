@@ -1269,10 +1269,13 @@ console.log('\n--- days changed email ---')
   // somebody pressing a toggle to see what it does must be able to read, before
   // pressing, that it reaches nobody. If this copy is reworded, that is the
   // fact which must survive the rewrite.
-  check('the confirm prompt promises nobody is emailed',
-    /nobody is emailed/i.test(CONFIRM_SHOW_PROMPT), true)
-  check('and points at the separate button',
+  // Shortened 2026-10-01 at Dan's direction ("too much explaining"). The one
+  // fact that must survive any rewrite is that this press does not email: it is
+  // the whole reason the second button exists.
+  check('the confirm prompt points at the separate button',
     /separate button/i.test(CONFIRM_SHOW_PROMPT), true)
+  check('and never claims it emails anybody',
+    /emails the crew|will be emailed/i.test(CONFIRM_SHOW_PROMPT), false)
   check('the un-confirm prompt says nobody is emailed',
     /nobody is emailed/i.test(UNCONFIRM_SHOW_PROMPT), true)
 
@@ -1378,9 +1381,9 @@ console.log('\n--- days changed email ---')
   // Nobody unreachable is the ordinary case and says nothing at all.
   check('everybody reachable says nothing', describeUnreached([]), '')
   check('one unreachable person is named', describeUnreached(['Theo Lindqvist']),
-    'No email on file for Theo Lindqvist — tell them yourself.')
+    'No email on file for Theo Lindqvist.')
   check('a crowd is summarised rather than listed',
-    describeUnreached(['Ana', 'Bo', 'Cy', 'Di']), 'No email on file for Ana, Bo and 2 others — tell them yourself.')
+    describeUnreached(['Ana', 'Bo', 'Cy', 'Di']), 'No email on file for Ana, Bo and 2 others.')
 }
 
 // ---------------------------------------------------------------------------

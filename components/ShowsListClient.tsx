@@ -222,7 +222,18 @@ export default function ShowsListClient({
                 )}
               >
                 <Link href={`/dashboard/shows/${row.id}`} className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-ink">{row.name}</div>
+                  {/* BESIDE THE NAME, NOT IN THE STATUS COLUMN (Dan,
+                      2026-10-01: "It doesn't fit where it is"). Stacked under
+                      the lifecycle chip it made that one row twice the height
+                      of every other and pushed the staffing bar out of line.
+                      It is a different axis from the status anyway — a show can
+                      be unsold and Wrapped — so sitting beside the name, which
+                      is what it is a fact ABOUT, reads better than a second
+                      chip in a column that means something else. */}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-ink">{row.name}</span>
+                    {!row.confirmed && <Chip tone="ot">Not confirmed</Chip>}
+                  </div>
                   <div className="truncate text-xs text-muted">
                     {[row.venue, row.cityState].filter(Boolean).join(' · ') || '—'}
                   </div>
@@ -235,12 +246,8 @@ export default function ShowsListClient({
                   </div>
                 </Link>
 
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div>
                   <Chip tone={row.statusTone}>{row.statusLabel}</Chip>
-                  {/* Only the exception wears ink — a chip on every sold show
-                      would be wallpaper. Same rule as the tracker, where a crew
-                      row that has accepted shows no chip at all. */}
-                  {!row.confirmed && <Chip tone="ot">Not confirmed</Chip>}
                 </div>
 
                 {schedulingEnabled && <Crewed row={row} />}

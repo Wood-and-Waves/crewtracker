@@ -23,7 +23,10 @@ export function describeUnreached(noEmail: string[]): string {
   const names = noEmail.length <= 3
     ? noEmail.join(', ')
     : `${noEmail.slice(0, 2).join(', ')} and ${noEmail.length - 2} others`
-  return `No email on file for ${names} — tell them yourself.`
+  // Just the fact. "Tell them yourself" was an instruction nobody needs
+  // (Dan, 2026-10-01) — somebody reading that a person has no address can
+  // work out the rest.
+  return `No email on file for ${names}.`
 }
 
 /**
@@ -35,9 +38,8 @@ export function describeUnreached(noEmail: string[]): string {
  * no one. Telling the crew is NOTIFY_CREW_PROMPT, a separate button.
  */
 export const CONFIRM_SHOW_PROMPT =
-  'Mark this show as confirmed?\n\n' +
-  'The scheduler will book crew rather than hold them. Nobody is emailed — ' +
-  'telling the crew is a separate button.'
+  'Mark as confirmed\n\n' +
+  'This marks the show as confirmed. Telling the crew is a separate button.'
 
 /**
  * Asked before the second press, the one that actually writes to people.
