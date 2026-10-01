@@ -384,6 +384,48 @@ export function buildBookingRequestText(
     : "Let me know either way and I'll get you on the books."].join('\n')
 }
 
+/** What happened to one person in a group ask. */
+export type AskOutcome = { name: string; emailed: boolean; reason?: string | null }
+
+/**
+ * The group ask's result line.
+ *
+ * IT MUST CARRY THE REASON. The first version counted failures and listed
+ * names — "Asked 0 of 3 by email. Couldn't email: Bill Madison, Noor
+ * Halvorsen, Bob Barker." — which reads identically whether somebody has no
+ * address, the show has already finished, or Resend is down. Dan hit exactly
+ * that and asked why he could not send (2026-10-01): the screen had told him
+ * what happened and not one word about why.
+ *
+ * No addresses on file is the common case and is collapsed into one line, so
+ * three people do not produce three copies of the same sentence. Anything else
+ * is reported as the route worded it, deduped — a single cause affecting
+ * everybody then prints once rather than per person.
+ */
+export function summarizeAsk(results: AskOutcome[]): string {
+  const total = results.length
+  const sent = results.filter(r => r.emailed).length
+  const head = `Asked ${sent} of ${total} by email.`
+  const failed = results.filter(r => !r.emailed)
+  if (failed.length === 0) return head
+
+  const noAddress = failed.filter(r => /no email address|no email on file/i.test(r.reason ?? ''))
+  const others = failed.filter(r => !noAddress.includes(r))
+
+  const parts: string[] = []
+  if (noAddress.length > 0) parts.push(`No email on file: ${noAddress.map(r => r.name).join(', ')}.`)
+  // Deduped: one cause stopping everybody should be stated once.
+  for (const reason of [...new Set(others.map(r => (r.reason ?? '').trim()).filter(Boolean))]) {
+    parts.push(reason.endsWith('.') ? reason : `${reason}.`)
+  }
+  // A failure the route gave no words for is still a failure, and saying who
+  // beats saying nothing.
+  const silent = others.filter(r => !(r.reason ?? '').trim())
+  if (silent.length > 0) parts.push(`Couldn't email: ${silent.map(r => r.name).join(', ')}.`)
+
+  return [head, ...parts].join(' ')
+}
+
 export async function sendBookingRequestEmail(
   input: BookingRequestInput,
 ): Promise<{ error?: string }> {

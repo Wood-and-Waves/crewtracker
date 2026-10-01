@@ -167,7 +167,7 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
           {/* Only while somebody is still pencilled: once everyone has been
               asked, the button had nobody to email and said so after the fact
               (Dan, 2026-09-08). */}
-          {show.sent_to_scheduling_at && board.summary.pencilledPeople > 0 && <AskPencilledButton showId={id} />}
+          {show.sent_to_scheduling_at && <AskPencilledButton showId={id} pencilled={board.summary.pencilledPeople} />}
           <SendToSchedulingButton
             showId={id}
             sentAt={show.sent_to_scheduling_at ?? null}

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
+import { summarizeAsk, type AskOutcome } from '@/lib/bookingEmail'
 
 // Ask everyone still pencilled on a show, in one go (Dan, 2026-09-07: "Would
 // be great to happen in a group rather than one at a time"). One booking
@@ -12,7 +13,26 @@ import Button from '@/components/ui/Button'
 // wording, the token and the expiry are identical however they were asked.
 // Somebody with no email is reported, not skipped silently.
 
-export default function AskPencilledButton({ showId, size = 'sm' }: { showId: string; size?: 'sm' | 'md' }) {
+export default function AskPencilledButton({
+  showId, size = 'sm', pencilled,
+}: {
+  showId: string
+  size?: 'sm' | 'md'
+  /**
+   * How many people are still unasked, when the caller knows.
+   *
+   * THE GATE LIVES HERE RATHER THAN IN THE PARENT, and that is the whole point.
+   * The Scheduling strip used to render this only while somebody was unasked —
+   * so the moment the last one was asked the refresh unmounted the button and
+   * took the result line with it, and Dan pressed Send and saw nothing at all.
+   * Exactly the AddDayButton bug recorded in CLAUDE.md, where refreshing
+   * removed the control that was still speaking. Holding the gate inside means
+   * the button can disappear while the sentence it just wrote stays put.
+   *
+   * Undefined = the caller does not count (Edit Show), so always show it.
+   */
+  pencilled?: number
+}) {
   const router = useRouter()
   const supabase = createClient()
   const [busy, setBusy] = useState(false)
@@ -37,26 +57,37 @@ export default function AskPencilledButton({ showId, size = 'sm' }: { showId: st
     if (people.length === 0) { setBusy(false); setNote('Everyone has been asked or has answered.'); return }
     if (!confirm(`Email a booking request to the ${people.length} ${people.length === 1 ? 'person' : 'people'} who have not been asked yet?`)) { setBusy(false); return }
 
-    let sent = 0
-    const failed: string[] = []
+    // THE REASON IS THE USEFUL PART. This used to collect names and throw the
+    // route's words away, so "Couldn't email: Bill, Noor, Bob" read the same
+    // whether they had no addresses or the whole send was refused — see
+    // summarizeAsk.
+    const results: AskOutcome[] = []
     for (const [crewMemberId, p] of people) {
       const res = await fetch('/api/bookings/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ showId, crewMemberId }),
       })
       const body = await res.json().catch(() => ({}))
-      if (res.ok && body.emailed) sent++
-      else failed.push(p.name)
+      results.push({
+        name: p.name,
+        emailed: res.ok && !!body.emailed,
+        reason: body.error ?? body.warning ?? null,
+      })
     }
     setBusy(false)
-    setNote(`Asked ${sent} of ${people.length} by email.${failed.length ? ` Couldn't email: ${failed.join(', ')}.` : ''}`)
+    setNote(summarizeAsk(results))
     router.refresh()
   }
 
+  // Nobody left to ask and nothing left to say: render nothing.
+  if (pencilled === 0 && !note) return null
+
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <Button size={size} variant="ghost" disabled={busy} onClick={askAll}>
-        {busy ? 'Sending…' : 'Send email invites'}
-      </Button>
+      {pencilled !== 0 && (
+        <Button size={size} variant="ghost" disabled={busy} onClick={askAll}>
+          {busy ? 'Sending…' : 'Send email invites'}
+        </Button>
+      )}
       {note && <span className="text-xs text-muted">{note}</span>}
     </span>
   )

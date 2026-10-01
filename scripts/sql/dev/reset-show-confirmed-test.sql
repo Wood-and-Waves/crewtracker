@@ -35,6 +35,22 @@ begin
     raise exception 'Test Show 3 is not in this database — this fixture is for DEV only.';
   end if;
 
+  -- THE SHOW IS ALWAYS NEXT WEEK (Dan, 2026-10-01: "Let's change the test show
+  -- to be future. No reason to go after a past show and fix it."). It was
+  -- seeded in the past, which made every booking request refuse: the link
+  -- expires the day after the show, so on a finished show it is dead before it
+  -- is sent, and "Send email invites" correctly declined to send anything.
+  --
+  -- Dated from current_date rather than shifted by a fixed offset, so running
+  -- this twice does not walk the show further into the future each time.
+  update work_days w
+     set date = (current_date + 7) + (w.day_number - 1)
+   where w.show_id = v_show;
+  update shows
+     set start_date = (select min(date) from work_days where show_id = v_show),
+         end_date   = (select max(date) from work_days where show_id = v_show)
+   where id = v_show;
+
   -- Held, and nobody told. This is what puts NOT CONFIRMED on the shows list
   -- and the Scheduling strip, and makes the fill picker say PENCIL.
   update shows

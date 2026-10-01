@@ -15,6 +15,7 @@ import { addDays, dateRange } from '../../lib/datetime.ts'
 import { showStatus } from '../../lib/showStatus.ts'
 import {
   describeDates, buildBookingRequestText, describeDayLines, hasAnyDayActivity, buildBookingRequestEmail,
+  summarizeAsk,
 } from '../../lib/bookingEmail.ts'
 import { summarizeCall, describeCallSize } from '../../lib/crewCall.ts'
 import {
@@ -1434,6 +1435,42 @@ console.log('\n--- days changed email ---')
   // "Pencilled" is not a word a crew member ever reads (Dan, 2026-09-29).
   check('nothing a crew member reads says pencilled',
     /pencill?ed/i.test(held.text + held.html + smsHeld), false)
+}
+
+// ---------------------------------------------------------------------------
+// The group ask says WHY it could not send (2026-10-01)
+// ---------------------------------------------------------------------------
+{
+  const ok = (name: string) => ({ name, emailed: true })
+  check('everybody asked says just the count',
+    summarizeAsk([ok('Ana'), ok('Bo')]), 'Asked 2 of 2 by email.')
+
+  // THE CASE DAN HIT. One cause stopping everybody is stated ONCE, with the
+  // reason — the old line listed three names and no explanation, which reads
+  // identically to every other kind of failure.
+  const finished = 'This show has already finished, so a booking request for it could not be answered.'
+  check('one cause stopping everybody is stated once, with the reason',
+    summarizeAsk([
+      { name: 'Bill Madison', emailed: false, reason: finished },
+      { name: 'Noor Halvorsen', emailed: false, reason: finished },
+      { name: 'Bob Barker', emailed: false, reason: finished },
+    ]),
+    `Asked 0 of 3 by email. ${finished}`)
+
+  // Missing addresses are the common case and collapse to one line rather than
+  // three copies of the same sentence.
+  check('people with no address are named together',
+    summarizeAsk([
+      ok('Ana'),
+      { name: 'Bo', emailed: false, reason: 'Bo has no email address. Text or copy the message instead.' },
+      { name: 'Cy', emailed: false, reason: 'Cy has no email address. Text or copy the message instead.' },
+    ]),
+    'Asked 1 of 3 by email. No email on file: Bo, Cy.')
+
+  // A failure the route gave no words for still names who it was.
+  check('a wordless failure still says who',
+    summarizeAsk([ok('Ana'), { name: 'Bo', emailed: false }]),
+    "Asked 1 of 2 by email. Couldn't email: Bo.")
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

@@ -50,7 +50,7 @@ export default function NeedsSchedulingList({ rows }: { rows: QueueRow[] }) {
               {/* Group ask (Dan, 2026-09-07): one email per person still
                   pencilled — so it appears only while somebody has not been
                   asked, not merely while somebody has not answered. */}
-              {row.pencilled > 0 && <AskPencilledButton showId={row.id} />}
+              <AskPencilledButton showId={row.id} pencilled={row.pencilled} />
             </div>
           </div>
         ))}
