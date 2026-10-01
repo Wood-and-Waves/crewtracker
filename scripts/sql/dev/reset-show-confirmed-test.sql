@@ -51,6 +51,20 @@ begin
          end_date   = (select max(date) from work_days where show_id = v_show)
    where id = v_show;
 
+  -- Held, nobody told, no PM, and the fully-staffed email unsent. All four are
+  -- states a walkthrough can leave behind, and a fixture that only half resets
+  -- is worse than none — the next run starts somewhere nobody chose.
+  update shows
+     set pm_profile_id = null, pm_invited_at = null, pm_accepted_at = null,
+         ready_email_sent_at = null
+   where id = v_show;
+  delete from pm_invites where show_id = v_show;
+
+  -- Rebuild the slots the position definitions call for. Testing can delete
+  -- unfilled ones; this is the database's own derivation, so it puts back
+  -- exactly what the definitions say and never touches a booked person.
+  perform sync_position_slots(v_show);
+
   -- Held, and nobody told. This is what puts NOT CONFIRMED on the shows list
   -- and the Scheduling strip, and makes the fill picker say PENCIL.
   update shows

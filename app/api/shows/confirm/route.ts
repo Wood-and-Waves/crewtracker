@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendShowConfirmedEmails } from '@/lib/showConfirmedEmail'
+import { maybeSendReadyEmail, isExpectedReadyReason } from '@/lib/showReadiness'
 
 
 // Marking a show CONFIRMED — the client has sold it, so the scheduler books
@@ -92,7 +93,8 @@ export async function POST(request: NextRequest) {
 
   // After the stamp, never before: the show is confirmed whatever Resend does,
   // and sendShowConfirmedEmails never throws into this route.
-  const notice = await sendShowConfirmedEmails(createAdminClient(), showId)
+  const admin = createAdminClient()
+  const notice = await sendShowConfirmedEmails(admin, showId)
   if (notice.failed.length > 0) {
     console.error('[showConfirmed] some notices did not send', notice.failed)
   }
@@ -108,6 +110,17 @@ export async function POST(request: NextRequest) {
       .update({ confirmed_notice_sent_at: new Date().toISOString() })
       .eq('id', showId)
     if (stampError) console.error('[showConfirmed] could not record the notice', stampError.message)
+  }
+
+  // CONFIRMING CAN BE THE EVENT THAT COMPLETES A SHOW. The fully-staffed email
+  // is held back while a show is only a hold (Dan, 2026-10-01), so a show that
+  // filled up weeks before the client said yes has been waiting for this
+  // moment — and since that email sends once ever, nothing else would ever
+  // trigger it. Different audience from the notice above: this one goes to the
+  // PM, not the crew.
+  const { sent: readySent, reason: readyReason } = await maybeSendReadyEmail(admin, showId)
+  if (!readySent && !isExpectedReadyReason(readyReason)) {
+    console.error('maybeSendReadyEmail failed after a show was confirmed:', readyReason)
   }
 
   return NextResponse.json({

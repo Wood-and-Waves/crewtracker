@@ -5,16 +5,26 @@ import { dayLabel } from '@/lib/dayActivities'
 import { siteOrigin } from '@/lib/siteOrigin'
 
 // THE ONE PLACE the ready email is decided. Called after anything that can
-// complete a show: a crew confirmation (/api/bookings/respond) and a PM
-// accepting (/api/pm/accept). Idempotent by ready_email_sent_at; a show that
-// later reopens a slot does not unsend or resend it.
+// complete a show: a crew confirmation (/api/bookings/respond), a PM accepting
+// (/api/pm/accept), and the client confirming the show (/api/shows/confirm).
+// Idempotent by ready_email_sent_at; a show that later reopens a slot does not
+// unsend or resend it.
+//
+// A HELD SHOW IS NEVER READY (Dan, 2026-10-01: "Hold the fully-staffed email
+// until the show is confirmed"). "You're staffed, go" is not news a PM can act
+// on for a job nobody has sold — and because this email sends ONCE EVER, firing
+// it while the show was still a hold meant the PM never got one when it became
+// real. That is why /api/shows/confirm is now a caller: a show can be fully
+// staffed weeks before the client says yes, and confirming it is then the
+// event that completes it.
 export async function maybeSendReadyEmail(admin: SupabaseClient, showId: string): Promise<{ sent: boolean; reason: string }> {
   try {
     const { data: show } = await admin.from('shows')
-      .select('id, name, venue, city_state, start_date, end_date, organization_id, pm_profile_id, pm_accepted_at, ready_email_sent_at, finalized_at, archived')
+      .select('id, name, venue, city_state, start_date, end_date, organization_id, pm_profile_id, pm_accepted_at, ready_email_sent_at, finalized_at, archived, confirmed_at')
       .eq('id', showId).maybeSingle()
     if (!show) return { sent: false, reason: 'no show' }
     if (show.ready_email_sent_at) return { sent: false, reason: 'already sent' }
+    if (!show.confirmed_at) return { sent: false, reason: 'not confirmed' }
     if (!show.pm_profile_id || !show.pm_accepted_at) return { sent: false, reason: 'no accepted PM' }
     if (show.finalized_at || show.archived) return { sent: false, reason: 'closed' }
 
@@ -105,7 +115,7 @@ export async function maybeSendReadyEmail(admin: SupabaseClient, showId: string)
   }
 }
 
-const EXPECTED_READY_REASONS = new Set(['already sent', 'no accepted PM', 'closed', 'no show', 'nothing to staff'])
+const EXPECTED_READY_REASONS = new Set(['already sent', 'no accepted PM', 'closed', 'no show', 'nothing to staff', 'not confirmed'])
 
 /**
  * True for a reason maybeSendReadyEmail returns in the ordinary course of

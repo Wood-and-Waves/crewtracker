@@ -28,6 +28,7 @@ import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
 import { describeBookingPage } from '../../lib/bookingPage.ts'
+import { isExpectedReadyReason } from '../../lib/showReadiness.ts'
 import {
   CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
   describeUnreached, describeCrewTold,
@@ -1509,6 +1510,24 @@ console.log('\n--- days changed email ---')
   check('and a decliner is not told about the client',
     page(false, 'declined').sayNotConfirmed, false)
   check('and gets the plain thanks', page(true, 'declined').closing, 'Thanks for letting us know.')
+}
+
+// ---------------------------------------------------------------------------
+// A held show is never "fully staffed" (2026-10-01)
+// ---------------------------------------------------------------------------
+{
+  // "You're staffed, go" is not news a PM can act on for a job nobody has sold.
+  // The reason has to be on the expected list or every held show logs an error
+  // on every crew confirmation.
+  check('waiting on the client is an ordinary reason, not a failure',
+    isExpectedReadyReason('not confirmed'), true)
+  // The rest of the list, so adding one never quietly drops another.
+  for (const r of ['already sent', 'no accepted PM', 'closed', 'no show', 'nothing to staff']) {
+    check(`"${r}" is still expected`, isExpectedReadyReason(r), true)
+  }
+  check('still-open counts are expected', isExpectedReadyReason('2 open, 1 waiting'), true)
+  // A genuine failure must still shout.
+  check('a real failure is not swallowed', isExpectedReadyReason('PM has no email'), false)
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)
