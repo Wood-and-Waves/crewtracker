@@ -27,7 +27,7 @@ import { moveResetsAnswer } from '../../lib/scheduleBoard.ts'
 import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNotices.ts'
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
 import {
-  describeShowConfirmed, CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
+  CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
   describeUnreached, describeCrewTold,
 } from '../../lib/showConfirmed.ts'
 import { buildShowConfirmedEmail, collectShowConfirmedRecipients } from '../../lib/showConfirmedEmail.ts'
@@ -1255,15 +1255,6 @@ console.log('\n--- days changed email ---')
 // Is the job sold, or are we holding the dates? (2026-09-29)
 // ---------------------------------------------------------------------------
 {
-  // The two sentences describe the SCHEDULER's consequence, which is the whole
-  // point of the flag — not "a box is ticked".
-  check('an unsold show tells the scheduler they are pencilling',
-    describeShowConfirmed(false),
-    'Holding the dates. The scheduler pencils crew in until this is turned on.')
-  check('a sold show tells them they are booking',
-    describeShowConfirmed(true),
-    'The client has confirmed this show, so the scheduler books crew.')
-
   // NEITHER TOGGLE SENDS ANYTHING (Dan, 2026-09-30: an automatic send on the
   // confirm press "feels too risky"). Both prompts have to say so out loud —
   // somebody pressing a toggle to see what it does must be able to read, before

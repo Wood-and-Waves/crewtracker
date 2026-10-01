@@ -391,12 +391,38 @@ export default function FillPositionPicker({
       return
     }
 
-    // Straight into the slot. A brand-new person has no roles, no conflicts and
-    // has declined nothing, so the Candidate is exact rather than a guess.
-    // book() sets busy itself, so hand it a clean slate first.
+    // THE ROLE STICKS TO THE PERSON, not just to this booking (Dan,
+    // 2026-10-01: "when a person is added as an A1 from the schedule screen,
+    // the directory should reflect that they are an A1 so they can be scheduled
+    // on the next show"). Roles live on rate_cards, which is the only place the
+    // app records what somebody does — so without this they come back next
+    // month reading "No roles listed" and the role filter hides them from the
+    // very position they were hired for.
+    //
+    // NO day_rate. The column defaults to 0 and the pay-rate write guard drops
+    // one anyway for somebody without the permission — and a scheduler, who is
+    // exactly who uses this panel, has no business setting a rate. The rate is
+    // the Directory's job; this is only "they are an A1".
+    const { error: roleError } = await supabase
+      .from('rate_cards')
+      .insert({ crew_member_id: (data as any).id, role: positionRole })
+
+    // A failed role write must not cost them the booking, which is the thing
+    // actually being asked for — and it is repairable from the Directory in a
+    // way an unbooked position is not. Said out loud rather than swallowed.
+    if (roleError) console.error('[fillPosition] role not saved to the directory', roleError.message)
+
+    // Straight into the slot. A brand-new person has no conflicts and has
+    // declined nothing, so the Candidate is exact rather than a guess; the role
+    // is the one just written. book() sets busy itself, so hand it a clean
+    // slate first.
     setBusy(false)
     setAdding(false); setNewName(''); setNewPhone(''); setNewEmail('')
-    await book({ id: (data as any).id, name: trimmed, roles: [], conflicts: [], declinedThisShow: false }, siblings)
+    await book({
+      id: (data as any).id, name: trimmed,
+      roles: roleError ? [] : [positionRole],
+      conflicts: [], declinedThisShow: false,
+    }, siblings)
   }
 
   async function book(c: Candidate, extra: SiblingSlot[]) {

@@ -71,11 +71,3 @@ export function describeCrewTold(sentAt: string | null): string {
 export const UNCONFIRM_SHOW_PROMPT =
   'Put this show back to holding the dates?\n\n' +
   'Nobody is emailed. If people have already been told it is confirmed, tell them yourself.'
-
-/** The line under the Edit Show toggle, which states the consequence for the
- *  scheduler rather than repeating the toggle's own label. */
-export function describeShowConfirmed(confirmed: boolean): string {
-  return confirmed
-    ? 'The client has confirmed this show, so the scheduler books crew.'
-    : 'Holding the dates. The scheduler pencils crew in until this is turned on.'
-}

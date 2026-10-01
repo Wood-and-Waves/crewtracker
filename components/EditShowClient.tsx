@@ -19,7 +19,7 @@ import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
 import {
   CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
-  describeShowConfirmed, describeUnreached, describeCrewTold,
+  describeUnreached, describeCrewTold,
 } from '@/lib/showConfirmed'
 import { normalizeActivities, type Activity } from '@/lib/dayActivities'
 import { cn } from '@/lib/cn'
@@ -663,7 +663,6 @@ export default function EditShowClient({
         <FieldRow label="Show Confirmed">
           <Toggle checked={!!confirmedAt} onChange={setConfirmed} label="Show Confirmed" />
         </FieldRow>
-        <p className="text-xs text-muted mt-2">{describeShowConfirmed(!!confirmedAt)}</p>
 
         {/* MARKING IT CONFIRMED EMAILS NOBODY. Telling the crew is this second
             press, on purpose (Dan, 2026-09-30) — a toggle pressed to see what

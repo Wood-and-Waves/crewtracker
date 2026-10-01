@@ -18,7 +18,6 @@ import PositionDefsEditor from '@/components/PositionDefsEditor'
 import PmField from '@/components/PmField'
 import { derivedCounts, type PositionDef } from '@/lib/positionDefs'
 import { cn } from '@/lib/cn'
-import { describeShowConfirmed } from '@/lib/showConfirmed'
 import CrewCallGrid, { type GridRoom } from '@/components/CrewCallGrid'
 import { roomDayIndices, validateRooms, type CallModel } from '@/lib/crewCallGrid'
 
@@ -454,7 +453,6 @@ export default function NewShowClient({
               <span className="text-sm text-ink">Show Confirmed</span>
               <Toggle checked={showConfirmed} onChange={setShowConfirmed} label="Show Confirmed" />
             </div>
-            <p className="mt-1.5 text-xs text-muted">{describeShowConfirmed(showConfirmed)}</p>
 
             <div className="mt-3">
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Production manager</p>
