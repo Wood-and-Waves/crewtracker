@@ -74,8 +74,16 @@ end $$;
 -- Both hosts, because the same dev database is behind the local server AND the
 -- branch preview, and which one you are testing on is your choice rather than
 -- something this file can know.
+-- NAMED, because this show has collected invites from earlier runs and an
+-- unlabelled column of four links tells you nothing about which one to open.
+-- Bex is the one the walkthrough wants: she is the person who was asked and has
+-- not answered, so hers is the page that carries the hold wording.
 select
-  '/book/' || token as path,
-  'http://localhost:3000/book/' || token as local_url,
-  'https://crewtracker-git-scheduling-crew-tracker.vercel.app/book/' || token as preview_url
-  from booking_invites where show_id = '596ea309-8d69-416c-8da0-b32825c7af84';
+  c.full_name,
+  'http://localhost:3000/book/' || b.token as local_url,
+  'https://crewtracker-git-scheduling-crew-tracker.vercel.app/book/' || b.token as preview_url
+  from booking_invites b
+  join crew_members c on c.id = b.crew_member_id
+ where b.show_id = '596ea309-8d69-416c-8da0-b32825c7af84'
+   and b.expires_at > now()
+ order by (c.id = 'c819fa11-bf13-4796-a5fc-d85d5a7c227b') desc, c.full_name;

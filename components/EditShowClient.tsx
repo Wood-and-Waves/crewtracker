@@ -225,15 +225,16 @@ export default function EditShowClient({
     const data = await res.json().catch(() => ({}))
     if (!res.ok) { setSaveError(data.error || "Couldn't save the show's status."); return }
     setConfirmedAt(next ? new Date().toISOString() : null)
-    // Going back to a hold un-tells the crew, matching the route: a show sold
-    // again later is news worth sending a second time.
-    if (!next) setNoticeSentAt(null)
-    setUnreached('')
+    // Confirming tells the crew in the same press; going back to a hold
+    // un-tells them, matching the route, because a show sold again later is
+    // news worth sending a second time.
+    setNoticeSentAt(next && (data.emailed > 0 || data.failed === 0) ? new Date().toISOString() : null)
+    setUnreached(next ? describeUnreached(data.noEmail ?? []) : '')
     noteSaved()
     router.refresh()
   }
 
-  /** The second, deliberate press — the only thing that emails the crew. */
+  /** Send it again, or send it at all when confirming could not. */
   async function tellCrew() {
     const alreadyTold = !!noticeSentAt
     if (!confirm(alreadyTold ? NOTIFY_CREW_AGAIN_PROMPT : NOTIFY_CREW_PROMPT)) return

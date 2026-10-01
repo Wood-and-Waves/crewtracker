@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/session'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { sendShowConfirmedEmails } from '@/lib/showConfirmedEmail'
 
 
 // Marking a show CONFIRMED — the client has sold it, so the scheduler books
@@ -16,12 +18,21 @@ import { getCurrentUser } from '@/lib/session'
 // THE UPDATE IS VERIFIED. An UPDATE that matches no policy returns success with
 // zero rows, so without `.select()` a refusal would read as a success.
 //
-// THIS ROUTE EMAILS NOBODY (2026-09-30). Dan: "I think we need a second button
-// to press to email the crew. Sending an autoemail when the mark show as
-// confirmed get hit feels too risky." Marking a show confirmed is internal
-// bookkeeping — the scheduler books instead of holding — and pressing a toggle
-// to see what it does must not reach thirty freelancers. Telling them is
-// app/api/shows/confirm/notify, a separate deliberate press.
+// CONFIRMING TELLS THE CREW, and the OK/Cancel in front of it is what makes
+// that safe (Dan, 2026-10-01: "I do want that to email the crew. What I didn't
+// want was the one switch flip to email the crew. The popup handles the not one
+// button to email the crew issue."). The risk was a switch that reached thirty
+// freelancers the instant it moved, not the fact that confirming tells people —
+// so the guard is the prompt, which says what is about to happen, and the
+// common case stays one trip. CONFIRM_SHOW_PROMPT carries that sentence and a
+// test pins it.
+//
+// THE NOTICE STAMP IS ONLY SET IF SOMETHING ACTUALLY WENT. A confirmed show
+// with nobody told is exactly the state that puts "Tell the crew" back on
+// screen, so a failed send leaves a visible way to retry rather than a show
+// that quietly believes its crew know. /api/shows/confirm/notify is that
+// retry, and the same route re-sends later when somebody is booked after the
+// fact.
 
 export async function POST(request: NextRequest) {
   let body: { showId?: string; confirmed?: boolean }
@@ -79,5 +90,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'You do not have permission to change this show.' }, { status: 403 })
   }
 
-  return NextResponse.json({ ok: true, confirmed: true })
+  // After the stamp, never before: the show is confirmed whatever Resend does,
+  // and sendShowConfirmedEmails never throws into this route.
+  const notice = await sendShowConfirmedEmails(createAdminClient(), showId)
+  if (notice.failed.length > 0) {
+    console.error('[showConfirmed] some notices did not send', notice.failed)
+  }
+
+  // Nothing sent AND something tried = a real failure, so the show stays
+  // "confirmed, nobody told" and the button comes back. Nothing sent because
+  // there was nobody to write to is not a failure, and must still count as
+  // told, or the button sits there forever on a show with no crew on it yet.
+  const reached = notice.sent > 0 || notice.failed.length === 0
+  if (reached) {
+    const { error: stampError } = await supabase
+      .from('shows')
+      .update({ confirmed_notice_sent_at: new Date().toISOString() })
+      .eq('id', showId)
+    if (stampError) console.error('[showConfirmed] could not record the notice', stampError.message)
+  }
+
+  return NextResponse.json({
+    ok: true,
+    confirmed: true,
+    emailed: notice.sent,
+    // Named rather than counted: somebody with no address on file is told by
+    // NOBODY, and whoever pressed this is the only one able to ring them.
+    noEmail: notice.noEmail,
+    failed: notice.failed.length,
+  })
 }

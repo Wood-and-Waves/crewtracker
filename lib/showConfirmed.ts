@@ -30,16 +30,23 @@ export function describeUnreached(noEmail: string[]): string {
 }
 
 /**
- * Asked before turning the job from a hold into a booking.
+ * Asked before turning the job from a hold into a booking — AND before the
+ * crew are told, because confirming does both.
  *
- * IT SAYS NOBODY IS EMAILED, and that is the point (Dan, 2026-09-30: sending
- * automatically on this press "feels too risky"). Somebody pressing a toggle to
- * see what it does must be able to read, before they press it, that it reaches
- * no one. Telling the crew is NOTIFY_CREW_PROMPT, a separate button.
+ * THIS PROMPT IS THE SAFETY (Dan, 2026-10-01: "I do want that to email the
+ * crew. What I didn't want was the one switch flip to email the crew. The
+ * popup handles the not one button to email the crew issue."). The risk he
+ * named on 2026-09-30 was a toggle that reached thirty freelancers the instant
+ * it moved; an OK/Cancel that says what is about to happen removes it, without
+ * making the common case two separate trips.
+ *
+ * SO IT MUST KEEP SAYING THAT IT EMAILS. If this sentence is ever shortened to
+ * just the status change, the guard is gone and the switch is back to sending
+ * silently. Dan's words, pinned by a test.
  */
 export const CONFIRM_SHOW_PROMPT =
   'Mark as confirmed\n\n' +
-  'This marks the show as confirmed. Telling the crew is a separate button.'
+  'This marks the show as confirmed and emails the crew the show is confirmed.'
 
 /**
  * Asked before the second press, the one that actually writes to people.

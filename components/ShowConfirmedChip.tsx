@@ -76,11 +76,20 @@ export default function ShowConfirmedChip({
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) { setNote(data.error || 'That did not save.'); return }
+    // Confirming emails the crew, so it reports the same way the retry does —
+    // who had no address is the one thing whoever pressed it has to act on.
+    setNote(describeUnreached(data.noEmail ?? []))
     setOpen(false)
     router.refresh()
   }
 
-  /** The second press: the only thing in the app that sends this email. */
+  /**
+   * Send it again, or send it at all when confirming could not.
+   *
+   * Confirming already tells the crew (see the route), so this is the retry
+   * after a failed send and the deliberate re-send when somebody is booked
+   * after the fact — not the only door it was on 2026-09-30.
+   */
   async function tellCrew() {
     if (!confirm(told ? NOTIFY_CREW_AGAIN_PROMPT : NOTIFY_CREW_PROMPT)) return
 

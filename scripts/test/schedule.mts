@@ -1269,13 +1269,15 @@ console.log('\n--- days changed email ---')
   // somebody pressing a toggle to see what it does must be able to read, before
   // pressing, that it reaches nobody. If this copy is reworded, that is the
   // fact which must survive the rewrite.
-  // Shortened 2026-10-01 at Dan's direction ("too much explaining"). The one
-  // fact that must survive any rewrite is that this press does not email: it is
-  // the whole reason the second button exists.
-  check('the confirm prompt points at the separate button',
-    /separate button/i.test(CONFIRM_SHOW_PROMPT), true)
-  check('and never claims it emails anybody',
-    /emails the crew|will be emailed/i.test(CONFIRM_SHOW_PROMPT), false)
+  // THE PROMPT IS THE SAFETY (Dan, 2026-10-01: "The popup handles the not one
+  // button to email the crew issue"). Confirming does email the crew, so this
+  // sentence is the only warning anybody gets — shorten it to just the status
+  // change and the switch is back to sending silently, which is the thing he
+  // objected to in the first place.
+  check('the confirm prompt says it emails the crew',
+    /emails the crew/i.test(CONFIRM_SHOW_PROMPT), true)
+  check('and leads with the action, not a question',
+    CONFIRM_SHOW_PROMPT.startsWith('Mark as confirmed'), true)
   check('the un-confirm prompt says nobody is emailed',
     /nobody is emailed/i.test(UNCONFIRM_SHOW_PROMPT), true)
 
