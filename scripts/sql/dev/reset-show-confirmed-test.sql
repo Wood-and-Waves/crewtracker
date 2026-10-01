@@ -70,5 +70,12 @@ end $$;
 
 -- Bex's link for step 1. Open it BEFORE marking the show confirmed — that page
 -- is the whole point of the hold wording, and confirming changes what it says.
-select 'http://localhost:3000/book/' || token as crew_link
+--
+-- Both hosts, because the same dev database is behind the local server AND the
+-- branch preview, and which one you are testing on is your choice rather than
+-- something this file can know.
+select
+  '/book/' || token as path,
+  'http://localhost:3000/book/' || token as local_url,
+  'https://crewtracker-git-scheduling-crew-tracker.vercel.app/book/' || token as preview_url
   from booking_invites where show_id = '596ea309-8d69-416c-8da0-b32825c7af84';
