@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict zUgH1GuY4vsy6w1wmGig9BT72yvKiXreOMetldzQP2FavcN2bovUUt5WfJQ8hrt
+\restrict boTS01oH7A7X6uzdcHrJoLArUrt2frz5QCbLOZuwn6Q1Q1EhK1Nz971EMXZGv3t
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -340,7 +340,7 @@ begin
     return NEW;                       -- no rate supplied
   end if;
 
-  if my_perm('can_edit_pay_rates') then
+  if (select my_perm('can_edit_pay_rates')) then
     return NEW;
   end if;
 
@@ -349,8 +349,10 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  -- INSERT: drop the rate rather than refuse the row.
-  NEW.day_rate := null;
+  -- INSERT: drop the rate rather than refuse the row. ZERO, not null — the
+  -- column is NOT NULL DEFAULT 0.0, and nulling it turned this branch into a
+  -- constraint violation, which is the opposite of letting the row through.
+  NEW.day_rate := 0;
   return NEW;
 end;
 $$;
@@ -1684,7 +1686,10 @@ CREATE TABLE "public"."shows" (
     "sent_to_scheduling_by" "uuid",
     "ready_email_sent_at" timestamp with time zone,
     "onsite_contact_name" "text",
-    "onsite_contact_phone" "text"
+    "onsite_contact_phone" "text",
+    "confirmed_at" timestamp with time zone,
+    "confirmed_by" "uuid",
+    "confirmed_notice_sent_at" timestamp with time zone
 );
 
 
@@ -1707,6 +1712,27 @@ COMMENT ON COLUMN "public"."shows"."onsite_contact_name" IS 'Who the crew ring o
 --
 
 COMMENT ON COLUMN "public"."shows"."onsite_contact_phone" IS 'Their mobile, as typed. Rendered as tel: and sms: links on the crew clock screen.';
+
+
+--
+-- Name: COLUMN "shows"."confirmed_at"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."shows"."confirmed_at" IS 'When the client confirmed this show. Null = holding the dates, so the scheduler pencils rather than books. NOT timecards.booking_status, which is the crew member''s own answer.';
+
+
+--
+-- Name: COLUMN "shows"."confirmed_by"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."shows"."confirmed_by" IS 'Who turned the Show Confirmed toggle on. Null on rows stamped by the 0042 backfill.';
+
+
+--
+-- Name: COLUMN "shows"."confirmed_notice_sent_at"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN "public"."shows"."confirmed_notice_sent_at" IS 'When the crew were last emailed that this show is confirmed. Null = confirmed but nobody told them, which is what puts the Tell the crew button on screen. Cleared when a show goes back to holding dates. NOT confirmed_at, which is the internal fact that the client sold it.';
 
 
 --
@@ -2868,6 +2894,14 @@ ALTER TABLE ONLY "public"."show_crew_access"
 
 ALTER TABLE ONLY "public"."shows"
     ADD CONSTRAINT "shows_call_approved_by_fkey" FOREIGN KEY ("call_approved_by") REFERENCES "public"."profiles"("id");
+
+
+--
+-- Name: shows shows_confirmed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY "public"."shows"
+    ADD CONSTRAINT "shows_confirmed_by_fkey" FOREIGN KEY ("confirmed_by") REFERENCES "public"."profiles"("id");
 
 
 --
@@ -4558,5 +4592,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict zUgH1GuY4vsy6w1wmGig9BT72yvKiXreOMetldzQP2FavcN2bovUUt5WfJQ8hrt
+\unrestrict boTS01oH7A7X6uzdcHrJoLArUrt2frz5QCbLOZuwn6Q1Q1EhK1Nz971EMXZGv3t
 
