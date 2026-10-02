@@ -2129,7 +2129,29 @@ like everything else.
 
 ## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
 
-**Latest run: 2026-09-20, 0041 (onsite contact).** Backup
+**Latest run: 2026-10-01, 0042 + 0043 + 0044 (Show Confirmed).** Backup
+(`backups/crewtracker-2026-10-02T01-54-32.sql`, 594 KB) → `db:migrate --prod` →
+`db:grants` (header-only diff again, which is the proof `shows` is table-granted
+and its three new columns needed none) → `db:schema` → commit both → merge
+`scheduling` → `main` @ e18c078 → live check.
+
+**TWO OF THE THREE WRITE EXISTING ROWS**, so it was verified either side rather
+than assumed: 13 shows, 396 timecards, 826 punches, 9 profiles, 66 crew, 80 rate
+cards, 6 assignments — identical before and after, because both backfills UPDATE
+and neither inserts or deletes. All 13 shows stamped confirmed from their own
+`created_at`, none left confirmed-but-untold, `confirmed_by` null throughout as
+0042 intends. 0044 rewrites a pay-rate guard, so the lockdown beside it was
+re-checked on production: the function is still SECURITY DEFINER with a pinned
+search_path, its trigger is still attached to `rate_cards`, and `authenticated`
+still holds NO SELECT on `timecards.day_rate` or `rate_cards.day_rate` (the two
+SECURITY DEFINER views keep theirs, which is how rates are read). `rls.mts` runs
+against DEV, which carries the identical migration set — 131 green.
+
+Live afterwards: `/` 200, `/login` 200, `/terms` 200, `/dashboard` 307,
+`/book/<bad token>` 200 rendering "This link isn't valid", `www` 308. Reads only,
+as production checks have been since 2026-09-08.
+
+**Previous run: 2026-09-20, 0041 (onsite contact).** Backup
 (`backups/crewtracker-2026-09-20T22-11-56.sql`) → `db:migrate --prod` → `db:grants`
 (header-only diff, which is the proof `shows` is table-granted and the new columns needed no
 column grant) → `db:schema` (the two columns and their comments, nothing else) → commit both →
