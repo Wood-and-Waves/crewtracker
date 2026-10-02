@@ -228,8 +228,9 @@ export default function EditShowClient({
     // Confirming tells the crew in the same press; going back to a hold
     // un-tells them, matching the route, because a show sold again later is
     // news worth sending a second time.
-    setNoticeSentAt(next && (data.emailed > 0 || data.failed === 0) ? new Date().toISOString() : null)
-    setUnreached(next ? describeUnreached(data.noEmail ?? []) : '')
+    // Matches the route: any failure leaves it untold so the retry shows.
+    setNoticeSentAt(next && (data.failed ?? []).length === 0 ? new Date().toISOString() : null)
+    setUnreached(next ? describeUnreached(data.noEmail ?? [], data.failed ?? []) : '')
     noteSaved()
     router.refresh()
   }
@@ -247,7 +248,7 @@ export default function EditShowClient({
     setTelling(false)
     if (!res.ok) { setSaveError(data.error || 'The emails did not send.'); return }
     setNoticeSentAt(data.sentAt ?? new Date().toISOString())
-    setUnreached(describeUnreached(data.noEmail ?? []))
+    setUnreached(describeUnreached(data.noEmail ?? [], data.failed ?? []))
     noteSaved()
     router.refresh()
   }

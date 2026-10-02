@@ -78,7 +78,7 @@ export default function ShowConfirmedChip({
     if (!res.ok) { setNote(data.error || 'That did not save.'); return }
     // Confirming emails the crew, so it reports the same way the retry does —
     // who had no address is the one thing whoever pressed it has to act on.
-    setNote(describeUnreached(data.noEmail ?? []))
+    setNote(describeUnreached(data.noEmail ?? [], data.failed ?? []))
     setOpen(false)
     router.refresh()
   }
@@ -101,7 +101,7 @@ export default function ShowConfirmedChip({
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) { setNote(data.error || 'The emails did not send.'); return }
-    setNote(describeUnreached(data.noEmail ?? []))
+    setNote(describeUnreached(data.noEmail ?? [], data.failed ?? []))
     setOpen(false)
     router.refresh()
   }

@@ -99,11 +99,17 @@ export async function POST(request: NextRequest) {
     console.error('[showConfirmed] some notices did not send', notice.failed)
   }
 
-  // Nothing sent AND something tried = a real failure, so the show stays
-  // "confirmed, nobody told" and the button comes back. Nothing sent because
-  // there was nobody to write to is not a failure, and must still count as
-  // told, or the button sits there forever on a show with no crew on it yet.
-  const reached = notice.sent > 0 || notice.failed.length === 0
+  // STAMPED ONLY ON A CLEAN RUN. This used to be `sent > 0 || failed === 0`,
+  // so 20 delivered and 5 refused counted as told: the retry button never came
+  // back and those five were never written to again. Any failure now leaves the
+  // show reading "confirmed, nobody told" so the button returns — pressing it
+  // writes to everybody again, which its prompt says, and that is the lesser
+  // evil against five people silently never hearing.
+  //
+  // Nothing sent because there was nobody to write to is NOT a failure and must
+  // still count as told, or the button sits there forever on a show with no
+  // crew on it yet. failed.length === 0 covers that case on its own.
+  const reached = notice.failed.length === 0
   if (reached) {
     const { error: stampError } = await supabase
       .from('shows')
@@ -130,6 +136,7 @@ export async function POST(request: NextRequest) {
     // Named rather than counted: somebody with no address on file is told by
     // NOBODY, and whoever pressed this is the only one able to ring them.
     noEmail: notice.noEmail,
-    failed: notice.failed.length,
+    // NAMES, not a count: a number nobody can act on is not a report.
+    failed: notice.failed.map(f => f.name),
   })
 }

@@ -69,11 +69,16 @@ export async function POST(request: NextRequest) {
 
   const notice = await sendShowConfirmedEmails(createAdminClient(), showId)
 
-  // NOTHING SENT AND NOTHING TO SEND ARE DIFFERENT THINGS. If the send failed
-  // outright, release the claim so the button comes back rather than leaving a
-  // show marked as told when nobody was — the same release-on-failure the ready
-  // email does. A run that simply had no one to write to is not a failure.
-  if (notice.sent === 0 && notice.failed.length > 0) {
+  // ANY FAILURE RELEASES THE CLAIM, not just a total one. A partial send used to
+  // stay stamped, which left the people it had refused with no second attempt
+  // and no button to make one. Releasing means a retry writes to everybody
+  // again — which the prompt says out loud — and that is the lesser evil
+  // against somebody silently never hearing.
+  //
+  // Nothing sent because there was nobody to write to is NOT a failure and
+  // keeps its stamp, or the button sits there forever on a show with no crew.
+  if (notice.failed.length > 0) {
+    console.error('[showConfirmed] some notices did not send', notice.failed)
     const { error: releaseError } = await supabase
       .from('shows')
       .update({ confirmed_notice_sent_at: previous })
@@ -81,14 +86,12 @@ export async function POST(request: NextRequest) {
     if (releaseError) {
       console.error('[showConfirmed] claim stuck after a failed send', releaseError.message)
     }
-    return NextResponse.json(
-      { error: 'None of the emails sent. Nothing has been recorded — try again.' },
-      { status: 502 },
-    )
-  }
-
-  if (notice.failed.length > 0) {
-    console.error('[showConfirmed] some notices did not send', notice.failed)
+    if (notice.sent === 0) {
+      return NextResponse.json(
+        { error: 'None of the emails sent. Nothing has been recorded — try again.' },
+        { status: 502 },
+      )
+    }
   }
 
   return NextResponse.json({
@@ -97,7 +100,7 @@ export async function POST(request: NextRequest) {
     // Named rather than counted: somebody with no address on file is told by
     // NOBODY, and whoever pressed this is the only one able to ring them.
     noEmail: notice.noEmail,
-    failed: notice.failed.length,
+    failed: notice.failed.map(f => f.name),
     sentAt: stampedAt,
   })
 }

@@ -11,22 +11,35 @@
 // goes past him first.
 
 /**
- * Who could not be emailed, as a sentence worth reading.
+ * Who the notice did not reach, as a sentence worth reading.
  *
- * Somebody with no address on file is told by NOBODY, and the person who just
- * pressed the button is the only one in a position to ring them — so this is
- * said out loud rather than logged. Empty string when everything went out,
- * which is the ordinary case.
+ * TWO DIFFERENT FAILURES, AND BOTH HAVE TO SHOW. Somebody with no address on
+ * file is told by NOBODY, and the person who pressed the button is the only one
+ * able to ring them. An email that was attempted and FAILED is worse: it looks
+ * from every other angle as though they were told.
+ *
+ * Until 2026-10-02 only the first was rendered — the route counted failures and
+ * the screens dropped them — so a part-delivered notice read as a clean one.
+ * It could not surface on dev, where every run was two or three people and all
+ * of them sent; it needs a real crew-sized show to appear, which is exactly when
+ * it matters.
+ *
+ * Empty string when everything landed, which is the ordinary case.
  */
-export function describeUnreached(noEmail: string[]): string {
-  if (noEmail.length === 0) return ''
-  const names = noEmail.length <= 3
-    ? noEmail.join(', ')
-    : `${noEmail.slice(0, 2).join(', ')} and ${noEmail.length - 2} others`
-  // Just the fact. "Tell them yourself" was an instruction nobody needs
-  // (Dan, 2026-10-01) — somebody reading that a person has no address can
-  // work out the rest.
-  return `No email on file for ${names}.`
+export function describeUnreached(noEmail: string[], failed: string[] = []): string {
+  const parts: string[] = []
+  if (noEmail.length > 0) parts.push(`No email on file for ${names(noEmail)}.`)
+  // No instruction to press anything: the Tell the crew button is back on
+  // screen beside this, because a run with failures is not stamped as told.
+  if (failed.length > 0) parts.push(`The email did not send to ${names(failed)}.`)
+  return parts.join(' ')
+}
+
+/** Up to three by name, then a count — a crew list should not run off the row. */
+function names(list: string[]): string {
+  return list.length <= 3
+    ? list.join(', ')
+    : `${list.slice(0, 2).join(', ')} and ${list.length - 2} others`
 }
 
 /**

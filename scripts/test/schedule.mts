@@ -1376,6 +1376,17 @@ console.log('\n--- days changed email ---')
     'No email on file for Theo Lindqvist.')
   check('a crowd is summarised rather than listed',
     describeUnreached(['Ana', 'Bo', 'Cy', 'Di']), 'No email on file for Ana, Bo and 2 others.')
+
+  // A SEND THAT FAILED IS NOT THE SAME AS NO ADDRESS, and it used to be
+  // invisible — the route counted failures and the screens dropped them, so a
+  // part-delivered notice read as a clean one. It needs a crew-sized show to
+  // appear, which is exactly when it matters.
+  check('a failed send is named too', describeUnreached([], ['Bo']),
+    'The email did not send to Bo.')
+  check('both kinds are reported together',
+    describeUnreached(['Ana'], ['Bo']),
+    'No email on file for Ana. The email did not send to Bo.')
+  check('a clean run still says nothing', describeUnreached([], []), '')
 }
 
 // ---------------------------------------------------------------------------
