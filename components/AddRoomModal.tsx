@@ -9,10 +9,24 @@ export default function AddRoomModal({
   showId,
   currentWorkDayId,
   remainingWorkDayIds,
+  allDays = false,
 }: {
   showId: string
   currentWorkDayId: string
   remainingWorkDayIds: string[]
+  /**
+   * Add the room to EVERY day given, with no per-day choice offered.
+   *
+   * For Edit Show, which has no "current day" to be remaining from — it is the
+   * whole show at once (Dan, 2026-10-02: "How do I add a room from the edit
+   * show screen?", the answer having been that you could not). Offering the
+   * tracker's checkbox there would ask about days the screen is not showing,
+   * and unticking it would silently mean "day one only".
+   *
+   * The tracker keeps its per-day behaviour untouched: it IS looking at one
+   * day, so "all remaining days" means something there.
+   */
+  allDays?: boolean
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -27,7 +41,7 @@ export default function AddRoomModal({
     setLoading(true)
 
     const trimmedName = name.trim()
-    const targetDayIds = applyAll
+    const targetDayIds = allDays || applyAll
       ? [currentWorkDayId, ...remainingWorkDayIds]
       : [currentWorkDayId]
 
@@ -93,7 +107,7 @@ export default function AddRoomModal({
           onChange={e => setName(e.target.value)}
           className="w-full rounded-field bg-surface-2 border border-line px-4 py-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent mb-3"
         />
-        {remainingWorkDayIds.length > 0 && (
+        {!allDays && remainingWorkDayIds.length > 0 && (
           <label className="flex items-center gap-2 text-sm text-muted mb-4">
             <input
               type="checkbox"

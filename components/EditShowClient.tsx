@@ -8,6 +8,7 @@ import { SHOW_TIMEZONES } from '@/lib/timezones'
 import { formatPhone } from '@/lib/phone'
 import RulesetFields from '@/components/RulesetFields'
 import AddDayButton from '@/components/AddDayButton'
+import AddRoomModal from '@/components/AddRoomModal'
 import DayActivitiesGrid from '@/components/DayActivitiesGrid'
 import PositionDefsSection, { type DefRow, type SlotFlag } from '@/components/PositionDefsSection'
 import ShowNav from '@/components/ShowNav'
@@ -642,6 +643,13 @@ export default function EditShowClient({
       {/* Handing the show to a scheduler — an admin act, so it belongs here
           rather than in the tracker's header where it sat beside the punch
           controls it has nothing to do with. */}
+      {/* ADDING A ROOM LIVES HERE TOO, not only on the tracker (Dan,
+          2026-10-02: "How do I add a room from the edit show screen?" — the
+          answer being that you could not). Edit Show is the laptop screen that
+          already owns the day activities and the position definitions, and "the
+          client added a breakout room" is desk work; sending somebody to the
+          on-site screen for it was a gap rather than a decision.
+          Every day of the show, because this screen is not looking at one. */}
       {positions && (
         <PositionDefsSection
           showId={show.id}
@@ -652,6 +660,14 @@ export default function EditShowClient({
           flags={positions.flags}
           locked={!!show.finalized_at}
           organizationId={organizationId}
+          addRoom={!show.finalized_at && workDays.length > 0 ? (
+            <AddRoomModal
+              showId={show.id}
+              currentWorkDayId={workDays[0].id}
+              remainingWorkDayIds={workDays.slice(1).map((wd: any) => wd.id)}
+              allDays
+            />
+          ) : undefined}
         />
       )}
 

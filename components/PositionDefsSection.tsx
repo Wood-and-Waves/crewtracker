@@ -37,7 +37,7 @@ function fmt(date: string) {
 }
 
 export default function PositionDefsSection({
-  showId, roomNames, roles, days, defs: initialDefs, flags, locked, organizationId,
+  showId, roomNames, roles, days, defs: initialDefs, flags, locked, organizationId, addRoom,
 }: {
   showId: string
   /** Room NAMES across the show (a room is a per-day row; the definition is keyed by name). */
@@ -49,6 +49,14 @@ export default function PositionDefsSection({
   locked: boolean
   /** Lets the role picker add a role that is not on the list yet. */
   organizationId?: string
+  /**
+   * A control for creating a room, rendered beside the heading.
+   *
+   * Passed in rather than built here because this section is also mounted on a
+   * screen that has its own Add Room (the tracker's day header), and two of
+   * them on one page would be a choice nobody needs to make.
+   */
+  addRoom?: React.ReactNode
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -185,13 +193,18 @@ export default function PositionDefsSection({
     <section className="mb-6">
       <p className="mb-3 flex items-baseline justify-between gap-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">
         <span>Positions</span>
-        {busy && <span className="font-sans text-[11px] font-normal normal-case tracking-normal text-muted">Saving…</span>}
+        <span className="flex items-baseline gap-3">
+          {busy && <span className="font-sans text-[11px] font-normal normal-case tracking-normal text-muted">Saving…</span>}
+          {addRoom && <span className="font-sans font-normal normal-case tracking-normal">{addRoom}</span>}
+        </span>
       </p>
       <p className="mb-3 text-xs text-muted">
         What each room needs, and on which kinds of day. The days come from the day activities above; change those and the open positions follow.
       </p>
       {roomNames.length === 0 ? (
-        <p className="py-2 text-xs text-muted">Add a room on the tracker first.</p>
+        <p className="py-2 text-xs text-muted">
+          {addRoom ? 'Add a room to start writing positions.' : 'Add a room on the tracker first.'}
+        </p>
       ) : (
         <PositionDefsEditor rooms={rooms} roles={roles} days={days} defs={defs} onChange={onChange} organizationId={organizationId} readOnly={locked} />
       )}
