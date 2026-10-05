@@ -256,3 +256,29 @@ Pushed; preview building. NEXT: measure the preview against the baseline, then D
 Follow-ups noted by reviewers, none blocking: `currentWorkDayId` prop on StaffRoomModal is now unused; sub-routes under shows/[id] (edit/schedule/reports) borrow the tracker-shaped skeleton until they get their own; picker siblings come from the painted board, so a slot added by someone else appears on the next refresh rather than instantly.
 **Follow-up landed (2026-10-04):** per-screen loading.tsx via components/PageSkeleton.tsx — React shows a fallback only for a NEWLY mounted boundary, so the parent skeleton never showed on tracker→edit (measured 1.8 s of old screen on the preview). 13 boundaries now. Preview measurement so far: background renders after a tracker hard load 23–24 → 0; list→tracker now served from prefetch with zero requests; the control page (Team, unchanged code) ran 530 ms on prod vs 698 on the preview in the same minute, i.e. the preview environment is ~30% slower, so raw preview ms understate the gain. NEXT: confirm the skeleton appears on tracker→edit, then Dan decides on main.
 **Preview verified (ec6c524, 2026-10-04):** skeleton photographed on a child click (edit→reports, page landed 380 ms later); background renders after a tracker hard load 23–24 → 0; tracker→edit served from prefetch with zero requests. Per-click ms on the preview are NOT comparable to production (different database, smaller shows, and the unchanged control page swung 447–698 ms within one session), so the honest production before/after is: deploy to main, re-measure the same PwC show in the same minute. Awaiting Dan's decision on main. Nothing deployed.
+
+## 8. Production before/after (2026-10-04, deployed as 74b687c)
+
+Same show (PwC Tax Assurance Oct'26, 12 crew, 4 rooms), same laptop, warm function. Three
+samples of the control page (Team, code unchanged) show the environment drifting slower
+across the hour — 407 → 530 → 583 ms — so compare against the fresh baseline column and
+read the gains as understated.
+
+| Click | Baseline (1 h before) | Fresh baseline (25 min before) | After deploy | Changed this round? |
+|---|---|---|---|---|
+| Shows list, hard load | ~640 | 876 | **635** | prefetch storm removed |
+| List → tracker | 681 | 661 | **instant, 0 requests** | skeleton + prefetch |
+| Tracker → Scheduling | 565 | 729 | 803 | no (B2 parked) — skeleton now shows |
+| Scheduling → Edit Show | 895 | 1,335 | 1,257 | no (B4 parked) — skeleton photographed |
+| Edit Show → Reports | 632 | 731 | **494** | yes (C) |
+| Reports → tracker | 764 | 734 | **561** | yes (B) |
+| → Team (control) | 407 | 530 | 583 | no |
+| Tracker, hard load | 605–663 | — | 645 | yes (B) — flat while the control slowed 40% |
+| Background renders after a tracker load | 23–24 | 23 | **0** | yes (A) |
+
+Proven and drift-immune: the storm is gone (23 → 0); a prefetched click is instant; a
+non-prefetched click shows the outline at once (photographed on production, dark mode).
+Drift-exposed but clear: Reports −32 % and the tracker −24 % on a day the control got
+10 % slower. Not touched this round and still slow: Scheduling (B2) and Edit Show (B4),
+which now at least answer the click with a skeleton. Next in line by gain ÷ effort:
+item 3 (session chain, every page), then B4 Edit Show, then B2.
