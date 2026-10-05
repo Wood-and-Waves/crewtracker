@@ -174,14 +174,15 @@ export default function MobileRoomTracker({
     <div className={className}>
       {/* Compact header: show info, iOS-style action icons, day nav */}
       <div className="mb-6">
-        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+        {/* prefetch={false} on every link here: measured 23 background renders per tracker load, and prefetch carries nothing for a dynamic route. */}
+        <Link prefetch={false} href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
         <div className="flex items-start justify-between gap-3 mt-2">
           <div className="min-w-0">
             <h1 className="truncate font-display text-xl font-bold uppercase tracking-wide">{showName}</h1>
             {showMeta && <p className="text-sm text-muted truncate">{showMeta}</p>}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Link
+            <Link prefetch={false}
               href={editHref}
               aria-label="Show info"
               className="flex h-9 w-9 items-center justify-center rounded-field bg-surface border border-line text-ink hover:border-accent hover:text-accent"
@@ -192,7 +193,7 @@ export default function MobileRoomTracker({
                 <line x1="12" y1="8" x2="12.01" y2="8" />
               </svg>
             </Link>
-            <Link
+            <Link prefetch={false}
               href={reportHref}
               aria-label="View report"
               className="flex h-9 w-9 items-center justify-center rounded-field bg-surface border border-line text-ink hover:border-accent hover:text-accent"
@@ -219,7 +220,7 @@ export default function MobileRoomTracker({
           </div>
         </div>
         <div className="flex items-center justify-center gap-4 mt-5">
-          <Link
+          <Link prefetch={false}
             href={prevDayNumber ? `?day=${prevDayNumber}` : '#'}
             aria-label="Previous day"
             className={cn(
@@ -241,7 +242,7 @@ export default function MobileRoomTracker({
             )}
           </div>
           {nextDayNumber ? (
-            <Link
+            <Link prefetch={false}
               href={`?day=${nextDayNumber}`}
               aria-label="Next day"
               className="rounded-field h-9 w-9 flex items-center justify-center shrink-0 bg-accent text-accent-ink"

@@ -120,14 +120,15 @@ export default function AppShell({
           from the page. This warm tint is the middle Dan asked for. Opaque, so
           content scrolling under the sticky bar stays hidden. */}
       <header className="sticky top-0 z-40 hidden items-center gap-2 border-b border-line bg-surface-2 px-6 py-3 lg:flex print:hidden">
-        <Link href="/dashboard" className="mr-5 flex items-center gap-2 text-[15px] font-extrabold">
+        {/* prefetch={false} on every link here: measured 23 background renders per tracker load, and prefetch carries nothing for a dynamic route. */}
+        <Link prefetch={false} href="/dashboard" className="mr-5 flex items-center gap-2 text-[15px] font-extrabold">
           <span className="text-accent"><Logo /></span>
           CrewTracker
         </Link>
         {navItems.map(item => {
           const active = item.match(pathname)
           return (
-            <Link
+            <Link prefetch={false}
               key={item.href}
               href={item.href}
               className={cn(
@@ -176,7 +177,7 @@ export default function AppShell({
         {tabItems.map(item => {
           const active = item.match(pathname)
           return (
-            <Link
+            <Link prefetch={false}
               key={item.href}
               href={item.href}
               className={cn(

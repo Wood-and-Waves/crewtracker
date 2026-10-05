@@ -90,7 +90,7 @@ export default async function ShowDetailPage({
   if (!workDays || workDays.length === 0) {
     return (
       <div className="p-6 md:p-10">
-        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+        <Link prefetch={false} href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
         <h1 className="text-2xl font-bold mt-4">{show.name}</h1>
         <p className="text-muted mt-2">No days generated for this show yet.</p>
       </div>
@@ -330,7 +330,8 @@ export default async function ShowDetailPage({
           page. The mobile header lives inside MobileRoomTracker so its add-crew
           icon can target the currently selected room. */}
       <header className="hidden lg:block">
-        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+        {/* prefetch={false} on every link here: measured 23 background renders per tracker load, and prefetch carries nothing for a dynamic route. */}
+        <Link prefetch={false} href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
 
         <div className="mt-2 flex items-start justify-between gap-6">
           <div className="min-w-0">
@@ -339,7 +340,7 @@ export default async function ShowDetailPage({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <Link
+            <Link prefetch={false}
               href={prevDay ? `?day=${prevDay.day_number}` : '#'}
               aria-label="Previous day"
               className={cn(
@@ -366,7 +367,7 @@ export default async function ShowDetailPage({
               )}
             </div>
             {nextDay ? (
-              <Link
+              <Link prefetch={false}
                 href={`?day=${nextDay.day_number}`}
                 aria-label="Next day"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-line bg-surface-2 hover:border-accent hover:text-accent"
@@ -431,14 +432,14 @@ export default async function ShowDetailPage({
                 filling and answers are a desk job, weeks earlier, and the
                 tracker is show day. */}
             {schedulingOn && (
-              <Link href={`/dashboard/shows/${id}/schedule`}>
+              <Link prefetch={false} href={`/dashboard/shows/${id}/schedule`}>
                 <Button variant="ghost" size="sm">Scheduling</Button>
               </Link>
             )}
-            <Link href={`/dashboard/shows/${id}/edit`}>
+            <Link prefetch={false} href={`/dashboard/shows/${id}/edit`}>
               <Button variant="ghost" size="sm">Edit Show</Button>
             </Link>
-            <Link href={`/dashboard/shows/${id}/reports`}>
+            <Link prefetch={false} href={`/dashboard/shows/${id}/reports`}>
               <Button variant="ghost" size="sm">View Report</Button>
             </Link>
           </div>
