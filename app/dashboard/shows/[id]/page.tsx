@@ -18,7 +18,7 @@ import { PUNCH_LABELS, isWrapped, visiblePunchTypes } from '@/lib/punches'
 import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll'
 import { punchGridCols, LAYOUT_COOKIE } from '@/lib/trackerLayout'
 import { dayActivitiesBgClass, dayLabel } from '@/lib/dayActivities'
-import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { liveBookings, fetchShowRates, TIMECARD_SELECT, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 import Button from '@/components/ui/Button'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
@@ -33,19 +33,39 @@ export default async function ShowDetailPage({
   const { id } = await params
   const { day, d, v } = await searchParams
   const supabase = await createClient()
-  // The caller and show/ruleset/workDays are independent of each other (none
-  // depend on another's result) so fetch them in one round trip instead
-  // of four sequential ones.
+  // Everything here needs only the show id, so it all goes in ONE round trip:
+  // the caller, the show, its ruleset and days, whether the caller is PM-side,
+  // and every room and live timecard on the show (rooms and timecards carry
+  // show_id since 0023, so neither has to wait for the day list). Only the
+  // punches need to know which day is open, and they stay a wave of their own.
+  // A crew-side visitor pays for a few reads they never use; the database
+  // returns them only their own rows, and the cost is far smaller than
+  // making every PM wait through four sequential waves.
   const [
     user,
     { data: show },
     { data: ruleset },
     { data: workDays },
+    pmSide,
+    { data: allShowRooms },
+    { data: timecardRows, error: timecardsError },
   ] = await Promise.all([
     getCurrentUser(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
+    isPmOnShow(supabase, id),
+    supabase
+      .from('rooms')
+      .select('id, name, work_day_id')
+      .eq('show_id', id)
+      // Insertion order, matching iOS. Unordered, multiple rooms on a day came
+      // back arbitrarily and could reshuffle between refreshes.
+      .order('created_at'),
+    // Declined bookings are excluded here, once, and every derived object below
+    // inherits it — the roster, the day summary counts, Copy Crew's source, and
+    // everything handed to MobileRoomTracker. Someone who said no is not crew.
+    liveBookings(supabase.from('timecards').select(TIMECARD_SELECT).eq('show_id', id)),
   ])
 
   // The handoff-to-scheduler control and its position/scheduler queries used to
@@ -65,7 +85,6 @@ export default async function ShowDetailPage({
   // PM-side or crew-side? (Section 2, 2026-09-06.) Crew-side people get their
   // own screen — the crew clock — and never the tracker, which would be empty
   // for them anyway: the database hides every row but their own.
-  const pmSide = await isPmOnShow(supabase, id)
   if (!pmSide) return <CrewShowScreen showId={id} profileId={user.id} day={d} view={v} />
   // The scheduling module. Gated on the FLAG, never on "are there any positions"
   // — a switched-off organization may still have positions sitting in the
@@ -97,21 +116,18 @@ export default async function ShowDetailPage({
     )
   }
 
-  // Fetch ALL rooms/timecards/punches across the WHOLE show (not just the
+  // Same failure behaviour as fetchLiveTimecards: a page that renders blank is
+  // better than one that renders a show with its crew silently missing. Checked
+  // here, after the crew-side return, so a crew visitor never trips it.
+  if (timecardsError) throw new Error(`Could not load timecards: ${timecardsError.message}`)
+  const allShowTimecards = (timecardRows ?? []) as unknown as TimecardRowMaybeRate[]
+
+  // Rooms and timecards for the WHOLE show were fetched above (not just the
   // active day) so short-turnaround detection can look at a crew member's
   // previous day's end punch, which may be in a different room/day entirely.
-  // Rooms and the org's rounding setting do not depend on each other, so they
-  // go in one round trip. This page used to be nine awaits deep after its
-  // opening Promise.all; every one of those is paid again on every
-  // router.refresh(), i.e. after every punch.
-  const [{ data: allShowRooms }, { data: organization }, { data: defRows }] = await Promise.all([
-    supabase
-      .from('rooms')
-      .select('id, name, work_day_id')
-      .in('work_day_id', workDays.map(d => d.id))
-      // Insertion order, matching iOS. Unordered, multiple rooms on a day came
-      // back arbitrarily and could reshuffle between refreshes.
-      .order('created_at'),
+  // What is left here depends on the caller: the org's rounding setting, the
+  // positions check, and the show's rates share one round trip.
+  const [{ data: organization }, { data: defRows }, rateById] = await Promise.all([
     supabase.from('organizations').select('timecard_rounding_minutes').eq('id', organizationId).single(),
     // Add Day's extend-toggle: cheap existence check, gated the same as every
     // other positions query on this page — a switched-off organization must
@@ -119,26 +135,15 @@ export default async function ShowDetailPage({
     schedulingOn
       ? supabase.from('position_defs').select('id').eq('show_id', id).limit(1)
       : Promise.resolve({ data: [] as { id: string }[] }),
+    // The tracker shows hours, never money — the only thing here that wants a
+    // rate is RoomActionsMenu's rate editor. Rates come from the
+    // permission-checked view, which yields nothing for a user who can't see
+    // them, and are gated on the permission so the view's join is not run for
+    // somebody who would be shown no rate anyway.
+    canViewRates ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
   ])
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
   const hasDefs = (defRows?.length ?? 0) > 0
-
-  const allRoomIds = (allShowRooms || []).map(r => r.id)
-
-  // The tracker shows hours, never money — the only thing here that wants a rate
-  // is RoomActionsMenu's rate editor. Rates come from the permission-checked
-  // view, which yields nothing for a user who can't see them.
-  // Declined bookings are excluded here, once, and every derived object below
-  // inherits it — the roster, the day summary counts, Copy Crew's source, and
-  // everything handed to MobileRoomTracker. Someone who said no is not crew.
-  // Rates are gated on the permission, not just on the view returning nothing:
-  // the view still executed a four-table join plus its helper calls for a user
-  // who would be shown no rate anyway. Independent of the timecards read, so
-  // the two share a round trip.
-  const [allShowTimecards, rateById] = await Promise.all([
-    fetchLiveTimecards<TimecardRowMaybeRate>(supabase, allRoomIds),
-    canViewRates ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
-  ])
 
   // Compute "today" in the show's timezone, not UTC/device time — using
   // toISOString() here rolls to tomorrow's date in the evening for any
