@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { liveBookings } from '@/lib/timecardFields'
 import { logStaffingEvent } from '@/lib/staffingEvents'
 import { compressDays } from '@/lib/readyEmail'
-import type { PaintedBooking } from '@/lib/scheduleBoard'
+import type { PaintedBooking, SiblingSlot } from '@/lib/scheduleBoard'
 import { describeConflicts, type BookingConflict } from '@/lib/bookingConflicts'
 import Button from '@/components/ui/Button'
 import Toggle from '@/components/ui/Toggle'
@@ -45,8 +45,10 @@ import { formatPhone } from '@/lib/phone'
 // ticked, which made the common case pay for the rare one (2026-09-15).
 // A slot with no definition (built in the old per-day grid, or a one-off) is
 // one day with no choice to make, exactly as before, and shows no Days control.
-// The picker finds the definition itself from the slot, so no caller has to
-// know the difference.
+// The caller hands over those other open days (siblingSlotsFor in
+// lib/scheduleBoard.ts, read off the grid the page already holds), so opening
+// the picker asks the database only what the page cannot know: who the crew
+// are, their roles, where they are already booked, and who declined this show.
 
 type Candidate = {
   id: string
@@ -59,9 +61,6 @@ type Candidate = {
    *  scheduler is not the last to know; booking them again is allowed. */
   declinedThisShow: boolean
 }
-
-/** Another open slot of the same definition, on another day. */
-type SiblingSlot = { id: string; roomId: string; roomName: string; date: string }
 
 const ADD_FIELD =
   'w-full rounded-field border border-line bg-surface-2 px-3 py-2 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
@@ -76,6 +75,8 @@ function fmtDay(date: string) {
  * say which, so the scheduler knows whether the other show is real yet).
  */
 export default function FillPositionPicker({
+  showId,
+  siblings,
   positionId,
   positionRole,
   roomId,
@@ -87,6 +88,12 @@ export default function FillPositionPicker({
   onFilled,
   onCancel,
 }: {
+  /** The show this position belongs to: the conflict wording, the declines
+   *  read and the staffing event all need it. */
+  showId: string
+  /** The definition's other open days (siblingSlotsFor). Empty for a slot with
+   *  no definition — one day, no choice to make. */
+  siblings: SiblingSlot[]
   positionId: string
   positionRole: string
   roomId: string
@@ -126,8 +133,6 @@ export default function FillPositionPicker({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // The definition's other open days, if the slot has a definition.
-  const [siblings, setSiblings] = useState<SiblingSlot[]>([])
   // Step two: the chosen person and which of those days stay ticked.
   const [plan, setPlan] = useState<{ c: Candidate; picked: Set<string> } | null>(null)
   // Somebody who is not in the directory yet. Three fields, opened in place.
@@ -140,59 +145,6 @@ export default function FillPositionPicker({
   // the whole difference — see the showConfirmed prop. Capitalised here because
   // both call sites start a sentence with it.
   const verb = showConfirmed ? 'Book' : 'Pencil'
-  // The show this position belongs to — the picker only ever knows roomId,
-  // and logging a staffing event needs the show. Read once per room.
-  const [showId, setShowId] = useState<string | null>(null)
-  // The conflict read is scoped to the days this booking COVERS, so it cannot
-  // run until the day list is settled — otherwise it checks the clicked day,
-  // then has to be thrown away and run again.
-  const [daysReady, setDaysReady] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    setSiblings([])
-    setDaysReady(false)
-    setPlan(null)
-    ;(async () => {
-      const [{ data: me }, { data: room }] = await Promise.all([
-        supabase.from('crew_call_positions').select('position_def_id').eq('id', positionId).maybeSingle(),
-        supabase.from('rooms').select('show_id').eq('id', roomId).maybeSingle(),
-      ])
-      if (active) setShowId((room as any)?.show_id ?? null)
-      const defId = (me as any)?.position_def_id
-      // No definition means a one-day slot: no siblings, and the day list is
-      // settled at exactly the day that was clicked.
-      if (!defId || !active) { if (active) setDaysReady(true); return }
-      const { data: slots } = await supabase
-        .from('crew_call_positions')
-        .select('id, room_id, rooms!inner ( name, work_days!inner ( date ) )')
-        .eq('position_def_id', defId)
-        .neq('id', positionId)
-      const ids = ((slots ?? []) as any[]).map(s => s.id)
-      const { data: held } = ids.length
-        ? await liveBookings(supabase.from('timecards').select('call_position_id, booking_status')).in('call_position_id', ids)
-        : { data: [] as any[] }
-      if (!active) return
-      const taken = new Set(((held ?? []) as any[]).map(t => t.call_position_id))
-      // ONE slot per room-day, and never the clicked slot's own room: a
-      // definition that wants two stagehands has two open slots on each day,
-      // and one person can hold only one of them (the room+person unique index
-      // says so). The other slot stays open for the next person.
-      const seenRoom = new Set<string>([roomId])
-      setSiblings(((slots ?? []) as any[])
-        .filter(s => !taken.has(s.id))
-        .map(s => {
-          const room = Array.isArray(s.rooms) ? s.rooms[0] : s.rooms
-          const wd = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-          return { id: s.id, roomId: s.room_id, roomName: room?.name ?? '', date: wd?.date ?? '' }
-        })
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .filter(s => (seenRoom.has(s.roomId) ? false : (seenRoom.add(s.roomId), true))))
-      setDaysReady(true)
-    })()
-    return () => { active = false }
-  }, [positionId, roomId])
-
   // Every day this booking would cover — the clicked one plus the definition's
   // other open days. Sorted and joined so the effect below re-runs when the set
   // genuinely changes rather than on every new array identity.
@@ -204,14 +156,16 @@ export default function FillPositionPicker({
     [{ id: null, date }, ...siblings.map(s => ({ id: s.id, date: s.date }))]
       .sort((a, b) => a.date.localeCompare(b.date))
 
+  // ONE WAIT. Everything this needs to know about the show — which show, which
+  // days — arrived as props, so the four reads below go out together the
+  // moment the picker opens rather than behind three lookups of their own.
   useEffect(() => {
     let active = true
-    if (!daysReady) return
+    // A different slot is a different booking: drop a half-made day step.
+    setPlan(null)
     ;(async () => {
       setLoading(true)
-      // This room's show, for "this show" wording and for the declines below.
-      const { data: roomRow } = await supabase.from('rooms').select('show_id').eq('id', roomId).maybeSingle()
-      const thisShowId = ((roomRow as any)?.show_id ?? null) as string | null
+      const thisShowId = showId
       const [{ data: crew, error: crewErr }, { data: rates }, { data: booked }, { data: declined }] = await Promise.all([
         supabase.from('crew_members').select('id, full_name').order('full_name'),
         // Roles come from rate cards — the only place the app records what a
@@ -246,9 +200,7 @@ export default function FillPositionPicker({
           .in('rooms.work_days.date', bookingDates.split(',')),
         // Who already said NO to this show (Dan, 2026-09-07: "so the scheduler
         // doesn't try to schedule the same person over again").
-        thisShowId
-          ? supabase.from('timecards').select('crew_member_id').eq('show_id', thisShowId).eq('booking_status', 'declined')
-          : Promise.resolve({ data: [] as any[] }),
+        supabase.from('timecards').select('crew_member_id').eq('show_id', thisShowId).eq('booking_status', 'declined'),
       ])
       if (!active) return
 
@@ -298,7 +250,7 @@ export default function FillPositionPicker({
       setLoading(false)
     })()
     return () => { active = false }
-  }, [bookingDates, roomId, daysReady])
+  }, [showId, roomId, bookingDates])
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()

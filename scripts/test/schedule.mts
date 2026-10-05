@@ -34,7 +34,7 @@ import {
   describeUnreached, describeCrewTold,
 } from '../../lib/showConfirmed.ts'
 import { buildShowConfirmedEmail, collectShowConfirmedRecipients } from '../../lib/showConfirmedEmail.ts'
-import { buildBoard, describeBoard, applyPending } from '../../lib/scheduleBoard.ts'
+import { buildBoard, describeBoard, applyPending, siblingSlotsFor } from '../../lib/scheduleBoard.ts'
 import { compressDays, buildReadyEmail } from '../../lib/readyEmail.ts'
 import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
@@ -843,6 +843,74 @@ console.log('\n--- scheduling board ---')
   })
   check('the same person on two days is 2 positions, 1 person waiting',
     [wide.summary.total, wide.summary.waitingPeople], [2, 1])
+}
+
+console.log('\n--- the fill picker\'s other days, read off the grid ---')
+{
+  // The rule the picker used to ask the database for on every Open: the
+  // definition's OTHER OPEN slots, one per room-day, never the clicked one's
+  // own room-day, in date order. Three days, one room; a definition 'd1'
+  // wanting two Stagehands a day, and a one-off slot with none.
+  const days = [
+    { workDayId: 'w1', date: '2026-10-01', activities: ['load_in'] },
+    { workDayId: 'w2', date: '2026-10-02', activities: ['show'] },
+    { workDayId: 'w3', date: '2026-10-03', activities: ['show'] },
+  ]
+  const rooms = [
+    { id: 'h1', name: 'Hall', workDayId: 'w1' },
+    { id: 'h2', name: 'Hall', workDayId: 'w2' },
+    { id: 'h3', name: 'Hall', workDayId: 'w3' },
+  ]
+  const slot = (id: string, roomId: string, sortOrder: number, positionDefId: string | null = 'd1') =>
+    ({ id, roomId, role: 'Stagehand', sortOrder, positionDefId })
+  const slots = [
+    // Deliberately out of date order, so the sort is what puts them right.
+    slot('c1', 'h3', 0), slot('c2', 'h3', 1),
+    slot('a1', 'h1', 0), slot('a2', 'h1', 1),
+    slot('b1', 'h2', 0), slot('b2', 'h2', 1),
+    slot('one', 'h2', 2, null),
+  ]
+  const board = buildBoard({ days, rooms, slots, bookings: [], flags: [] })
+  const ids = (b: typeof board, id: string) => siblingSlotsFor(b, id).map(s => s.id)
+
+  check('no definition, no other days', siblingSlotsFor(board, 'one'), [])
+  check('a slot not on the grid has no other days', siblingSlotsFor(board, 'nope'), [])
+  check('the other open days, in date order, as full slots',
+    siblingSlotsFor(board, 'c1'),
+    [
+      { id: 'a1', roomId: 'h1', roomName: 'Hall', date: '2026-10-01' },
+      { id: 'b1', roomId: 'h2', roomName: 'Hall', date: '2026-10-02' },
+    ])
+  // Two Stagehands a day means two open slots on each room-day; one person can
+  // hold one of them, so each day is offered once.
+  check('two open slots on one room-day count once', ids(board, 'a1'), ['b1', 'c1'])
+  // c2 is open and shares the definition, but it is in the clicked slot's own
+  // room on its own day: the room+person index would refuse it.
+  check('never the clicked slot\'s own room-day', ids(board, 'c1').includes('c2'), false)
+
+  // A sibling held by a live booking is not open, so it is not offered, and
+  // its room-day partner still is.
+  const booking = (timecardId: string, roomId: string, slotId: string) => ({
+    timecardId, roomId, slotId, crewMemberId: timecardId, crewMemberName: timecardId, role: 'Stagehand',
+    status: 'confirmed' as const,
+  })
+  const held = buildBoard({
+    days, rooms, slots, flags: [],
+    bookings: [booking('t1', 'h1', 'a1'), booking('t2', 'h1', 'a2')],
+  })
+  check('a held sibling is not offered', ids(held, 'c1'), ['b1'])
+  const halfHeld = buildBoard({ days, rooms, slots, flags: [], bookings: [booking('t1', 'h1', 'a1')] })
+  check('but the open slot beside it on that day still is', ids(halfHeld, 'c1'), ['a2', 'b1'])
+  // The painted board is what the picker reads, so a booking accepted a moment
+  // ago is not offered again before the refresh lands.
+  const painted = applyPending(board, [{
+    kind: 'book', slotId: 'b1',
+    booking: { timecardId: 'p', crewMemberId: 'p', crewMemberName: 'P', role: 'Stagehand', status: 'pencilled' },
+  }])
+  check('a slot just painted as booked is not offered', ids(painted, 'c1'), ['a1', 'b2'])
+  // And a removal painted on the grid reopens the slot WITH its definition.
+  const reopened = applyPending(held, [{ kind: 'remove', crewMemberId: 't1' }])
+  check('a slot reopened by a painted removal is offered again', ids(reopened, 'c1'), ['a1', 'b1'])
 }
 
 console.log('\n--- a move un-asks the person ---')

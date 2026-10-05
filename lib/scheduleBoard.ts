@@ -64,9 +64,13 @@ export function moveResetsAnswer(fromDate: string, toDate: string): boolean {
   return fromDate !== toDate
 }
 
+// `positionDefId` is the slot's definition (crew_call_positions.position_def_id),
+// null for a legacy or one-off slot and for a hand-staffed booking. Carried on
+// BOTH kinds so a removal painted by applyPending reopens the slot with it, and
+// the fill picker can read the definition's other open days off the grid.
 export type BoardEntry =
-  | { kind: 'open'; slotId: string; roomId: string; role: string }
-  | { kind: 'booked'; slotId: string | null; roomId: string; booking: BoardBooking; flag: SlotFlag | null }
+  | { kind: 'open'; slotId: string; roomId: string; role: string; positionDefId: string | null }
+  | { kind: 'booked'; slotId: string | null; roomId: string; booking: BoardBooking; flag: SlotFlag | null; positionDefId: string | null }
 
 /** One position, running the width of the show. */
 export type BoardLine = {
@@ -104,7 +108,7 @@ export type Board = { days: BoardDay[]; rooms: BoardRoom[]; summary: BoardSummar
 export type BoardInput = {
   days: BoardDay[]
   rooms: { id: string; name: string; workDayId: string }[]
-  slots: { id: string; roomId: string; role: string; sortOrder: number }[]
+  slots: { id: string; roomId: string; role: string; sortOrder: number; positionDefId?: string | null }[]
   /** Every LIVE timecard on the show; `slotId` is call_position_id. */
   bookings: (BoardBooking & { roomId: string; slotId: string | null })[]
   flags: SlotFlag[]
@@ -165,12 +169,13 @@ export function buildBoard({ days, rooms, slots, bookings, flags }: BoardInput):
         for (const s of mine) {
           if (!roleRank.has(s.role)) roleRank.set(s.role, rank++)
           const b = bySlot.get(s.id)
+          const positionDefId = s.positionDefId ?? null
           list.push(b
-            ? { kind: 'booked', slotId: s.id, roomId, booking: b, flag: flagBySlot.get(s.id) ?? null }
-            : { kind: 'open', slotId: s.id, roomId, role: s.role })
+            ? { kind: 'booked', slotId: s.id, roomId, booking: b, flag: flagBySlot.get(s.id) ?? null, positionDefId }
+            : { kind: 'open', slotId: s.id, roomId, role: s.role, positionDefId })
         }
         for (const b of extras.filter(x => x.roomId === roomId)) {
-          list.push({ kind: 'booked', slotId: null, roomId, booking: b, flag: null })
+          list.push({ kind: 'booked', slotId: null, roomId, booking: b, flag: null, positionDefId: null })
         }
       }
       entriesByDate[day.date] = list
@@ -336,7 +341,7 @@ export function applyPending(board: Board, pending: PendingChange[]): Board {
         if (e && e.kind === 'open') {
           const b = bySlot.get(e.slotId)
           if (b) {
-            byDate[date] = { kind: 'booked', slotId: e.slotId, roomId: e.roomId, booking: b, flag: null }
+            byDate[date] = { kind: 'booked', slotId: e.slotId, roomId: e.roomId, booking: b, flag: null, positionDefId: e.positionDefId }
             lineTouched = true
             continue
           }
@@ -344,7 +349,7 @@ export function applyPending(board: Board, pending: PendingChange[]): Board {
           // A slot they held opens again; a hand-staffed booking held no slot,
           // so its cell simply stops existing, exactly as a rebuild would.
           byDate[date] = e.slotId
-            ? { kind: 'open', slotId: e.slotId, roomId: e.roomId, role: e.booking.role }
+            ? { kind: 'open', slotId: e.slotId, roomId: e.roomId, role: e.booking.role, positionDefId: e.positionDefId }
             : null
           lineTouched = true
           continue
@@ -366,6 +371,52 @@ export function applyPending(board: Board, pending: PendingChange[]): Board {
   // Recounted, never patched: the strip is computed from the cells, so painting
   // a cell and adjusting a number by hand is exactly how the two drift apart.
   return { ...board, rooms, summary: summarizeRooms(rooms) }
+}
+
+/** Another open slot of the same definition, on another day. */
+export type SiblingSlot = { id: string; roomId: string; roomName: string; date: string }
+
+/**
+ * The days a booking from this slot would cover besides its own: the
+ * definition's OTHER OPEN slots, read off the grid the page already holds.
+ *
+ * This used to be three dependent queries every time the fill picker opened
+ * (the slot's definition, its sibling slots, which of those were held) — the
+ * board already knows all three. Reading the board that has been PAINTED also
+ * means a slot booked a moment ago is not offered again before the refresh.
+ *
+ * The rule is the picker's, unchanged:
+ *   - same definition; a slot with none is one day with no siblings;
+ *   - never the clicked slot, never a slot held by a live booking (declined
+ *     rows never reach the board, so they hold nothing here either);
+ *   - ONE slot per room-day, and never the clicked slot's own room-day: a
+ *     definition wanting two stagehands has two open slots on each day, and one
+ *     person can hold only one of them (timecards_room_crew_uniq). The other
+ *     stays open for the next person;
+ *   - in date order.
+ */
+export function siblingSlotsFor(board: Board, slotId: string): SiblingSlot[] {
+  let defId: string | null = null
+  let ownRoomId: string | null = null
+  const open: SiblingSlot[] = []
+  const defOf = new Map<string, string | null>()
+  for (const room of board.rooms) {
+    for (const line of room.lines) {
+      for (const [date, e] of Object.entries(line.byDate)) {
+        if (!e) continue
+        if (e.slotId === slotId) { defId = e.positionDefId; ownRoomId = e.roomId }
+        if (e.kind !== 'open' || !e.positionDefId || e.slotId === slotId) continue
+        defOf.set(e.slotId, e.positionDefId)
+        open.push({ id: e.slotId, roomId: e.roomId, roomName: room.name, date })
+      }
+    }
+  }
+  if (!defId) return []
+  const seenRoom = new Set<string>(ownRoomId ? [ownRoomId] : [])
+  return open
+    .filter(s => defOf.get(s.id) === defId)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter(s => (seenRoom.has(s.roomId) ? false : (seenRoom.add(s.roomId), true)))
 }
 
 /** @deprecated use applyPending — kept so a book-only caller reads plainly. */

@@ -9,7 +9,7 @@ import FillPositionPicker from '@/components/FillPositionPicker'
 import SlotFlagActions from '@/components/SlotFlagActions'
 import CrewChangeNotice from '@/components/CrewChangeNotice'
 import { dayLabel, dayActivitiesBgClass } from '@/lib/dayActivities'
-import type { Board, BoardEntry, BoardRoom } from '@/lib/scheduleBoard'
+import { siblingSlotsFor, type Board, type BoardEntry, type BoardRoom } from '@/lib/scheduleBoard'
 import { useBoardPaint, usePaintedBoard } from '@/components/BoardPaint'
 
 // Rooms down the side, days across the top — and it reads like a grid, because
@@ -81,6 +81,14 @@ export default function ScheduleBoard({
           }
     return m
   }, [board])
+
+  // The open slot's definition-mates, read off the grid rather than asked of the
+  // database every time the picker opens. The PAINTED board, so a slot booked a
+  // moment ago is not offered again before the refresh lands.
+  const siblings = useMemo(
+    () => (picker ? siblingSlotsFor(board, picker.slotId) : []),
+    [board, picker?.slotId],
+  )
 
   // The picker opens under the row it belongs to, and the grid is its own
   // scroll box — so on a row near the bottom it opened out of sight and the
@@ -231,6 +239,8 @@ export default function ScheduleBoard({
               && (line.byDate[picker.date] as Extract<BoardEntry, { kind: 'open' }>).slotId === picker.slotId && (
               <div ref={pickerRef} className="border-b border-line bg-surface-2/40 px-3 py-3">
                 <FillPositionPicker
+                  showId={showId}
+                  siblings={siblings}
                   positionId={picker.slotId}
                   positionRole={picker.role}
                   roomId={picker.roomId}

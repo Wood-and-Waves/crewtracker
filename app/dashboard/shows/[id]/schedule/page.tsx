@@ -69,7 +69,7 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
     untold,
   ] = await Promise.all([
     roomIds.length
-      ? supabase.from('crew_call_positions').select('id, room_id, role, sort_order').in('room_id', roomIds).order('sort_order')
+      ? supabase.from('crew_call_positions').select('id, room_id, role, sort_order, position_def_id').in('room_id', roomIds).order('sort_order')
       : Promise.resolve({ data: [] as any[] }),
     // A declined person holds nothing, so they are filtered in SQL — the same
     // rule lib/timecardFields.ts applies everywhere else.
@@ -94,7 +94,9 @@ export default async function ShowSchedulePage({ params }: { params: Promise<{ i
   const board = buildBoard({
     days,
     rooms,
-    slots: (slotRows ?? []).map((s: any) => ({ id: s.id, roomId: s.room_id, role: s.role, sortOrder: s.sort_order })),
+    slots: (slotRows ?? []).map((s: any) => ({
+      id: s.id, roomId: s.room_id, role: s.role, sortOrder: s.sort_order, positionDefId: s.position_def_id ?? null,
+    })),
     bookings: (bookingRows ?? []).map((t: any): BoardBooking & { roomId: string; slotId: string | null } => ({
       timecardId: t.id,
       roomId: t.room_id,
