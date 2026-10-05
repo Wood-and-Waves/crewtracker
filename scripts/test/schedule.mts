@@ -29,6 +29,7 @@ import { summarizeUntold, worthTelling, type UntoldRow } from '../../lib/crewNot
 import { describeConflicts, type BookingConflict } from '../../lib/bookingConflicts.ts'
 import { describeBookingPage } from '../../lib/bookingPage.ts'
 import { isExpectedReadyReason } from '../../lib/showReadiness.ts'
+import { resolveSession } from '../../lib/sessionResolve.ts'
 import {
   CONFIRM_SHOW_PROMPT, UNCONFIRM_SHOW_PROMPT, NOTIFY_CREW_PROMPT,
   describeUnreached, describeCrewTold,
@@ -1607,6 +1608,90 @@ console.log('\n--- days changed email ---')
   check('still-open counts are expected', isExpectedReadyReason('2 open, 1 waiting'), true)
   // A genuine failure must still shout.
   check('a real failure is not swallowed', isExpectedReadyReason('PM has no email'), false)
+}
+
+// ---------------------------------------------------------------------------
+// Which company is this login acting in? (lib/sessionResolve.ts, 2026-10-04)
+// ---------------------------------------------------------------------------
+{
+  const A = '11111111-1111-1111-1111-111111111111'
+  const B = '22222222-2222-2222-2222-222222222222'
+  const ME = 'me-0000'
+  const row = (over: any = {}) => ({
+    profile_id: ME, organization_id: A, deactivated_at: null,
+    organizations: { id: A, name: 'Alpha Staging', scheduling_enabled: true, disabled_at: null },
+    can_edit_timecards: true, can_view_pay_rates: true, ...over,
+  })
+  const r = (activeOrganizationId: string | null, memberships: any[]) => resolveSession({ profileId: ME, activeOrganizationId, memberships })
+
+  // The ordinary case: one company, pointer matches.
+  const one = r(A, [row()])
+  check('one live membership resolves to that company', one.organizationId, A)
+  check('and carries its permissions', one.permissions.can_edit_timecards, true)
+  check('and a permission the row does not grant stays false', one.permissions.can_manage_users, false)
+  check('and is not deactivated', one.deactivated, false)
+  check('and the switcher lists it as active', one.organizations.map(o => `${o.name}:${o.isActive}`), ['Alpha Staging:true'])
+
+  // THE POINTER GRANTS NOTHING. A stale pointer at a company you are not in is
+  // exactly the case the database's my_organization_id() refuses too.
+  const stale = r(B, [row()])
+  check('a pointer at a company you are not in resolves to no company', stale.organizationId, null)
+  check('and no permissions at all', Object.values(stale.permissions).some(Boolean), false)
+  check('and is not reported as removed (there is nothing to be removed from)', stale.deactivated, false)
+  check('but the switcher still offers the company you ARE in', stale.organizations.map(o => o.name), ['Alpha Staging'])
+  check('with nothing marked active', stale.organizations.some(o => o.isActive), false)
+
+  // REMOVED: the row exists, deactivated_at is set. Named as removed, grants
+  // nothing, drops out of the switcher.
+  const gone = r(A, [row({ deactivated_at: '2026-09-01T00:00:00Z' })])
+  check('a deactivated membership resolves to no company', gone.organizationId, null)
+  check('and says so', gone.deactivated, true)
+  check('and grants nothing', gone.permissions.can_edit_timecards, false)
+  check('and leaves the switcher empty', gone.organizations.length, 0)
+
+  // TWO COMPANIES: the pointer picks, the other stays on the list.
+  const two = r(B, [row(), row({ organization_id: B, organizations: { id: B, name: 'Beta Events', scheduling_enabled: false, disabled_at: null }, can_edit_timecards: false })])
+  check('two memberships: the pointer decides which is active', two.organizationId, B)
+  check("and the permissions are THAT company's, not the other's", two.permissions.can_edit_timecards, false)
+  check('and the module flag is that company\'s too', two.schedulingEnabled, false)
+  check('the switcher lists both by name', two.organizations.map(o => o.name), ['Alpha Staging', 'Beta Events'])
+  check('with only the active one marked', two.organizations.map(o => o.isActive), [false, true])
+
+  // NONE: never joined. And no pointer at all.
+  check('no memberships: no company', r(A, []).organizationId, null)
+  check('no pointer: no company even with a live membership', r(null, [row()]).organizationId, null)
+  check('but the switcher still shows where they could go', r(null, [row()]).organizations.length, 1)
+
+  // Suspension and the module flag, and the two shapes PostgREST uses for an embed.
+  check('a suspended company is reported', r(A, [row({ organizations: { id: A, name: 'Alpha Staging', disabled_at: '2026-01-01' } })]).orgSuspended, true)
+  check('scheduling defaults ON when the flag is missing (fail open on a billing flag)',
+    r(A, [row({ organizations: { id: A, name: 'Alpha Staging' } })]).schedulingEnabled, true)
+  check('an embed returned as a one-element array is read the same',
+    r(A, [row({ organizations: [{ id: A, name: 'Alpha Staging', scheduling_enabled: false }] })]).schedulingEnabled, false)
+  check('a membership whose organization did not embed is left off the switcher',
+    r(A, [row({ organizations: null })]).organizations.length, 0)
+  check('but a live active row with no embed still resolves, scheduling on, not suspended',
+    (() => { const x = r(A, [row({ organizations: null })]); return [x.organizationId === A, x.schedulingEnabled, x.orgSuspended] })(),
+    [true, true, false])
+  check('an array-shaped embed still names the company on the switcher',
+    r(A, [row({ organizations: [{ id: A, name: 'Alpha Staging' }] })]).organizations.map(o => o.name), ['Alpha Staging'])
+  check('a deactivated active row reports scheduling off and not suspended',
+    (() => { const x = r(A, [row({ deactivated_at: '2026-09-01T00:00:00Z' })]); return [x.schedulingEnabled, x.orgSuspended] })(), [false, false])
+  // Pointer at the company you were REMOVED from, while still live in another:
+  // no company, but the other one is still on the list to switch to.
+  const halfOut = r(A, [row({ deactivated_at: '2026-09-01T00:00:00Z' }), row({ organization_id: B, organizations: { id: B, name: 'Beta Events' } })])
+  check('removed from the pointed company: no company, flagged removed', [halfOut.organizationId, halfOut.deactivated], [null, true])
+  check('but the other live company is still offered', halfOut.organizations.map(o => `${o.name}:${o.isActive}`), ['Beta Events:false'])
+
+  // SOMEBODY ELSE'S ROW IS IGNORED, whatever RLS let through. An admin's policy
+  // returns the whole team's memberships; a teammate's row for the SAME company
+  // must not become the caller's permissions or the caller's company.
+  const foreign = r(A, [row({ profile_id: 'someone-else', can_manage_users: true })])
+  check('a teammate\'s row for the same company does not resolve', foreign.organizationId, null)
+  check('and grants nothing', Object.values(foreign.permissions).some(Boolean), false)
+  check('and is not on the switcher', foreign.organizations.length, 0)
+  const mixed = r(A, [row({ profile_id: 'someone-else', can_manage_users: true }), row({ can_manage_users: false })])
+  check('with both present, only the caller\'s own row counts', [mixed.organizationId, mixed.permissions.can_manage_users], [A, false])
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

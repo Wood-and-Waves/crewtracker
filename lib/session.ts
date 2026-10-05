@@ -23,6 +23,7 @@ import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import type { PermissionKey, PermissionValues } from '@/lib/permissions'
 import { ALL_PERMISSION_KEYS } from '@/lib/permissions'
+import { resolveSession, type MembershipRow, type MyOrganization } from '@/lib/sessionResolve'
 
 export type CurrentUser = {
   id: string
@@ -52,22 +53,79 @@ export type CurrentUser = {
   can: (key: PermissionKey) => boolean
 }
 
-const NO_PERMISSIONS = Object.fromEntries(
-  ALL_PERMISSION_KEYS.map((k) => [k, false]),
-) as PermissionValues
+/**
+ * ONE request-cached load for everything about the signed-in user.
+ *
+ * TWO ROUND TRIPS AFTER THE AUTH CHECK, NOT THREE IN A ROW (2026-10-04). It used
+ * to be: validate the login → read the profile → read the ONE membership for
+ * the profile's active company (which had to wait for the profile, because it
+ * needed the pointer) → and then getMyOrganizations read ALL memberships for the
+ * switcher, serial behind all of that even though the layout wrapped the two in
+ * Promise.all. Measured on the live site at ~85 ms a round trip, that chain was
+ * most of the ~400 ms every navigation paid before any page did its own work.
+ *
+ * Both data reads need only the login's id, so they run together: the profile,
+ * and every membership this login holds with its organization embedded. Which
+ * one is active is then decided in plain code — resolveSession() in
+ * lib/sessionResolve.ts, pure and pinned by tests for the four cases that
+ * matter: a stale pointer, a deactivated membership, a login in two companies,
+ * a login in none. The rule it applies is the one that was always here: the
+ * pointer grants nothing; a live membership in exactly that company must exist.
+ *
+ * The memberships read is filtered to this login's own rows TWICE — in the
+ * query, and again inside resolveSession — because the memberships policy lets
+ * an admin read their whole team, so RLS alone would not bound it. Nothing here
+ * is a security boundary — RLS is — but the pick must still be the caller's.
+ *
+ * One read now feeds both the permissions and the switcher, so the deploy-order
+ * rule in CLAUDE.md ("migrate first, then deploy") now empties the switcher too
+ * if a permission column is missing, where before only getCurrentUser failed.
+ */
+const loadSession = cache(async function loadSession() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const [{ data: profile }, { data: memberships }] = await Promise.all([
+    // profiles holds person-level facts only. Which organization they are
+    // acting in is a pointer; it grants nothing on its own.
+    supabase
+      .from('profiles')
+      .select(
+        `id, email, full_name, is_super_admin,
+         use_24_hour_time, shoulder_surfer_mode, active_organization_id`,
+      )
+      .eq('id', user.id)
+      .single(),
+    // Every membership, deactivated ones included: a removed member keeps their
+    // row so "who finalized this payroll report" survives them leaving, and the
+    // UI needs to know "removed" from "never joined". The organization rides
+    // along embedded, so the module entitlement, the suspension flag and the
+    // switcher's names all land in the same round trip as the permissions.
+    supabase
+      .from('memberships')
+      .select(
+        `profile_id, organization_id, deactivated_at, organizations(id, name, scheduling_enabled, disabled_at), ${ALL_PERMISSION_KEYS.join(', ')}`,
+      )
+      .eq('profile_id', user.id),
+  ])
+
+  const row = (profile ?? {}) as Record<string, unknown>
+  const resolved = resolveSession({
+    profileId: user.id,
+    activeOrganizationId: (row.active_organization_id as string) ?? null,
+    memberships: (memberships ?? []) as unknown as MembershipRow[],
+  })
+  return { user, row, resolved }
+})
 
 /**
  * The signed-in user, or null if nobody is signed in.
  *
  * WRAPPED IN React.cache(): one answer per server request, shared by the layout
- * and the page. Before 2026-09-06 the dashboard layout and every page each
- * called this independently — three sequential round trips apiece, the first a
- * network call to the auth server — so a single tracker view validated the
- * same session four times (proxy + layout + getMyOrganizations + page).
- * Measured: ~20 Supabase round trips per page, re-paid on every
- * router.refresh(), i.e. after every punch. cache() is per-request and holds
- * nothing across requests, so a permission change still takes effect on the
- * next navigation exactly as before.
+ * and the page, and sharing one loadSession() with getMyOrganizations so the
+ * switcher costs nothing extra. cache() is per-request and holds nothing across
+ * requests, so a permission change still takes effect on the next navigation.
  *
  * Returns permissions for their ACTIVE organization. A user with no
  * organization gets every permission false rather than null, so call sites can
@@ -79,136 +137,45 @@ const NO_PERMISSIONS = Object.fromEntries(
  * standing between a user and an action.
  */
 export const getCurrentUser = cache(async function getCurrentUser(): Promise<CurrentUser | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  // profiles holds person-level facts only. Which organization they are acting
-  // in is a pointer; it grants nothing on its own.
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select(
-      `id, email, full_name, is_super_admin,
-       use_24_hour_time, shoulder_surfer_mode, active_organization_id`,
-    )
-    .eq('id', user.id)
-    .single()
-
-  const row = (profile ?? {}) as Record<string, unknown>
-  const activeOrgId = (row.active_organization_id as string) ?? null
-
-  // Resolve the pointer to a real membership. This mirrors my_organization_id()
-  // in the database exactly, and for the same reason: the pointer is a stored
-  // choice, and a stored choice is a way to serve the wrong organization's data
-  // if it is ever trusted on its own. Both ends re-check that a live membership
-  // for that specific organization exists, every time.
-  //
-  // maybeSingle(), not single(): "no membership for the active org" is an
-  // ordinary state (never joined, just removed, stale pointer), not an error.
-  //
-  // organizations(scheduling_enabled) rides along as an embedded select rather
-  // than a second query: the module entitlement is a property of the org the
-  // caller is acting in, so it resolves at exactly the same moment their
-  // permissions do, for no extra round trip.
-  const { data: membership } = activeOrgId
-    ? await supabase
-        .from('memberships')
-        .select(
-          `organization_id, deactivated_at, organizations(scheduling_enabled, disabled_at), ${ALL_PERMISSION_KEYS.join(', ')}`,
-        )
-        .eq('profile_id', user.id)
-        .eq('organization_id', activeOrgId)
-        .maybeSingle()
-    : { data: null }
-
-  const m = (membership ?? {}) as Record<string, unknown>
-  // A deactivated member keeps their row so that "who finalized this payroll
-  // report" survives them leaving, but they hold nothing. Matching the database,
-  // which returns null from my_organization_id() for them, means the UI stops
-  // rendering an organization's chrome around screens RLS has already emptied.
-  const deactivated = !!membership && !!m.deactivated_at
-  const live = !!membership && !deactivated
-
-  const permissions = live
-    ? (Object.fromEntries(
-        ALL_PERMISSION_KEYS.map((k) => [k, m[k] === true]),
-      ) as PermissionValues)
-    : NO_PERMISSIONS
-
-  // PostgREST returns an embedded to-one relation as an object, but types it as
-  // an array often enough that both shapes have to be handled — the same dance
-  // every `rooms!inner(work_days!inner(...))` read in this app does.
-  const orgRel = m.organizations as
-    | { scheduling_enabled?: boolean; disabled_at?: string | null }
-    | { scheduling_enabled?: boolean; disabled_at?: string | null }[]
-    | null
-  const org = Array.isArray(orgRel) ? orgRel[0] : orgRel
-  // Default TRUE when unknown: the column is `not null default true`, so the
-  // only way to read undefined here is a shape surprise, and failing OPEN on a
-  // commercial entitlement is the right way round — a billing flag must never be
-  // able to silently hide a feature a customer is paying for.
-  const schedulingEnabled = live ? org?.scheduling_enabled !== false : false
-  const orgSuspended = live ? !!org?.disabled_at : false
+  const session = await loadSession()
+  if (!session) return null
+  const { user, row, resolved } = session
+  const { permissions } = resolved
 
   return {
     id: user.id,
     email: (row.email as string) ?? user.email ?? null,
     fullName: (row.full_name as string) ?? null,
-    organizationId: live ? ((m.organization_id as string) ?? null) : null,
+    organizationId: resolved.organizationId,
     isSuperAdmin: row.is_super_admin === true,
     use24Hour: row.use_24_hour_time === true,
     shoulderSurfer: row.shoulder_surfer_mode === true,
-    deactivated,
-    schedulingEnabled,
-    orgSuspended,
+    deactivated: resolved.deactivated,
+    schedulingEnabled: resolved.schedulingEnabled,
+    orgSuspended: resolved.orgSuspended,
     permissions,
     can: (key) => permissions[key] === true,
   }
 })
 
-export type MyOrganization = {
-  id: string
-  name: string
-  isActive: boolean
-}
+export type { MyOrganization } from '@/lib/sessionResolve'
 
 /**
  * Every organization the signed-in user can currently act in, for the switcher.
  *
- * Deactivated memberships are excluded: being removed from a company should take
- * it out of your list, not leave a door that opens onto an empty app.
+ * Derived from the same rows getCurrentUser already loaded — no query of its
+ * own since 2026-10-04. Deactivated memberships are excluded: being removed
+ * from a company should take it out of your list, not leave a door that opens
+ * onto an empty app. "Active" is the RESOLVED organization (a live membership),
+ * matching my_organization_id(), not the raw pointer.
  *
- * Returns an empty array for someone in no organization, and a single entry for
- * the ordinary case — callers should hide the switcher entirely below two, since
- * a "switch company" control offering one company is just clutter.
+ * Empty for someone in no organization, one entry for the ordinary case —
+ * callers hide the switcher below two, since a "switch company" control
+ * offering one company is just clutter.
  */
 export const getMyOrganizations = cache(async function getMyOrganizations(): Promise<MyOrganization[]> {
-  // Reuses the request-cached user rather than re-validating the session and
-  // re-reading profiles — this used to be a second auth round trip plus two
-  // duplicate table reads on every dashboard render. "Active" is the RESOLVED
-  // organization (a live membership), matching my_organization_id(), not the
-  // raw pointer — a stale pointer must never mark a company you were removed
-  // from as the active one.
-  const user = await getCurrentUser()
-  if (!user) return []
-  const supabase = await createClient()
-
-  const { data } = await supabase
-    .from('memberships')
-    .select('organization_id, deactivated_at, organizations(id, name)')
-    .eq('profile_id', user.id)
-    .is('deactivated_at', null)
-
-  type Row = { organization_id: string; organizations: { id: string; name: string } | null }
-
-  return ((data ?? []) as unknown as Row[])
-    .filter((r) => r.organizations)
-    .map((r) => ({
-      id: r.organization_id,
-      name: r.organizations!.name,
-      isActive: r.organization_id === user.organizationId,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const session = await loadSession()
+  return session ? session.resolved.organizations : []
 })
 
 /**

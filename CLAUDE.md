@@ -352,6 +352,9 @@ lib/
                   reader for the public page; clockSession never uses select('*')
   ruleset.ts    — payroll ruleset field list + the Continuous Time / Working Lunch mutual exclusion
   permissions.ts — role presets and permission metadata, shared by the team screens
+  sessionResolve.ts — PURE: which company a login is acting in and what it may do, from
+                  the profile + ALL its memberships read in parallel (2026-10-04); tested in
+                  schedule.mts. session.ts is server-only and cannot be imported by a test
   timezones.ts  — the one shared timezone list (New Show and Edit Show used to disagree)
   crew.ts       — crew-member helpers
   phone.ts      — phone formatting/normalisation
@@ -394,8 +397,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 643 assertions as of 2026-09-27
-                  (payroll 42 + schedule 346 + clock 124 + rls 131).
+                  helper, no framework. 762 assertions as of 2026-10-04
+                  (payroll 42 + schedule 464 + clock 125 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
