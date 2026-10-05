@@ -282,3 +282,28 @@ Drift-exposed but clear: Reports −32 % and the tracker −24 % on a day the co
 10 % slower. Not touched this round and still slow: Scheduling (B2) and Edit Show (B4),
 which now at least answer the click with a skeleton. Next in line by gain ÷ effort:
 item 3 (session chain, every page), then B4 Edit Show, then B2.
+
+## 9. Item 3 landed — production after 80e19e2 (2026-10-04)
+
+The session chain: two parallel reads after the auth check instead of three in a row, the pick
+in pure code (`lib/sessionResolve.ts`, 35 tests), three independent Opus reviewers (equivalence,
+security, consumers) all approved, every persona checked by hand on dev, Dan's two-company
+switcher checked on production. The security reviewer caught a false comment — RLS does NOT
+bound memberships to the caller's own rows (admins read their team) — so the resolver now filters
+on `profile_id` itself, tested with a teammate's row for the same company.
+
+| Click | Fresh baseline | After items 1–5 | **After item 3** |
+|---|---|---|---|
+| Settings (the chain's worst case) | 862 | — | **374** |
+| → Team (nearest thing to the fixed tax) | 530 / 583 | 583 | **512** |
+| Shows list, hard load | 876 | 635 | 755 |
+| List → tracker | 661 | instant | instant |
+| Tracker → Scheduling → Edit → Reports → tracker | 729 / 1,335 / 731 / 734 | 803 / 1,257 / 494 / 561 | **all instant** this run |
+
+Reading it: the show-to-show clicks came back instant because each screen's prefetches now
+finish before the next click — the faster layout chain is what made that window close. That
+means the per-click server cost is no longer measurable through a click; Settings and Team are
+the non-prefetched routes, and Settings carries the clearest signal. Team moved less than the
+~150 ms predicted, within the environment's ±30 % noise. Remaining by gain ÷ effort: B4 Edit
+Show (~11 serial hops, ~19 requests per field blur), B2 Scheduling page chain, the crew-clock
+punch route (8 waits → 3), then B3 server-side PDF.
