@@ -221,6 +221,26 @@ fill picker.
 
 **The tracker console's punch table** (`TimecardRow.tsx` + the room block in `shows/[id]/page.tsx`) is a genuine ruled grid on desktop (`lg:grid-cols-[...]`, shared between the header row and every crew row via `lib/trackerLayout.ts`), collapsing to labeled per-field cards on mobile. This replaced free-floating pill buttons after Dan's first-round feedback that times weren't visually separated.
 
+**THE DAY ARROWS PREFETCH THEIR NEIGHBOURS, AND THE ARROW SAYS WHEN IT IS WAITING**
+(`components/DayLink.tsx`, 2026-10-05; Dan: "so much hesitation while switching between
+days"). A day switch is a full server render of the tracker (~0.5 s warm, more on venue wifi),
+and `?day=N` is the same route with a different search param — so the page's loading boundary
+was already mounted and nothing on screen moved until the render landed. Both trees' arrows are
+now `DayLink`: the two neighbouring days are `router.prefetch`ed in FULL when a day opens, so
+the click lands at once (measured: zero requests, new day on screen in under 100 ms), and
+`useLinkStatus` dims and pulses the arrow while a cold day loads. Two things it does on purpose.
+**It is `router.prefetch` from an effect, not the Link's own prefetch**: a Link re-prefetches
+the instant a `router.refresh()` lands, and the tracker refreshes after every punch — measured
+as three server renders racing each other per punch, the refresh that paints the punch taking
+700 ms instead of 400. The effect re-prefetches too, but TWO SECONDS after the refresh, from
+`onInvalidate`, so the refresh has the connection to itself and the arrow is still warm by the
+time anybody reaches for it. **Every other link on the tracker stays `prefetch={false}`** —
+the 23-render storm of 2026-10-04 is why. The same change folded two of the tracker's four
+database waves into the first: the organization's rounding comes embedded in the show, the
+positions check and the rates no longer wait for the caller, and when the URL names the day
+(every arrow click, every post-punch refresh) the punches are found by day NUMBER through
+`timecards → rooms → work_days` and go out in wave one as well.
+
 **The tracker renders ONE of its two trees, chosen by a cookie (2026-09-06).** The desktop grid
 and `MobileRoomTracker` are separate trees, and until then the server rendered both on every
 request and hid one with CSS — `display:none` hides paint, not work, and two-thirds of a tracker
@@ -1259,6 +1279,15 @@ Other things that are load-bearing and were each verified:
 - Service role means the `day_rate` column lockdown does not apply. `lib/clockSession.ts` uses
   explicit column lists and **never `select('*')`** — the same convention, and the same lack of
   a lint rule, as `lib/bookingInvite.ts`.
+- **THE PUNCH ROUTE IS THREE WAITS, NOT EIGHT** (2026-10-05). The write behind a crew
+  member's tap was the throttle, the link, the show, the show AGAIN, the timecard, its punches,
+  the organization and then the write, each waiting on the one before, on the slowest
+  connection in the app. Now: the throttle and the link lookup go out together (the limiter's
+  answer is still read first, so a refused caller learns nothing); `applyCrewPunch` makes ONE
+  read — the timecard with its show, the company's rounding, its work day's date and its
+  punches embedded — and then the write. The expiry rule moved into `applyCrewPunch` behind
+  `linkExpiry`, which only the link route sets. Measured against dev from this machine: 600–890
+  ms → 205–300 ms per punch. Anything added here goes into that one read, not after it.
 
 Rate limiting on both routes since 2026-09-06 — see the security backlog entry for the limits.
 

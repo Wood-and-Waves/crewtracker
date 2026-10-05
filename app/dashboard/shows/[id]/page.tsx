@@ -4,6 +4,7 @@ import CrewShowScreen from '@/components/CrewShowScreen'
 import { redirect, notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
+import DayLink from '@/components/DayLink'
 import LayoutCookie from '@/components/LayoutCookie'
 import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
@@ -34,13 +35,25 @@ export default async function ShowDetailPage({
   const { day, d, v } = await searchParams
   const supabase = await createClient()
   // Everything here needs only the show id, so it all goes in ONE round trip:
-  // the caller, the show, its ruleset and days, whether the caller is PM-side,
-  // and every room and live timecard on the show (rooms and timecards carry
-  // show_id since 0023, so neither has to wait for the day list). Only the
-  // punches need to know which day is open, and they stay a wave of their own.
-  // A crew-side visitor pays for a few reads they never use; the database
-  // returns them only their own rows, and the cost is far smaller than
-  // making every PM wait through four sequential waves.
+  // the caller, the show (with the company's rounding grid embedded), its
+  // ruleset and days, whether the caller is PM-side, every room and live
+  // timecard on the show (rooms and timecards carry show_id since 0023, so
+  // neither has to wait for the day list), the positions check, the rates,
+  // and — when the URL names the day, which every arrow click does — that
+  // day's punches too. A crew-side visitor pays for a few reads they never
+  // use; the database returns them only their own rows, and the cost is far
+  // smaller than making every PM wait through four sequential waves. Two
+  // waves were trimmed here on 2026-10-05: the org/positions/rates wave,
+  // which had waited on the caller for an organization id the show already
+  // carries, and the punches wave, which had waited on the day list to learn
+  // which day "?day=3" is.
+  const PUNCH_COLS = 'id, timecard_id, punch_type, punched_at, source'
+  // The punches of ONE day, and the wraps of the days before it, found through
+  // the day NUMBER rather than through timecard ids — so they need nothing
+  // from another query. Only when the URL names a day: the first open from
+  // the shows list lands on today, which needs the show's timezone first.
+  const PUNCH_DAY_PATH = 'timecards!inner ( rooms!inner ( work_days!inner ( day_number ) ) )'
+  const requestedDayNumber = day && /^\d+$/.test(day) ? parseInt(day) : null
   const [
     user,
     { data: show },
@@ -49,9 +62,12 @@ export default async function ShowDetailPage({
     pmSide,
     { data: allShowRooms },
     { data: timecardRows, error: timecardsError },
+    { data: defRows },
+    rateById,
+    requestedPunches,
   ] = await Promise.all([
     getCurrentUser(),
-    supabase.from('shows').select('*').eq('id', id).single(),
+    supabase.from('shows').select('*, organizations ( timecard_rounding_minutes )').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
     isPmOnShow(supabase, id),
@@ -66,6 +82,24 @@ export default async function ShowDetailPage({
     // inherits it — the roster, the day summary counts, Copy Crew's source, and
     // everything handed to MobileRoomTracker. Someone who said no is not crew.
     liveBookings(supabase.from('timecards').select(TIMECARD_SELECT).eq('show_id', id)),
+    // Add Day's extend-toggle: cheap existence check. Read for everyone and
+    // USED only with the scheduling module on (hasDefs below) — a switched-off
+    // organization must not see the extend flow reappear just because old
+    // rows are still there.
+    supabase.from('position_defs').select('id').eq('show_id', id).limit(1),
+    // The tracker shows hours, never money — the only thing here that wants a
+    // rate is RoomActionsMenu's rate editor. Rates come from the
+    // permission-checked view, which yields nothing for a user who can't see
+    // them, so it is safe to ask before knowing who is asking.
+    fetchShowRates(supabase, id),
+    requestedDayNumber === null
+      ? Promise.resolve(null)
+      : Promise.all([
+          supabase.from('punches').select(`${PUNCH_COLS}, ${PUNCH_DAY_PATH}`)
+            .eq('show_id', id).eq('timecards.rooms.work_days.day_number', requestedDayNumber),
+          supabase.from('punches').select(`${PUNCH_COLS}, ${PUNCH_DAY_PATH}`)
+            .eq('show_id', id).eq('punch_type', 'end').lt('timecards.rooms.work_days.day_number', requestedDayNumber),
+        ]),
   ])
 
   // The handoff-to-scheduler control and its position/scheduler queries used to
@@ -125,25 +159,9 @@ export default async function ShowDetailPage({
   // Rooms and timecards for the WHOLE show were fetched above (not just the
   // active day) so short-turnaround detection can look at a crew member's
   // previous day's end punch, which may be in a different room/day entirely.
-  // What is left here depends on the caller: the org's rounding setting, the
-  // positions check, and the show's rates share one round trip.
-  const [{ data: organization }, { data: defRows }, rateById] = await Promise.all([
-    supabase.from('organizations').select('timecard_rounding_minutes').eq('id', organizationId).single(),
-    // Add Day's extend-toggle: cheap existence check, gated the same as every
-    // other positions query on this page — a switched-off organization must
-    // not see the extend flow reappear just because old rows are still there.
-    schedulingOn
-      ? supabase.from('position_defs').select('id').eq('show_id', id).limit(1)
-      : Promise.resolve({ data: [] as { id: string }[] }),
-    // The tracker shows hours, never money — the only thing here that wants a
-    // rate is RoomActionsMenu's rate editor. Rates come from the
-    // permission-checked view, which yields nothing for a user who can't see
-    // them, and are gated on the permission so the view's join is not run for
-    // somebody who would be shown no rate anyway.
-    canViewRates ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
-  ])
+  const organization = Array.isArray(show.organizations) ? show.organizations[0] : show.organizations
   const roundingMinutes = organization?.timecard_rounding_minutes ?? 1
-  const hasDefs = (defRows?.length ?? 0) > 0
+  const hasDefs = schedulingOn && (defRows?.length ?? 0) > 0
 
   // Compute "today" in the show's timezone, not UTC/device time — using
   // toISOString() here rolls to tomorrow's date in the evening for any
@@ -171,8 +189,11 @@ export default async function ShowDetailPage({
   const dayTimecardIds = (allShowTimecards || []).filter(t => dayRoomIdSet.has(t.room_id)).map(t => t.id)
   const earlierTimecardIds = (allShowTimecards || []).filter(t => earlierRoomIdSet.has(t.room_id)).map(t => t.id)
 
-  const PUNCH_COLS = 'id, timecard_id, punch_type, punched_at, source'
-  const [{ data: dayPunches }, { data: earlierWraps }] = await Promise.all([
+  // Already in hand when the URL named a real day of this show; otherwise
+  // (today, or a day number the show does not have) one more wave, by id.
+  const [{ data: dayPunches }, { data: earlierWraps }] = requestedPunches && requestedIndex >= 0
+    ? requestedPunches
+    : await Promise.all([
     dayTimecardIds.length > 0
       ? supabase.from('punches').select(PUNCH_COLS).in('timecard_id', dayTimecardIds)
       : Promise.resolve({ data: [] as any[] }),
@@ -345,16 +366,14 @@ export default async function ShowDetailPage({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <Link prefetch={false}
-              href={prevDay ? `?day=${prevDay.day_number}` : '#'}
-              aria-label="Previous day"
-              className={cn(
-                'flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-line bg-surface-2',
-                !prevDay ? 'pointer-events-none opacity-30' : 'hover:border-accent hover:text-accent',
-              )}
+            <DayLink
+              dayNumber={prevDay ? prevDay.day_number : null}
+              label="Previous day"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-line bg-surface-2 hover:border-accent hover:text-accent"
+              disabledClassName="pointer-events-none opacity-30"
             >
               ‹
-            </Link>
+            </DayLink>
             <div className="min-w-[168px] text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
                 Day {activeDay.day_number} of {workDays.length}
@@ -372,13 +391,13 @@ export default async function ShowDetailPage({
               )}
             </div>
             {nextDay ? (
-              <Link prefetch={false}
-                href={`?day=${nextDay.day_number}`}
-                aria-label="Next day"
+              <DayLink
+                dayNumber={nextDay.day_number}
+                label="Next day"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-line bg-surface-2 hover:border-accent hover:text-accent"
               >
                 ›
-              </Link>
+              </DayLink>
             ) : (
               addDayControl
             )}

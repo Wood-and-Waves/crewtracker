@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import DayLink from '@/components/DayLink'
 import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
 import TimecardRow from '@/components/TimecardRow'
@@ -220,16 +221,14 @@ export default function MobileRoomTracker({
           </div>
         </div>
         <div className="flex items-center justify-center gap-4 mt-5">
-          <Link prefetch={false}
-            href={prevDayNumber ? `?day=${prevDayNumber}` : '#'}
-            aria-label="Previous day"
-            className={cn(
-              'rounded-field h-9 w-9 flex items-center justify-center shrink-0',
-              !prevDayNumber ? 'pointer-events-none bg-surface-2 text-muted opacity-30' : 'bg-accent text-accent-ink',
-            )}
+          <DayLink
+            dayNumber={prevDayNumber}
+            label="Previous day"
+            className="rounded-field h-9 w-9 flex items-center justify-center shrink-0 bg-accent text-accent-ink"
+            disabledClassName="pointer-events-none bg-surface-2 text-muted opacity-30"
           >
             ‹
-          </Link>
+          </DayLink>
           <div className="min-w-0 flex-1 text-center">
             <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {dayNumber} of {totalDays}</p>
             <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
@@ -242,13 +241,13 @@ export default function MobileRoomTracker({
             )}
           </div>
           {nextDayNumber ? (
-            <Link prefetch={false}
-              href={`?day=${nextDayNumber}`}
-              aria-label="Next day"
+            <DayLink
+              dayNumber={nextDayNumber}
+              label="Next day"
               className="rounded-field h-9 w-9 flex items-center justify-center shrink-0 bg-accent text-accent-ink"
             >
               ›
-            </Link>
+            </DayLink>
           ) : (
             addDayControl ?? (
               <span className="rounded-field h-9 w-9 flex items-center justify-center shrink-0 bg-surface-2 text-muted opacity-30">›</span>

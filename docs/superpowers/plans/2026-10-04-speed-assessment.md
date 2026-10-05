@@ -307,3 +307,27 @@ the non-prefetched routes, and Settings carries the clearest signal. Team moved 
 ~150 ms predicted, within the environment's ±30 % noise. Remaining by gain ÷ effort: B4 Edit
 Show (~11 serial hops, ~19 requests per field blur), B2 Scheduling page chain, the crew-clock
 punch route (8 waits → 3), then B3 server-side PDF.
+
+## 10. Crew punch route and the tracker's day arrows (2026-10-05)
+
+**Punch route** (`app/api/clock/punch`): 8 sequential waits → 3 (throttle ∥ link; one timecard
+read with show, rounding, date and punches embedded; the write). Measured from this machine
+against dev, five punches each: old 603–893 ms, new 205–299 ms. Reviewed (Sonnet, correctness +
+security): no critical or important findings; the embed was run against dev with the service
+role and returned cleanly. The signed-in route reads the show and the caller's directory entries
+in parallel (4 waits, was 5).
+
+**Tracker day switch** (`components/DayLink.tsx`): the hesitation was a full server render of the
+same route with a new search param — no new loading boundary, so nothing moved until it landed
+(dev: 395–513 ms warm, 1.1 s cold). Now: full `router.prefetch` of both neighbouring days once a
+day opens (two background renders, 9 KB each); the click lands with zero requests and the new day
+on screen in under 100 ms (local production build). The Link's own prefetch was tried first and
+rejected: it re-prefetched both neighbours the instant every punch's refresh landed, making a
+punch three renders racing each other (refresh 701 ms vs 477 ms alone). The effect re-prefetches
+two seconds after the refresh instead; measured: punch → write + one refresh, neighbours
+re-fetched at +2.0 s, next arrow click zero requests. The arrow dims and pulses while a cold day
+loads. Also one database wave fewer per tracker render (org/positions/rates folded into wave one)
+and, when the URL names the day, the punches wave too — four waves → two on every arrow click
+and every post-punch refresh.
+
+Not yet measured on production (Chrome was signed in as an account with no company).
