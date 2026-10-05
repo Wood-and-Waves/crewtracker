@@ -20,7 +20,7 @@ import Chip from '@/components/ui/Chip'
 import SectionHead from '@/components/ui/SectionHead'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
-import { fetchLiveTimecards, fetchShowRates, type TimecardRowMaybeRate } from '@/lib/timecardFields'
+import { fetchShowRates, liveBookings, TIMECARD_SELECT, type TimecardRowMaybeRate } from '@/lib/timecardFields'
 
 function fmt(n: number): string {
   if (n === 0) return '0'
@@ -75,26 +75,94 @@ export default async function ShowReportPage({
 
   const supabase = await createClient()
 
-  // The caller and show/ruleset/workDays are independent of each other (none
-  // depend on another's result) so fetch them in one round trip instead
-  // of four sequential ones.
+  // ONE wave. Everything below is keyed by the show id (or by the caller, which
+  // getCurrentUser() has already resolved for the layout this request), so
+  // nothing waits on anything else's result except two reads that need a row
+  // from this same wave — the company's settings (needs the caller's company)
+  // and the crew phones (need the timecards) — and those are chained INSIDE the
+  // wave rather than awaited after it. This page used to be five sequential
+  // waits; every one of them cost a database round trip for nothing.
+  //
+  // Timecards and punches are read by show_id (the denormalized column from
+  // migration 0023, indexed), not by walking days -> rooms -> timecards ->
+  // punches, which is what forced the old order.
+  //
+  // Declined bookings excluded from the timecards: they are not crew, so they
+  // belong in neither the on-screen report nor the CSV/PDF the export buttons
+  // build from these rows — and they would otherwise trip the pre-send checks
+  // as "not started". liveBookings() owns that rule; the read throws on error
+  // exactly as fetchLiveTimecards does, because a blank report beats a wrong one.
+  //
+  // Rates come from the permission-checked timecard_day_rates view, through the
+  // caller's own session, as before. The show's financials flag is not known
+  // until this wave lands, so the view is asked unconditionally and the result
+  // is DISCARDED below unless canSeeFinancials — the same gate as before decides
+  // what the page can see; only the moment of asking moved.
+  const timecardsPromise = (async () => {
+    const { data, error } = await liveBookings(
+      supabase.from('timecards').select(TIMECARD_SELECT).eq('show_id', id),
+    )
+    if (error) throw new Error(`Could not load timecards: ${error.message}`)
+    return (data ?? []) as unknown as TimecardRowMaybeRate[]
+  })()
+
   const [
     user,
     { data: show },
     { data: rulesetRow },
     { data: workDays },
+    isPm,
+    { data: organization },
+    { data: rooms },
+    { data: personalLinks },
+    rawTimecards,
+    { data: allPunches },
+    allRates,
+    { data: crewContacts },
   ] = await Promise.all([
     getCurrentUser(),
     supabase.from('shows').select('*').eq('id', id).single(),
     supabase.from('payroll_rulesets').select('*').eq('show_id', id).single(),
     supabase.from('work_days').select('*').eq('show_id', id).order('day_number'),
+    isPmOnShow(supabase, id),
+    (async () => {
+      const u = await getCurrentUser()
+      if (!u?.organizationId) return { data: null }
+      return await supabase.from('organizations')
+        .select('timecard_rounding_minutes, final_report_emails')
+        .eq('id', u.organizationId).single()
+    })(),
+    supabase.from('rooms').select('id, name, work_day_id').eq('show_id', id),
+    // Their own clock links, so the texted timesheet can carry a link to the
+    // hours page. PERSONAL links only — the venue QR identifies nobody. A
+    // revoked link is excluded rather than sent: revoked outranks everything,
+    // so it would land on the dead-link card.
+    supabase.from('clock_links')
+      .select('crew_member_id, token')
+      .eq('show_id', id)
+      .not('crew_member_id', 'is', null)
+      .is('revoked_at', null),
+    timecardsPromise,
+    // Only the columns the page, the export buttons and the calculator read.
+    supabase.from('punches').select('id, timecard_id, punch_type, punched_at, source, created_by').eq('show_id', id),
+    fetchShowRates(supabase, id),
+    // Phones for "Text Hours", keyed by crew_member_id. iOS matches the crew
+    // member by NAME STRING, which breaks on duplicate names or a renamed
+    // directory entry — the timecard carries the id, so join on that instead.
+    // Needs the timecards, so it hangs off that read inside the wave.
+    (async () => {
+      const tcs = await timecardsPromise
+      const crewIds = [...new Set(tcs.map(t => t.crew_member_id).filter(Boolean))] as string[]
+      if (crewIds.length === 0) return { data: [] as { id: string; phone: string | null }[] }
+      return await supabase.from('crew_members').select('id, phone').in('id', crewIds)
+    })(),
   ])
   if (!user) redirect('/login')
 
   if (!show) notFound()
   // Crew-side viewers have their own screen; everything else on the show
   // belongs to the PM (Section 3, 2026-09-06).
-  if (!(await isPmOnShow(supabase, id))) redirect(`/dashboard/shows/${id}`)
+  if (!isPm) redirect(`/dashboard/shows/${id}`)
 
   // Only offer the Scheduling screen to a company that has the module.
   const schedulingOn = canUseScheduling(user)
@@ -115,26 +183,6 @@ export default async function ShowReportPage({
 
   const workDayIds = (workDays || []).map(d => d.id)
 
-  // The org settings and the room list do not depend on each other: one round
-  // trip, not two. (This page was nine sequential awaits deep.)
-  const [{ data: organization }, { data: rooms }, { data: personalLinks }] = await Promise.all([
-    user.organizationId
-      ? supabase.from('organizations').select('timecard_rounding_minutes, final_report_emails').eq('id', user.organizationId).single()
-      : Promise.resolve({ data: null }),
-    workDayIds.length > 0
-      ? supabase.from('rooms').select('id, name, work_day_id').in('work_day_id', workDayIds)
-      : Promise.resolve({ data: [] }),
-    // Their own clock links, so the texted timesheet can carry a link to the
-    // hours page. PERSONAL links only — the venue QR identifies nobody. A
-    // revoked link is excluded rather than sent: revoked outranks everything,
-    // so it would land on the dead-link card.
-    supabase.from('clock_links')
-      .select('crew_member_id, token')
-      .eq('show_id', id)
-      .not('crew_member_id', 'is', null)
-      .is('revoked_at', null),
-  ])
-
   // crew_member_id -> their hours page. Built from siteOrigin, NEVER the
   // browser's origin: this text is sent, and an origin taken from the request
   // is the 2026-09-06 bug.
@@ -152,42 +200,20 @@ export default async function ShowReportPage({
   const recipientCount = (organization?.final_report_emails || '')
     .split(',').map((s: string) => s.trim()).filter(Boolean).length
 
-  const roomIds = (rooms || []).map(r => r.id)
-
-  // Declined bookings excluded: they are not crew, so they belong in neither the
-  // on-screen report nor the CSV/PDF the export buttons build from these rows —
-  // and they would otherwise trip the pre-send checks as "not started".
-  // Rates come from the permission-checked view. Additionally gated on the
-  // show's own financials flag: canSeeFinancials is the stricter test (show
-  // tracks money AND this user may see rates), and every money figure on this
-  // page is already behind it. Independent of the timecards read, so shared.
-  const [rawTimecards, rateById] = await Promise.all([
-    fetchLiveTimecards<TimecardRowMaybeRate>(supabase, roomIds),
-    canSeeFinancials ? fetchShowRates(supabase, id) : Promise.resolve(new Map<string, number>()),
-  ])
-
   // Reattach the rate here, once, so everything downstream — the payroll
   // mappings and the CSV/PDF export buttons — keeps seeing a normal timecard
-  // with a day_rate on it. Zero for anyone not entitled to the real figure.
+  // with a day_rate on it. Zero for anyone not entitled to the real figure:
+  // canSeeFinancials (show tracks money AND this user may see rates) is the
+  // stricter test and every money figure on this page is already behind it.
+  const rateById = canSeeFinancials ? allRates : new Map<string, number>()
   const timecards = rawTimecards.map(tc => ({ ...tc, day_rate: rateById.get(tc.id) ?? 0 }))
 
-  const timecardIds = (timecards || []).map(t => t.id)
+  // Punches were read by show, which includes any a declined booking carries.
+  // Keep only the live timecards' — what the old per-timecard read returned —
+  // so the export buttons and the crew-entered count see the same rows.
+  const liveTimecardIds = new Set(timecards.map(t => t.id))
+  const punches = (allPunches || []).filter(p => liveTimecardIds.has(p.timecard_id))
 
-  // Phones for "Text Hours", keyed by crew_member_id. iOS matches the crew
-  // member by NAME STRING, which breaks on duplicate names or a renamed
-  // directory entry — the timecard carries the id, so join on that instead.
-  const crewIdsOnShow = [...new Set((timecards || []).map(t => t.crew_member_id).filter(Boolean))]
-
-  // Punches and contact phones both hang off the timecard list and not off
-  // each other: one round trip.
-  const [{ data: punches }, { data: crewContacts }] = await Promise.all([
-    timecardIds.length > 0
-      ? supabase.from('punches').select('*').in('timecard_id', timecardIds)
-      : Promise.resolve({ data: [] }),
-    crewIdsOnShow.length > 0
-      ? supabase.from('crew_members').select('id, phone').in('id', crewIdsOnShow)
-      : Promise.resolve({ data: [] }),
-  ])
   const phoneById: Record<string, string | null> =
     Object.fromEntries((crewContacts || []).map(c => [c.id, c.phone]))
 
