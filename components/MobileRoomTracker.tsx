@@ -380,6 +380,7 @@ export default function MobileRoomTracker({
       {/* Controlled add-crew modal, opened by the header person+ icon */}
       {addCrewRoom && (
         <StaffRoomModal
+          showId={showId}
           locked={locked}
           open={addCrewOpen}
           onOpenChange={setAddCrewOpen}

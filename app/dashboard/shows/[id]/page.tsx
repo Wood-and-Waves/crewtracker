@@ -586,6 +586,7 @@ export default async function ShowDetailPage({
 
               <div className="pt-3">
                 <StaffRoomModal
+                  showId={show.id}
                   locked={locked}
                   organizationId={organizationId}
                   roomId={room.id}

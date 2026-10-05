@@ -19,6 +19,7 @@ const inputCls =
   'rounded-field bg-surface-2 border border-line px-3 py-2 text-sm text-ink placeholder:text-muted outline-none focus:border-accent'
 
 export default function StaffRoomModal({
+  showId,
   organizationId,
   roomId,
   roomName,
@@ -31,6 +32,7 @@ export default function StaffRoomModal({
   canEditRates = false,
   locked = false,
 }: {
+  showId: string
   organizationId: string
   roomId: string
   roomName: string
@@ -63,9 +65,6 @@ export default function StaffRoomModal({
   // an insert supplies (see scripts/sql/applied/show-wide-day-rate.sql). Loading them
   // here keeps the form from advertising a directory rate that won't be used.
   const [showRates, setShowRates] = useState<Record<string, number>>({})
-  // The show this room belongs to — read once when the modal opens, so a
-  // successful staffing insert can log a staffing_events row per person.
-  const [showId, setShowId] = useState<string | null>(null)
   const [roles, setRoles] = useState<string[]>([])
   // `other` puts the role field into free-text mode for a one-off title.
   const [selected, setSelected] = useState<Record<string, Sel>>({})
@@ -91,74 +90,69 @@ export default function StaffRoomModal({
   useEffect(() => {
     if (!open) return
     async function load() {
-      const { data: crewData } = await supabase
-        .from('crew_members')
-        .select('id, full_name')
-        .eq('organization_id', organizationId)
-        .order('full_name')
+      // One round trip: none of these depends on another's result. The show id
+      // is a prop, so it no longer has to be looked up through work_days first.
+      const [
+        { data: crewData },
+        { data: rateData },
+        { data: roleData },
+        { data: existing },
+        { data: rates },
+      ] = await Promise.all([
+        supabase
+          .from('crew_members')
+          .select('id, full_name')
+          .eq('organization_id', organizationId)
+          .order('full_name'),
+        // Ordered so the pre-filled rate is deterministic. Unordered, `.find()`
+        // returned an arbitrary card, so anyone holding a $0 placeholder rate
+        // alongside a real one could silently be staffed at $0.
+        // Via the permission-checked view, so someone without can_view_pay_rates
+        // gets no saved-rate chips rather than a list of everyone's rates.
+        supabase
+          .from('crew_rate_cards_visible')
+          .select('crew_member_id, role, day_rate')
+          .order('role'),
+        // The org's curated job titles — the same list the directory and the
+        // room's Edit Crew panel use. Staffing used to bypass it entirely with a
+        // free-text field, so "A1", "a1" and "A-1" became distinct roles and
+        // split one person into separate rows in By Crew.
+        supabase
+          .from('av_roles')
+          .select('name')
+          .eq('organization_id', organizationId)
+          .order('name'),
+        // Every rate already in use anywhere on this show. Two queries: the
+        // timecards give (crew, role) per timecard id, the view gives the rate
+        // for the ids this user is allowed to see. Joined by id rather than
+        // selecting day_rate off timecards directly, which is the access the
+        // lockdown removes.
+        supabase
+          .from('timecards')
+          .select('id, crew_member_id, role, rooms!inner(work_days!inner(show_id))')
+          .eq('rooms.work_days.show_id', showId)
+          .not('crew_member_id', 'is', null),
+        supabase
+          .from('timecard_day_rates')
+          .select('timecard_id, day_rate')
+          .eq('show_id', showId),
+      ])
+
       setCrew(crewData || [])
-
-      // Ordered so the pre-filled rate is deterministic. Unordered, `.find()`
-      // returned an arbitrary card, so anyone holding a $0 placeholder rate
-      // alongside a real one could silently be staffed at $0.
-      // Via the permission-checked view, so someone without can_view_pay_rates
-      // gets no saved-rate chips rather than a list of everyone's rates.
-      const { data: rateData } = await supabase
-        .from('crew_rate_cards_visible')
-        .select('crew_member_id, role, day_rate')
-        .order('role')
       setRateCards(rateData || [])
-
-      // The org's curated job titles — the same list the directory and the
-      // room's Edit Crew panel use. Staffing used to bypass it entirely with a
-      // free-text field, so "A1", "a1" and "A-1" became distinct roles and
-      // split one person into separate rows in By Crew.
-      const { data: roleData } = await supabase
-        .from('av_roles')
-        .select('name')
-        .eq('organization_id', organizationId)
-        .order('name')
       setRoles((roleData || []).map(r => r.name))
 
-      // Every rate already in use anywhere on this show. Reached through
-      // rooms -> work_days because timecards carry no show_id of their own.
-      const { data: dayRow } = await supabase
-        .from('work_days')
-        .select('show_id')
-        .eq('id', currentWorkDayId)
-        .single()
-
-      setShowId(dayRow?.show_id ?? null)
-
-      if (dayRow?.show_id) {
-        // Two queries: the timecards give (crew, role) per timecard id, the view
-        // gives the rate for the ids this user is allowed to see. Joined by id
-        // rather than selecting day_rate off timecards directly, which is the
-        // access the lockdown removes.
-        const [{ data: existing }, { data: rates }] = await Promise.all([
-          supabase
-            .from('timecards')
-            .select('id, crew_member_id, role, rooms!inner(work_days!inner(show_id))')
-            .eq('rooms.work_days.show_id', dayRow.show_id)
-            .not('crew_member_id', 'is', null),
-          supabase
-            .from('timecard_day_rates')
-            .select('timecard_id, day_rate')
-            .eq('show_id', dayRow.show_id),
-        ])
-
-        const rateById = new Map((rates || []).map(r => [r.timecard_id, Number(r.day_rate) || 0]))
-        const map: Record<string, number> = {}
-        for (const tc of existing || []) {
-          const rate = rateById.get(tc.id)
-          if (rate === undefined) continue
-          map[`${tc.crew_member_id}|${tc.role ?? ''}`] = rate
-        }
-        setShowRates(map)
+      const rateById = new Map((rates || []).map(r => [r.timecard_id, Number(r.day_rate) || 0]))
+      const map: Record<string, number> = {}
+      for (const tc of existing || []) {
+        const rate = rateById.get(tc.id)
+        if (rate === undefined) continue
+        map[`${tc.crew_member_id}|${tc.role ?? ''}`] = rate
       }
+      setShowRates(map)
     }
     load()
-  }, [open, organizationId, currentWorkDayId])
+  }, [open, organizationId, showId])
 
   function cardsFor(id: string) {
     return rateCards.filter(rc => rc.crew_member_id === id)
