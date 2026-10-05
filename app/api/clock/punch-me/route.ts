@@ -33,19 +33,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid time.' }, { status: 400 })
   }
 
-  // The caller's OWN session: can they see this show at all?
+  // The caller's OWN session: can they see this show at all? And their
+  // directory entries — the link 0028 made — in every company at once, so the
+  // two reads share one wait; the entry in the SHOW's company is picked once
+  // both are back.
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Please sign in.' }, { status: 401 })
-  const { data: visible } = await supabase
-    .from('shows').select('id, organization_id').eq('id', showId).maybeSingle()
-  if (!visible) return NextResponse.json({ error: 'This show is not available.' }, { status: 404 })
-
-  // Their directory entry in that company — the link 0028 made.
   const admin = createAdminClient()
-  const { data: crew } = await admin
-    .from('crew_members').select('id')
-    .eq('organization_id', visible.organization_id).eq('profile_id', user.id).maybeSingle()
+  const [{ data: visible }, { data: entries }] = await Promise.all([
+    supabase.from('shows').select('id, organization_id').eq('id', showId).maybeSingle(),
+    admin.from('crew_members').select('id, organization_id').eq('profile_id', user.id),
+  ])
+  if (!visible) return NextResponse.json({ error: 'This show is not available.' }, { status: 404 })
+  const crew = (entries ?? []).find(e => e.organization_id === visible.organization_id)
   if (!crew) return NextResponse.json({ error: "You aren't staffed on this show." }, { status: 403 })
 
   const result = await applyCrewPunch(admin, {

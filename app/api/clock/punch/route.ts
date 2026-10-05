@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { PUNCH_ORDER, type PunchType } from '@/lib/punches'
 import { applyCrewPunch } from '@/lib/clockPunch'
-import { isClockLinkExpired } from '@/lib/clockLinks'
 import { rateLimitOr, clientIp } from '@/lib/rateLimit'
 
 // A crew member recording their own punch, with no login.
@@ -57,12 +56,22 @@ export async function POST(request: NextRequest) {
   const type = punchType as PunchType
 
   const admin = createAdminClient()
-  // Throttled per link and per address, before the token is even looked up.
-  // A person punches at most six times a day and corrects a few; the address
-  // limit covers a room full of phones behind one venue wifi.
-  const stop = await rateLimitOr(admin, [
-    { key: `punch:${token}`, limit: 30, windowSeconds: 600 },
-    { key: `punch-ip:${clientIp(request)}`, limit: 300, windowSeconds: 600 },
+  // The throttle and the token lookup go out TOGETHER: one wait instead of two,
+  // on the slowest connection in the app. A refused caller still gets nothing
+  // — the limiter's answer is read first — and the extra cost of a flood is one
+  // indexed read beside the counter write it was already paying for. Per link
+  // and per address: a person punches at most six times a day and corrects a
+  // few; the address limit covers a room full of phones behind one venue wifi.
+  const [stop, { data: link }] = await Promise.all([
+    rateLimitOr(admin, [
+      { key: `punch:${token}`, limit: 30, windowSeconds: 600 },
+      { key: `punch-ip:${clientIp(request)}`, limit: 300, windowSeconds: 600 },
+    ]),
+    admin
+      .from('clock_links')
+      .select('id, show_id, crew_member_id, revoked_at')
+      .eq('token', token)
+      .maybeSingle(),
   ])
   if (stop) return stop
 
@@ -73,12 +82,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid time.' }, { status: 400 })
   }
 
-  const { data: link } = await admin
-    .from('clock_links')
-    .select('id, show_id, crew_member_id, revoked_at')
-    .eq('token', token)
-    .maybeSingle()
-
   // A venue code identifies nobody, so it can never punch. It has to be traded
   // for a personal link first.
   if (!link || !link.crew_member_id) {
@@ -87,26 +90,16 @@ export async function POST(request: NextRequest) {
   if (link.revoked_at) {
     return NextResponse.json({ error: 'This link has been turned off. Ask your PM for a new one.' }, { status: 400 })
   }
-  const { data: show } = await admin
-    .from('shows')
-    .select('id, organization_id, timezone_identifier, finalized_at, end_date')
-    .eq('id', link.show_id).maybeSingle()
-  if (!show) return NextResponse.json({ error: 'This link is not valid.' }, { status: 404 })
 
-  // Expiry comes from the SHOW, not from clock_links.expires_at, so a show
-  // that got longer does not lock its crew out — see isClockLinkExpired.
-  // Checked after the show loads, which is why it sits below the lookup.
-  if (isClockLinkExpired(show.end_date, show.timezone_identifier || 'America/Chicago')) {
-    return NextResponse.json({ error: 'This link has expired. Ask your PM for a new one.' }, { status: 400 })
-  }
-
-  // Everything from here — whose timecard, finalized, travel/absence, PM-owned
-  // punches, order, chronology, rounding, the write — is lib/clockPunch.ts,
-  // shared with the login route so the two can never disagree.
+  // Everything from here — whose timecard, the show's end (linkExpiry),
+  // finalized, travel/absence, PM-owned punches, order, chronology, rounding,
+  // the write — is lib/clockPunch.ts, shared with the login route so the two
+  // can never disagree. One read and one write: three waits for the whole
+  // route, down from eight (2026-10-05).
   const result = await applyCrewPunch(admin, {
     timecardId, type, at, clear: !!clear,
-    crewMemberId: link.crew_member_id, showId: show.id,
-    sourceLink: link.id, createdBy: null,
+    crewMemberId: link.crew_member_id, showId: link.show_id,
+    sourceLink: link.id, createdBy: null, linkExpiry: true,
   })
   return NextResponse.json(result.body, { status: result.status })
 }

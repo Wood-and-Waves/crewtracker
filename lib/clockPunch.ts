@@ -5,6 +5,7 @@ import {
 } from '@/lib/punches'
 import type { Absence } from '@/lib/payroll'
 import { zonedWallTimeToUtc, addDays } from '@/lib/datetime'
+import { isClockLinkExpired } from '@/lib/clockLinks'
 
 // Every rule of a crew member's own punch, in ONE place, used by both
 //   app/api/clock/punch     — the no-login link (token = authorization)
@@ -26,6 +27,8 @@ export type CrewPunchRequest = {
   sourceLink: string | null
   /** auth.uid() for a login, null for a link. */
   createdBy: string | null
+  /** The link route: refuse once the show is over. A login has no link to expire. */
+  linkExpiry?: boolean
 }
 
 export type CrewPunchResult = { status: number; body: Record<string, unknown> }
@@ -75,11 +78,44 @@ export function punchRefusal(
 export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchRequest): Promise<CrewPunchResult> {
   const { timecardId, type, at, clear, crewMemberId, showId } = req
 
-  const { data: show } = await admin
-    .from('shows').select('id, organization_id, timezone_identifier, finalized_at')
-    .eq('id', showId).maybeSingle()
-  if (!show) return refuse(404, 'This show is not available.')
+  // ONE read for everything the decision needs: the timecard, its show (and
+  // through it the company's rounding grid), its work day's date, and the
+  // punches already on it. Until 2026-10-05 these were four reads one after
+  // another — show, timecard, punches, organization — on the slowest
+  // connection in the app, a phone on venue wifi. The timecard is looked up by
+  // the id the caller sent, so nothing in it is trusted until the next lines
+  // have checked it is this person's card on this show.
+  const { data: card } = await admin
+    .from('timecards')
+    .select(
+      'id, crew_member_id, show_id, is_travel_day, absence, ' +
+      'shows!inner ( id, organization_id, timezone_identifier, finalized_at, end_date, organizations ( timecard_rounding_minutes ) ), ' +
+      'rooms!inner ( work_days!inner ( date ) ), ' +
+      'punches ( id, punch_type, punched_at, source )',
+    )
+    .eq('id', timecardId)
+    .maybeSingle()
+  const one = <T,>(v: T | T[] | null | undefined): T | undefined => (Array.isArray(v) ? v[0] : v ?? undefined)
+  const timecard = card as any
+  const show = one<{
+    id: string; organization_id: string; timezone_identifier: string | null; finalized_at: string | null
+    end_date: string; organizations: { timecard_rounding_minutes: number | null } | { timecard_rounding_minutes: number | null }[] | null
+  }>(timecard?.shows)
+  const workDay = one<{ date: string }>(one<{ work_days: unknown }>(timecard?.rooms)?.work_days as any)
+  // The timecard must be THIS person's and on THIS show. Its own work day
+  // supplies the date, so the caller never gets to name one.
+  if (!timecard || timecard.crew_member_id !== crewMemberId || timecard.show_id !== showId || !show || !workDay?.date) {
+    return refuse(400, "That isn't one of your shifts on this show.")
+  }
   const timeZone = show.timezone_identifier || 'America/Chicago'
+  const punchDate = workDay.date
+
+  // Expiry comes from the SHOW, not from clock_links.expires_at, so a show
+  // that got longer does not lock its crew out — see isClockLinkExpired. Only
+  // the link route asks for this; a login has no link to expire.
+  if (req.linkExpiry && isClockLinkExpired(show.end_date, timeZone)) {
+    return refuse(400, 'This link has expired. Ask your PM for a new one.')
+  }
 
   // Checked BEFORE writing. punches_blocked_when_finalized is a TRIGGER, and
   // the service role does not bypass triggers — so a punch on a closed-out show
@@ -88,25 +124,10 @@ export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchReques
     return refuse(400, 'This show has been closed out, so times can no longer be changed. Talk to your PM.')
   }
 
-  // The timecard must be THIS person's and on THIS show. Its own work day
-  // supplies the date, so the caller never gets to name one.
-  const { data: timecard } = await admin
-    .from('timecards')
-    .select('id, crew_member_id, is_travel_day, absence, rooms!inner ( work_days!inner ( date, show_id ) )')
-    .eq('id', timecardId)
-    .maybeSingle()
-  const room = Array.isArray((timecard as any)?.rooms) ? (timecard as any).rooms[0] : (timecard as any)?.rooms
-  const workDay = Array.isArray(room?.work_days) ? room.work_days[0] : room?.work_days
-  if (!timecard || timecard.crew_member_id !== crewMemberId || workDay?.show_id !== show.id || !workDay?.date) {
-    return refuse(400, "That isn't one of your shifts on this show.")
-  }
-  const punchDate = workDay.date as string
-
-  const { data: existing } = await admin
-    .from('punches').select('id, punch_type, punched_at, source').eq('timecard_id', timecardId)
-  const all: Punch[] = (existing || [])
-    .map(p => ({ id: p.id, punch_type: p.punch_type as PunchType, punched_at: p.punched_at }))
-  const mine = (existing || []).find(p => p.punch_type === type)
+  const existing: { id: string; punch_type: PunchType; punched_at: string; source: 'staff' | 'crew' }[] = timecard.punches ?? []
+  const all: Punch[] = existing
+    .map(p => ({ id: p.id, punch_type: p.punch_type, punched_at: p.punched_at }))
+  const mine = existing.find(p => p.punch_type === type)
 
   // ---- Clearing a punch the crew member entered themselves ----------------
   if (clear) {
@@ -132,9 +153,7 @@ export async function applyCrewPunch(admin: SupabaseClient, req: CrewPunchReques
   // on the work day the server already resolved. No `at` means now. Snapped to
   // the company's grid server-side: `step` on a time input is a hint browsers
   // let you type past, and this is the value that gets paid.
-  const { data: org } = await admin
-    .from('organizations').select('timecard_rounding_minutes').eq('id', show.organization_id).maybeSingle()
-  const roundingMinutes = org?.timecard_rounding_minutes ?? 1
+  const roundingMinutes = one(show.organizations)?.timecard_rounding_minutes ?? 1
   const wall = at ?? new Intl.DateTimeFormat('en-GB', {
     timeZone, hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date())
