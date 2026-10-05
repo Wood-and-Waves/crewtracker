@@ -24,9 +24,22 @@ export const PUNCH_LABELS: Record<PunchType, string> = {
  * Dan, 2026-09-20, after a show: "M1 and M2 have shown a little confusion."
  * They are shorthand a PM learns on their first day; a crew member meets them
  * once, on a phone, and has to guess. The tracker keeps the abbreviations
- * because its desktop grid is eight equal columns and "Meal 1 Out" does not
+ * because its desktop grid is eight equal columns and "Meal 1 Start" does not
  * fit in one of them (see lib/trackerLayout.ts) — the crew screen is three
  * chunky cells serving one person, and has the room.
+ *
+ * START AND END, NOT OUT AND IN (Dan, 2026-10-04: "People are still confused by
+ * meal 1 in and out"). Spelling the meals out fixed M1/M2 and left the harder
+ * half untouched: `meal_out` is the punch that BEGINS the break, so "Out" named
+ * the start of a meal and "In" named its end. A crew member reading it on a
+ * phone has to work out that out means the break starting and in means being
+ * back — and half of them get it backwards. Start and End say which end of the
+ * break it is without anybody having to reason about it.
+ *
+ * The column names do not move: `meal_out` still means the break began. The
+ * database is the PM's vocabulary and renaming a column value is a migration
+ * for no visible gain — the same call `booking_status = 'pencilled'` already
+ * got.
  *
  * Kept as a second map rather than a rename so the two audiences can differ
  * without either one guessing: a new punch type added to PUNCH_ORDER must be
@@ -34,12 +47,12 @@ export const PUNCH_LABELS: Record<PunchType, string> = {
  */
 export const CREW_PUNCH_LABELS: Record<PunchType, string> = {
   start: 'Start',
-  meal_out: 'Meal 1 Out',
-  meal_in: 'Meal 1 In',
-  meal2_out: 'Meal 2 Out',
-  meal2_in: 'Meal 2 In',
-  meal3_out: 'Meal 3 Out',
-  meal3_in: 'Meal 3 In',
+  meal_out: 'Meal 1 Start',
+  meal_in: 'Meal 1 End',
+  meal2_out: 'Meal 2 Start',
+  meal2_in: 'Meal 2 End',
+  meal3_out: 'Meal 3 Start',
+  meal3_in: 'Meal 3 End',
   end: 'Wrap',
 }
 

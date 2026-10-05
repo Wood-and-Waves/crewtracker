@@ -263,8 +263,13 @@ console.log('\n=== the crew read Meal 1, the PM reads M1 ===')
 // grid is eight equal columns and the long form does not fit one. Both maps
 // are pinned so neither drifts into the other's surface.
 {
-  check('the crew screen spells the first meal out', CREW_PUNCH_LABELS.meal_out, 'Meal 1 Out')
-  check('and the second', CREW_PUNCH_LABELS.meal2_in, 'Meal 2 In')
+  // START AND END, not out and in (Dan, 2026-10-04). `meal_out` is the punch
+  // that BEGINS the break, so "Out" named a meal starting — which is the half
+  // of this that spelling M1 out never fixed.
+  check('the crew screen says the first meal STARTS', CREW_PUNCH_LABELS.meal_out, 'Meal 1 Start')
+  check('and that the second ENDS', CREW_PUNCH_LABELS.meal2_in, 'Meal 2 End')
+  check('nothing a crew member reads says out or in',
+    /\b(Out|In)\b/.test(Object.values(CREW_PUNCH_LABELS).join(' ')), false)
   check('Start and Wrap are the same words either way',
     [CREW_PUNCH_LABELS.start, CREW_PUNCH_LABELS.end], [PUNCH_LABELS.start, PUNCH_LABELS.end])
   check('the tracker keeps the shorthand', PUNCH_LABELS.meal_out, 'M1 Out')
@@ -274,16 +279,16 @@ console.log('\n=== the crew read Meal 1, the PM reads M1 ===')
   const started: Punch[] = [{ id: 'a', punch_type: 'start', punched_at: '2026-09-01T13:00:00Z' }]
   check('the refusal names the punch the way the cell does',
     punchRefusal(started, false, null, 'meal_in', undefined),
-    'Your Meal 1 Out isn\u2019t recorded yet. Ask your PM if that\u2019s not right.')
+    'Your Meal 1 Start isn\u2019t recorded yet. Ask your PM if that\u2019s not right.')
   check('so does a chronology refusal',
     getChronologyError(new Date('2026-09-01T12:00:00Z'), 'meal_out', started, CREW_PUNCH_LABELS),
-    'Meal 1 Out must be after Start.')
+    'Meal 1 Start must be after Start.')
   check('and a blocked clear',
     clearBlockedReason(
       [...started, { id: 'b', punch_type: 'meal_out', punched_at: '2026-09-01T18:00:00Z' },
        { id: 'c', punch_type: 'meal_in', punched_at: '2026-09-01T19:00:00Z' }],
       'meal_out', CREW_PUNCH_LABELS),
-    'Clear Meal 1 In first \u2014 it needs Meal 1 Out.')
+    'Clear Meal 1 End first \u2014 it needs Meal 1 Start.')
   // The default is still the PM's, so nothing on the tracker moved.
   check('the tracker still reads M1', getChronologyError(new Date('2026-09-01T12:00:00Z'), 'meal_out', started),
     'M1 Out must be after Start.')
