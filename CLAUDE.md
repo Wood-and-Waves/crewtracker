@@ -814,6 +814,36 @@ Permission columns: `can_manage_users`, `can_manage_billing` (hidden), `can_mana
   **Design it with the per-person schedule grid and the PM-with-nowhere-to-stand items** — all
   three are "which days is this person actually on, and in what capacity", and solving them
   separately would produce three ways to say the same thing.
+- **CREW AVAILABILITY — "blockout dates", the Planning Center idea** (Dan, 2026-10-06: *"There
+  may need to be a function that allows the scheduler and others to make days where people are
+  not available. Or maybe even a mechanism to allow for people to email in their times they are
+  not available… like a function I see in Planning Center online."*). Not designed; a backlog
+  note so the thinking is not lost.
+  **What exists today**: the fill picker warns when somebody is already BOOKED on another show in
+  this company (`lib/bookingConflicts.ts`). It knows nothing about a person being on holiday, on
+  a job for another company, or simply off that week — the scheduler finds out by asking, after
+  booking them.
+  **The shape that fits this app**: a per-person list of dates they are not available, in the
+  directory — `crew_unavailability` (crew_member_id, organization_id, start_date, end_date, a
+  short note, who entered it and when) — read by the SAME conflict check the picker already runs,
+  so a candidate reads "Away Tue 6 – Thu 8" beside "Booked on Harbour Point Gala". Shown, never
+  hidden: a scheduler may still want to ask, and a person who vanishes from the list is how a
+  gap goes unexplained. This is also the answer the rejected crew chart was looking for
+  (2026-09-08) — availability shows where the booking decision is made, not on a sheet of
+  everybody.
+  **Two ways in, and the second is the one worth getting right.** (1) A scheduler types it from
+  a phone call — Edit Crew, a dates picker, two minutes to build once the table exists. (2) The
+  crew member says so themselves. "Email in" means parsing free text, which is how "I'm out the
+  first week of Oct" becomes the wrong week; the honest version of the same wish is a PERSONAL
+  LINK (the `clock_links` pattern — a token, no login) to a page where they tap dates, and the
+  invitation to use it rides on emails they already get: a line at the foot of every booking
+  request and change notice. A crew-side LOGIN (Section 3) edits the same rows signed in.
+  **The trap**: the cross-company rule. One human working for two companies has two directory
+  entries, and availability entered at A must not surface at B — so the rows are per
+  organization, and a person with two companies tells each one separately. That is clumsy for
+  them and correct for the companies; if it is ever relaxed it is a decision, not a shortcut.
+  Design it in the same session as the per-person schedule grid and the "which days is this
+  person on" items above — all of them are the directory learning what a person's calendar is.
 - **The Scheduling screen on a phone.** Desktop-first by design (it is a grid, and Dan's
   scheduling happens at a desk). It scrolls sideways below 1024px rather than restructuring.
   Revisit only if Dan wants to schedule from an iPhone; the shape would be one room-day at a
