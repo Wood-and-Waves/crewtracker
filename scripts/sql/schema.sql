@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict boTS01oH7A7X6uzdcHrJoLArUrt2frz5QCbLOZuwn6Q1Q1EhK1Nz971EMXZGv3t
+\restrict ebprdCvMsvad3yuEUiZcr2DE5IHyUy0NSho94cA801hb9RinkFB0eAayy8W0E7X
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
@@ -1107,6 +1107,27 @@ begin
     perform refresh_show_crew_access(new.show_id, v_new);
   end if;
   return null;
+end; $$;
+
+
+--
+-- Name: timecards_drop_detached_slot(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION "public"."timecards_drop_detached_slot"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if old.call_position_id is null then return old; end if;
+  delete from crew_call_positions p
+  where p.id = old.call_position_id
+    and p.position_def_id is null
+    and not exists (
+      select 1 from timecards t
+      where t.call_position_id = p.id and t.id <> old.id
+        and t.booking_status is distinct from 'declined');
+  return old;
 end; $$;
 
 
@@ -2537,6 +2558,13 @@ CREATE TRIGGER "timecards_check_pay_rate_permission" BEFORE INSERT OR UPDATE ON 
 --
 
 CREATE TRIGGER "timecards_crew_access" AFTER INSERT OR DELETE OR UPDATE OF "crew_member_id", "booking_status", "show_id" ON "public"."timecards" FOR EACH ROW EXECUTE FUNCTION "public"."timecards_crew_access_tg"();
+
+
+--
+-- Name: timecards timecards_drop_detached_slot; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER "timecards_drop_detached_slot" AFTER DELETE ON "public"."timecards" FOR EACH ROW EXECUTE FUNCTION "public"."timecards_drop_detached_slot"();
 
 
 --
@@ -4100,6 +4128,15 @@ GRANT ALL ON FUNCTION "public"."timecards_crew_access_tg"() TO "service_role";
 
 
 --
+-- Name: FUNCTION "timecards_drop_detached_slot"(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION "public"."timecards_drop_detached_slot"() TO "anon";
+GRANT ALL ON FUNCTION "public"."timecards_drop_detached_slot"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."timecards_drop_detached_slot"() TO "service_role";
+
+
+--
 -- Name: FUNCTION "work_days_mirror_day_type"(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -4592,5 +4629,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin" IN SCHEMA "public" GRANT ALL 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict boTS01oH7A7X6uzdcHrJoLArUrt2frz5QCbLOZuwn6Q1Q1EhK1Nz971EMXZGv3t
+\unrestrict ebprdCvMsvad3yuEUiZcr2DE5IHyUy0NSho94cA801hb9RinkFB0eAayy8W0E7X
 

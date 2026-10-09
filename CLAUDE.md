@@ -505,6 +505,10 @@ scripts/
                        ring, shown as tappable Call and Text on the crew clock.
                        `shows` is TABLE-granted so the columns inherit their
                        grants — no column grant, unlike timecards. No rows.
+                       · 0045 a DETACHED slot (position_def_id null) leaves with its
+                       person: AFTER DELETE on timecards drops the slot once nobody live
+                       is left on it. WRITES EXISTING ROWS (deletes every open detached
+                       slot — 5 on production, all TxDOT; 218 seed-era ones on dev).
                        · 0037 sync_position_slots() makes a slot's role follow its definition;
                        deleting a definition drops its UNFILLED slots first (BEFORE DELETE
                        trigger — the FK's set-null used to orphan them as "legacy" slots the
@@ -2191,7 +2195,18 @@ like everything else.
 
 ## Shipping migrations to production — the procedure (first run: the 2026-08-06 cutover, DONE)
 
-**Latest run: 2026-10-01, 0042 + 0043 + 0044 (Show Confirmed).** Backup
+**Latest run: 2026-10-09, 0045 (detached slot leaves with its person).** Dan, on TxDOT
+Breakouts: a Production Manager position on the Scheduling screen that neither Edit Show nor
+the tracker showed and nothing could delete. He had added the definition, booked himself,
+deleted the definition (0037 keeps a FILLED slot and detaches it — right), then removed
+himself — leaving five open slots with no definition and no screen that lists them. Backup
+(`backups/crewtracker-2026-10-09T15-44-14.sql`) → `db:migrate --prod` → `db:grants` (no
+diff: no table or grant changed) → `db:schema` → commit → `main`. Verified read-only either
+side: 14 shows, 568 timecards, 1048 punches, 58 definitions unchanged; slots 351 → 346, the
+five TxDOT orphans and nothing else; the trigger present. No app code changed, so the deploy
+carried only the migration and the regenerated schema.
+
+**Previous run: 2026-10-01, 0042 + 0043 + 0044 (Show Confirmed).** Backup
 (`backups/crewtracker-2026-10-02T01-54-32.sql`, 594 KB) → `db:migrate --prod` →
 `db:grants` (header-only diff again, which is the proof `shows` is table-granted
 and its three new columns needed none) → `db:schema` → commit both → merge
