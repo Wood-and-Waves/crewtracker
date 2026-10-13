@@ -2289,6 +2289,25 @@ act that ships to customers, and any pending migrations go through the steps abo
 
 ## Past incidents worth remembering
 
+- **EVERY `router.refresh()` PAINTED ONE WRITE BEHIND for nine days, and the fix is one
+  component** (2026-10-04 → 10-13; `components/RefreshNudge.tsx`). Dan, on TxDOT: *"I clocked
+  the time here and the accrued hours stayed at 0. If I click travel in, the hours populate."*
+  Reproduced on a local production build: the refresh after a save went out and came back
+  (9 KB, fresh data) but nothing on screen changed — not the row's hours, not the day's
+  server-rendered totals — until the NEXT click of any kind, when it all painted at once with
+  zero network. Opening the account menu was enough. Bisected by rebuilding: it commits on its
+  own with no `loading.tsx` above the page and stalls with one at any level (the per-screen
+  skeletons went live 2026-10-04, which dates it). Not the dialog unmounting before its
+  refresh, not deferring the refresh a tick, not `useLinkStatus`, not the arrow prefetch —
+  each was tried and ruled out. The mechanism is in Next 16.2's `layout-router.js`: with a
+  loading boundary a segment carries a `prefetchRsc`, and every change of its content — a
+  refresh included — renders through `useDeferredValue(cacheNode.rsc, prefetchRsc)`, old
+  content first and the new in a deferred re-render that was never flushed by itself. Any
+  state update anywhere re-kicks the scheduler, so `RefreshNudge` (mounted once in
+  `app/layout.tsx`, renders nothing) ticks its own state 50/400/1500 ms after every `_rsc=`
+  response. 83 call sites of `router.refresh()` were affected and none needed changing. The
+  file says how to retire it after a Next upgrade. Found because the TimeEntryModal path was
+  the one Dan watched; the same lag was on every chip, flag and Edit Show save.
 - **A punch paints at write acknowledgement, not after the page re-renders — "paint first,
   reconcile second".** Until 2026-09-06 every punch save ran `router.refresh()` and the row only
   changed once the entire tracker had re-rendered (~20 round trips), which is what "punches are

@@ -145,9 +145,13 @@ export default function TimeEntryModal({
     // modal closes at once; the page re-render that keeps the day totals and
     // the batch bar honest still happens, but no longer stands between the tap
     // and the time appearing. This is the "punches are the worst" fix.
+    //
+    // The row issues that refresh, not this dialog (2026-10-13): the row owns
+    // the local paint, so it owns the reconcile that follows it. The hours
+    // that stayed at 0.00 after a wrap (Dan, TxDOT) were NOT this dialog's
+    // fault — see components/RefreshNudge.tsx for the real cause.
     onSaved?.({ id: row.id, punch_type: row.punch_type, punched_at: row.punched_at, source: row.source })
     onClose()
-    router.refresh()
   }
 
   async function clearPunch() {
@@ -170,7 +174,6 @@ export default function TimeEntryModal({
 
     onCleared?.(type)
     onClose()
-    router.refresh()
   }
 
   return (

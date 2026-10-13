@@ -469,9 +469,17 @@ export default function TimecardRow({
           authorId={authorId}
           roundingMinutes={roundingMinutes}
           onClose={() => setEditingType(null)}
-          onSaved={saved => setPunches(prev => [...prev.filter(p => p.punch_type !== saved.punch_type), saved]
-            .sort((a, b) => a.punched_at.localeCompare(b.punched_at)))}
-          onCleared={type => setPunches(prev => prev.filter(p => p.punch_type !== type))}
+          // The row refreshes the page, not the dialog: the row owns the local
+          // paint, so it owns the reconcile that follows it.
+          onSaved={saved => {
+            setPunches(prev => [...prev.filter(p => p.punch_type !== saved.punch_type), saved]
+              .sort((a, b) => a.punched_at.localeCompare(b.punched_at)))
+            router.refresh()
+          }}
+          onCleared={type => {
+            setPunches(prev => prev.filter(p => p.punch_type !== type))
+            router.refresh()
+          }}
         />
       )}
     </div>

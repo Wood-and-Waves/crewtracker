@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Oswald } from "next/font/google";
 import "./globals.css";
 import ThemeScript from "@/components/ThemeScript";
+import RefreshNudge from "@/components/RefreshNudge";
 
 // Showbill's display face: an industrial condensed gothic for mastheads,
 // headings and small-caps labels. next/font downloads it at build time and
@@ -67,7 +68,10 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <ThemeScript />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <RefreshNudge />
+      </body>
     </html>
   );
 }
