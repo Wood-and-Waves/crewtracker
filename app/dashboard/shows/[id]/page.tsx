@@ -5,6 +5,7 @@ import { redirect, notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
 import DayLink from '@/components/DayLink'
+import DayPicker from '@/components/DayPicker'
 import LayoutCookie from '@/components/LayoutCookie'
 import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
@@ -256,6 +257,10 @@ export default async function ShowDetailPage({
 
   const prevDay = workDays[activeIndex - 1]
   const nextDay = workDays[activeIndex + 1]
+  // The day list behind the date, on both trees (components/DayPicker.tsx).
+  const pickerDays = workDays.map(d => ({
+    dayNumber: d.day_number, date: d.date as string, activities: d.activities ?? null, href: `?day=${d.day_number}`,
+  }))
 
   // "Copy Crew from Day N" — for each room today, the same-named room on the
   // previous day and how many crew it holds. Offered only when this room is
@@ -378,7 +383,12 @@ export default async function ShowDetailPage({
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
                 Day {activeDay.day_number} of {workDays.length}
               </p>
-              <p className="text-base font-bold tabular-nums text-ink">{dateLabel}</p>
+              <DayPicker
+                days={pickerDays}
+                current={activeDay.day_number}
+                label={dateLabel}
+                className="text-base font-bold tabular-nums text-ink"
+              />
               {/* Read-only. The picker moved to Edit Show — on the tracker a
                   dropdown under the date read as a question the operator had to
                   answer before punching anybody in. Nothing shows when no type
@@ -636,6 +646,7 @@ export default async function ShowDetailPage({
         workDayId={activeDay.id}
         dayActivities={activeDay.activities ?? []}
         dateLabel={dateLabel}
+        days={pickerDays}
         prevDayNumber={prevDay?.day_number ?? null}
         nextDayNumber={nextDay?.day_number ?? null}
         rooms={roomsList.map(r => ({ id: r.id, name: r.name }))}

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import DayLink from '@/components/DayLink'
+import DayPicker, { type PickerDay } from '@/components/DayPicker'
 import AddRoomModal from '@/components/AddRoomModal'
 import StaffRoomModal from '@/components/StaffRoomModal'
 import TimecardRow from '@/components/TimecardRow'
@@ -33,6 +34,7 @@ export default function MobileRoomTracker({
   workDayId,
   dayActivities,
   dateLabel,
+  days,
   prevDayNumber,
   nextDayNumber,
   rooms,
@@ -70,6 +72,8 @@ export default function MobileRoomTracker({
   workDayId: string
   dayActivities: string[]
   dateLabel: string
+  /** Every day of the show, for the list behind the date. */
+  days: PickerDay[]
   prevDayNumber: number | null
   nextDayNumber: number | null
   rooms: Room[]
@@ -231,7 +235,7 @@ export default function MobileRoomTracker({
           </DayLink>
           <div className="min-w-0 flex-1 text-center">
             <p className="text-xs uppercase tracking-wide text-muted font-semibold">Day {dayNumber} of {totalDays}</p>
-            <p className="text-lg font-bold text-ink tabular-nums">{dateLabel}</p>
+            <DayPicker days={days} current={dayNumber} label={dateLabel} className="text-lg font-bold text-ink tabular-nums" />
             {/* Read-only: the picker lives on Edit Show now. */}
             {dayLabel(dayActivities) && (
               <p className="mt-1 flex items-center justify-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-muted">

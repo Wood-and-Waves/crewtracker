@@ -241,6 +241,16 @@ positions check and the rates no longer wait for the caller, and when the URL na
 (every arrow click, every post-punch refresh) the punches are found by day NUMBER through
 `timecards → rooms → work_days` and go out in wave one as well.
 
+**THE DATE IS A CONTROL TOO: tap it and the show's days drop under it** (`components/DayPicker.tsx`,
+2026-10-15; Dan: "a clean way to have a date picker here. This way, I don't have to click through
+all the days to get to the beginning or the end"). A paper-slip list, one row per day — day number,
+date, the day's tint square — the current day marked, rows are links to `?day=N`, portalled through
+`AnchoredPanel`. **A list, not a calendar**: a show has 2–20 days and a calendar offers thirty of
+which four are real. **No activity words on the rows**: "Show · Load-out · Travel" crowded the date
+in the mockup (Dan: "the activities is too long sometimes"); the square is the same tint the header
+wears and the words ride on the row's title. The arrows stay, centred on the cluster as before. Both
+trees; the crew screens' arrows (`?d=`) do not have it yet.
+
 **The tracker renders ONE of its two trees, chosen by a cookie (2026-09-06).** The desktop grid
 and `MobileRoomTracker` are separate trees, and until then the server rendered both on every
 request and hid one with CSS — `display:none` hides paint, not work, and two-thirds of a tracker
@@ -327,6 +337,8 @@ components/
   BatchPunchBar.tsx / BatchTimeModal.tsx — room-level batch punch actions and batch time entry
   MobileRoomTracker.tsx          — the <1024px tracker layout
   LayoutCookie.tsx               — tells the server which tracker tree (desktop/mobile) to render, so it sends ONE
+  DayLink.tsx / DayPicker.tsx    — the tracker's day arrows (prefetch the neighbours, pulse while loading) and the
+                                  list behind the date (a row per day, tint square, no activity words), both trees
   DayActivitiesGrid.tsx          — one row per day, five toggles, the derived label; New Show holds it in state, Edit Show saves each toggle
   CrewDirectoryClient.tsx / EditCrewMemberClient.tsx — Directory goes to a real data table on desktop
   TeamListClient.tsx / EditMemberClient.tsx / PermissionsEditor.tsx / InviteTeammateModal.tsx — org member admin
