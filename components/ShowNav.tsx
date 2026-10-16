@@ -18,10 +18,25 @@ import { cn } from '@/lib/cn'
 // THE CURRENT SCREEN IS NOT A LINK. A link to the page you are already on is
 // noise, and it is the one item that has to be readable as "you are here".
 //
-// Not on the tracker itself: its desktop header already carries this cluster
-// beside Add Room, and its phone layout carries the same places as icons in a
-// deliberately compact strip. Show day is not the screen to redesign for the
-// sake of symmetry.
+// ON ALL FOUR, THE TRACKER INCLUDED (2026-10-15). It was left off the tracker
+// at first — the desktop header already carried the same places as ghost
+// buttons beside Add Room, and the phone header as icons — and that turned
+// out to be the problem rather than a saving: the menu sat ABOVE the title on
+// three screens and BELOW it, in a different shape with different words, on the
+// fourth (Dan: "The menu moves between Tracker, Scheduling and Edit show and
+// reports. It's a bit confusing"). Now it is the first line of every show
+// screen, in the same place, and the screen you are on is the one underlined.
+//
+// prefetch={false} on every link: the tracker measured 23 background renders
+// per load from Link prefetches (2026-10-04), and a prefetch carries nothing
+// for a dynamic route anyway. Harmless on the other three screens.
+//
+// ON A PHONE THE WAY OUT TAKES ITS OWN ROW. Measured at 375px: the four tabs
+// are 277px with their gaps and fit the 327px row; the back link and divider
+// are what pushed the line to 361px, which wrapped REPORTS alone onto a second
+// line. So below `sm` the back link spans the row and the divider is hidden —
+// still two lines, but the break is the same on every phone and every screen
+// rather than wherever the width happened to fall.
 
 export type ShowScreen = 'tracker' | 'schedule' | 'edit' | 'reports'
 
@@ -45,16 +60,16 @@ export default function ShowNav({
   const label = 'font-display text-[12px] font-semibold uppercase tracking-[0.1em]'
 
   return (
-    <nav aria-label="This show" className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <Link href="/dashboard" className="text-sm text-muted hover:text-ink">← Shows</Link>
-      <span aria-hidden className="h-3.5 w-px bg-line" />
+    <nav aria-label="This show" className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
+      <Link prefetch={false} href="/dashboard" className="basis-full text-sm text-muted hover:text-ink sm:basis-auto">← Shows</Link>
+      <span aria-hidden className="hidden h-3.5 w-px bg-line sm:block" />
       {items.map(item =>
         item.key === current ? (
           <span key={item.key} aria-current="page" className={cn(label, 'border-b-2 border-ink pb-0.5 text-ink')}>
             {item.label}
           </span>
         ) : (
-          <Link key={item.key} href={item.href} className={cn(label, 'border-b-2 border-transparent pb-0.5 text-muted hover:text-ink')}>
+          <Link key={item.key} prefetch={false} href={item.href} className={cn(label, 'border-b-2 border-transparent pb-0.5 text-muted hover:text-ink')}>
             {item.label}
           </Link>
         ),

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import ShowNav from '@/components/ShowNav'
 import DayLink from '@/components/DayLink'
 import DayPicker, { type PickerDay } from '@/components/DayPicker'
 import AddRoomModal from '@/components/AddRoomModal'
@@ -27,8 +27,6 @@ export default function MobileRoomTracker({
   showId,
   showName,
   showMeta,
-  editHref,
-  reportHref,
   dayNumber,
   totalDays,
   workDayId,
@@ -65,8 +63,6 @@ export default function MobileRoomTracker({
   showId: string
   showName: string
   showMeta?: string
-  editHref: string
-  reportHref: string
   dayNumber: number
   totalDays: number
   workDayId: string
@@ -177,39 +173,18 @@ export default function MobileRoomTracker({
 
   return (
     <div className={className}>
-      {/* Compact header: show info, iOS-style action icons, day nav */}
+      {/* Compact header: the show nav, the title, the add-crew icon, day nav.
+          Edit Show and Reports used to be two icons beside the title (and
+          Scheduling was not here at all); they are on ShowNav now, the same
+          first line every show screen has (2026-10-15). */}
       <div className="mb-6">
-        {/* prefetch={false} on every link here: measured 23 background renders per tracker load, and prefetch carries nothing for a dynamic route. */}
-        <Link prefetch={false} href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+        <ShowNav showId={showId} current="tracker" schedulingOn={schedulingEnabled} />
         <div className="flex items-start justify-between gap-3 mt-2">
           <div className="min-w-0">
             <h1 className="truncate font-display text-xl font-bold uppercase tracking-wide">{showName}</h1>
             {showMeta && <p className="text-sm text-muted truncate">{showMeta}</p>}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Link prefetch={false}
-              href={editHref}
-              aria-label="Show info"
-              className="flex h-9 w-9 items-center justify-center rounded-field bg-surface border border-line text-ink hover:border-accent hover:text-accent"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9" />
-                <line x1="12" y1="11" x2="12" y2="16" />
-                <line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-            </Link>
-            <Link prefetch={false}
-              href={reportHref}
-              aria-label="View report"
-              className="flex h-9 w-9 items-center justify-center rounded-field bg-surface border border-line text-ink hover:border-accent hover:text-accent"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-                <path d="M12 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v3" />
-                <circle cx="16.5" cy="17.5" r="2.5" />
-                <path d="M18.5 19.5 21 22" />
-              </svg>
-            </Link>
             <button
               onClick={onAddCrewTap}
               disabled={rooms.length === 0}

@@ -361,7 +361,7 @@ components/
   CrewHoursList.tsx              — a crew member's own days and hours, the second view on both crew screens (?v=hours)
   CrewNoticesBar.tsx             — the standing version of the same thing on the Scheduling screen: whose days changed and nobody told them, with Tell them / Already told them
   SendFinalReportButton.tsx / UnlockShowButton.tsx — end-of-show sign-off and the admin unlock
-  ShowNav.tsx                    — the four screens of a show (tracker / Scheduling / Edit Show / Reports) on every one of them, current marked; replaces the old "← Back to …" line. NOT on the tracker, which already has the cluster
+  ShowNav.tsx                    — the four screens of a show (tracker / Scheduling / Edit Show / Reports), the FIRST LINE of every one of them including the tracker, current marked; replaces the old "← Back to …" line
   GoogleSignIn.tsx               — Google's own account chooser, opened OVER /login so nobody is redirected to the Supabase address. Falls back to the redirect button without NEXT_PUBLIC_GOOGLE_CLIENT_ID or if Google cannot be reached
   OnsiteContact.tsx              — who the crew ring, on their own clock screen: name, number, and
                                   real `tel:`/`sms:` targets. Plain links, no JS, so they work before hydration
@@ -1927,9 +1927,17 @@ the same thing twice — and keeps a "← Shows" out to the list. The current sc
 marked span, not a link. **The Scheduling item is gated on the module** (`canUseScheduling`, or
 on Edit Show the presence of its `scheduling` prop, which is omitted when the module is off);
 everything else is safe to offer because all three screens already refuse anyone who is not
-PM-side. **The tracker deliberately does NOT use it**: its desktop header already carries the
-same cluster beside Add Room, and its phone layout carries those places as icons in a compact
-strip — show day is not the screen to redesign for symmetry.
+PM-side. **The tracker uses it too, since 2026-10-15.** It did not at first: its desktop header
+already carried the same places as ghost buttons beside Add Room, and its phone header as two
+icons, and show day was judged not the screen to redesign for symmetry. Dan found the opposite
+(*"The menu moves between Tracker, Scheduling and Edit show and reports. It's a bit
+confusing"*): the menu sat ABOVE the title on three screens and BELOW it, in a different shape
+with different words ("View Report"), on the fourth — and the phone tracker had no Scheduling
+link at all. Now it is the first line of all four, in one place; "+ Add Room" stands alone on
+the tracker's strip and the add-crew icon alone beside the phone title. Its links are
+`prefetch={false}` for the tracker's sake (the 23-render storm), and **on a phone "← Shows"
+takes its own row** — measured at 375px, the four tabs fit the row and the back link is what
+wrapped REPORTS onto a second line by itself.
 
 **THE DEFINITIONS EDITOR PAINTS FIRST AND SAVES A BEAT LATER** (2026-09-17), the same rule as a
 punch on the tracker. Every tap used to be its own write plus a `router.refresh()`, and a custom

@@ -3,8 +3,8 @@ import { getCurrentUser, canUseScheduling, isPmOnShow } from '@/lib/session'
 import CrewShowScreen from '@/components/CrewShowScreen'
 import { redirect, notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
-import Link from 'next/link'
 import DayLink from '@/components/DayLink'
+import ShowNav from '@/components/ShowNav'
 import DayPicker from '@/components/DayPicker'
 import LayoutCookie from '@/components/LayoutCookie'
 import AddRoomModal from '@/components/AddRoomModal'
@@ -21,7 +21,6 @@ import { straightTimeHours, overtimeHours, doubleTimeHours } from '@/lib/payroll
 import { punchGridCols, LAYOUT_COOKIE } from '@/lib/trackerLayout'
 import { dayActivitiesBgClass, dayLabel } from '@/lib/dayActivities'
 import { liveBookings, fetchShowRates, TIMECARD_SELECT, type TimecardRowMaybeRate } from '@/lib/timecardFields'
-import Button from '@/components/ui/Button'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
 import { cn } from '@/lib/cn'
 
@@ -144,7 +143,7 @@ export default async function ShowDetailPage({
   if (!workDays || workDays.length === 0) {
     return (
       <div className="p-6 md:p-10">
-        <Link prefetch={false} href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+        <ShowNav showId={id} current="tracker" schedulingOn={schedulingOn} />
         <h1 className="text-2xl font-bold mt-4">{show.name}</h1>
         <p className="text-muted mt-2">No days generated for this show yet.</p>
       </div>
@@ -361,8 +360,11 @@ export default async function ShowDetailPage({
           page. The mobile header lives inside MobileRoomTracker so its add-crew
           icon can target the currently selected room. */}
       <header className="hidden lg:block">
-        {/* prefetch={false} on every link here: measured 23 background renders per tracker load, and prefetch carries nothing for a dynamic route. */}
-        <Link prefetch={false} href="/dashboard" className="text-sm text-muted hover:text-ink">← Back to Shows</Link>
+        {/* The same first line as Scheduling, Edit Show and Reports — the
+            menu used to sit BELOW the title here as ghost buttons on the stats
+            strip, and above it everywhere else. prefetch={false} on every link
+            in this header: measured 23 background renders per tracker load. */}
+        <ShowNav showId={id} current="tracker" schedulingOn={schedulingOn} />
 
         <div className="mt-2 flex items-start justify-between gap-6">
           <div className="min-w-0">
@@ -462,20 +464,9 @@ export default async function ShowDetailPage({
               currentWorkDayId={activeDay.id}
               remainingWorkDayIds={remainingWorkDayIds}
             />
-            {/* Scheduling lives on its own screen (2026-09-07): positions,
-                filling and answers are a desk job, weeks earlier, and the
-                tracker is show day. */}
-            {schedulingOn && (
-              <Link prefetch={false} href={`/dashboard/shows/${id}/schedule`}>
-                <Button variant="ghost" size="sm">Scheduling</Button>
-              </Link>
-            )}
-            <Link prefetch={false} href={`/dashboard/shows/${id}/edit`}>
-              <Button variant="ghost" size="sm">Edit Show</Button>
-            </Link>
-            <Link prefetch={false} href={`/dashboard/shows/${id}/reports`}>
-              <Button variant="ghost" size="sm">View Report</Button>
-            </Link>
+            {/* Scheduling, Edit Show and Reports used to sit here too; they
+                moved up to ShowNav (2026-10-15) so the menu is in one place on
+                all four show screens. */}
           </div>
         </div>
       </header>
@@ -639,8 +630,6 @@ export default async function ShowDetailPage({
         showId={id}
         showName={show.name}
         showMeta={showMeta || undefined}
-        editHref={`/dashboard/shows/${id}/edit`}
-        reportHref={`/dashboard/shows/${id}/reports`}
         dayNumber={activeDay.day_number}
         totalDays={workDays.length}
         workDayId={activeDay.id}
