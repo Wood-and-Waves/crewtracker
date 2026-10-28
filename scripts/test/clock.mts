@@ -123,8 +123,16 @@ check('no punches at all on a travel day',
   isEligibleForBatch(started, true, 'meal_out'), false)
 
 const wrapped = [...started, at('2026-09-04T22:00:00Z', 'end')]
-check('no meal punches after wrap',
-  isEligibleForBatch(wrapped, false, 'meal_out'), false)
+// Wrapping first and filling the lunch in afterwards is an ordinary end of day
+// (Dan, 2026-10-28: M1 IN ALL refused on a room he had just wrapped). The
+// ORDER is chronology's job, below.
+check('a meal punch is still allowed after wrap',
+  isEligibleForBatch(wrapped, false, 'meal_out'), true)
+check('but it still needs its predecessor after wrap',
+  isEligibleForBatch(wrapped, false, 'meal_in'), false)
+check('and a meal that lands after the wrap is refused by chronology',
+  getChronologyError(new Date('2026-09-04T23:00:00Z'), 'meal_out', wrapped),
+  'M1 Out must be before Wrap.')
 
 // Chronology still does the job eligibility cannot: ordering the times.
 check('a lunch that ends before it starts is refused',

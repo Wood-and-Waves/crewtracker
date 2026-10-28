@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  PUNCH_ORDER, CREW_PUNCH_LABELS, getChronologyError, isEligibleForBatch, isWrapped,
+  PUNCH_ORDER, CREW_PUNCH_LABELS, getChronologyError, isEligibleForBatch,
   roundWallTime, clearBlockedReason, type Punch, type PunchType,
 } from '@/lib/punches'
 import type { Absence } from '@/lib/payroll'
@@ -65,11 +65,11 @@ export function punchRefusal(
       type === 'start' ? null
       : type === 'end' ? 'start'
       : PUNCH_ORDER[PUNCH_ORDER.indexOf(type) - 1]
-    const why = isWrapped(all) && type !== 'end'
-      ? 'You’ve already wrapped for today.'
-      : requirement
-        ? `Your ${CREW_PUNCH_LABELS[requirement]} isn’t recorded yet.`
-        : 'That isn’t available right now.'
+    // A wrapped day still takes a meal punch (see isEligibleForBatch), so the
+    // only way to land here is a missing predecessor.
+    const why = requirement
+      ? `Your ${CREW_PUNCH_LABELS[requirement]} isn’t recorded yet.`
+      : 'That isn’t available right now.'
     return `${why} Ask your PM if that’s not right.`
   }
   return null

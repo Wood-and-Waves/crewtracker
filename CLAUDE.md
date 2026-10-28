@@ -429,8 +429,8 @@ scripts/
                   (npm run dev:password -- <email> '<password>'). Service role, so it needs
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
-                  helper, no framework. 762 assertions as of 2026-10-04
-                  (payroll 42 + schedule 464 + clock 125 + rls 131).
+                  helper, no framework. 764 assertions as of 2026-10-28
+                  (payroll 42 + schedule 464 + clock 127 + rls 131).
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
@@ -1248,6 +1248,13 @@ hours actually worked, so those still punch normally.
 "is this `nextPunchType`". An earlier version used the latter, which left Wrap dead until every
 meal was filled in — and plenty of days have no second meal, so crew could not go home. `next`
 survives purely as the VISUAL lit key; other legal punches sit in the ghost register.
+**A WRAPPED DAY STILL TAKES A MEAL PUNCH** (2026-10-28). The rule used to refuse every meal
+punch once Wrap existed, so a PM who wrapped a room and then noticed M1 In was never recorded got
+"This action isn't available yet" from M1 IN ALL while the same time entered row by row worked
+(Dan, on a real show). Wrap first, fill the lunch in after, is an ordinary end of day. ORDER was
+never that clause's job: the batch picker and the crew route both run `getChronologyError`, which
+keeps a meal between its neighbours and before Wrap. Eligibility now asks only "does the
+predecessor exist", on the tracker and the crew clock alike. Pinned in `clock.mts`.
 
 **The crew screen is the tracker, for one person.** Same gesture (tap a punch cell → the
 TimeEntryModal-shaped editor, pre-filled, Save), same vocabulary (ink `BAND` masthead, the

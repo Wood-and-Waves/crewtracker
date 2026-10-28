@@ -268,8 +268,18 @@ function has(punches: Punch[], type: PunchType): boolean {
 }
 
 // Should this crew member RECEIVE a batch punch of `type`? Requires the prior
-// punch in the sequence to exist, this punch to be absent, and (for meal
-// punches) the day not yet wrapped. Travel-day crew are never eligible.
+// punch in the sequence to exist and this punch to be absent. Travel-day and
+// absent crew are never eligible.
+//
+// A WRAPPED DAY STILL TAKES A MEAL PUNCH (2026-10-28). This used to refuse
+// every meal punch once Wrap existed, and Dan hit it on a real show: he wrapped
+// the room at 3:15, saw M1 In was never recorded, pressed M1 IN ALL and got
+// "This action isn't available yet" — while entering the same time row by row
+// worked. Wrapping first and filling the lunch in afterwards is an ordinary
+// end of day, not a mistake. ORDER is already the chronology check's job: the
+// batch picker and the crew route both run getChronologyError, which keeps a
+// meal between its neighbours and before Wrap, so the open-day clause only
+// ever blocked a correction the time itself would have proven legal.
 //
 // Derived from PUNCH_ORDER, so a new meal needs no case added here.
 export function isEligibleForBatch(punches: Punch[], isTravelDay: boolean, type: PunchType, absence?: string | null): boolean {
@@ -277,8 +287,7 @@ export function isEligibleForBatch(punches: Punch[], isTravelDay: boolean, type:
   if (has(punches, type)) return false          // already punched
   if (type === 'start') return true
   if (type === 'end') return has(punches, 'start')
-  // Meal punches: the previous punch must exist and the day must be open.
-  if (has(punches, 'end')) return false
+  // Meal punches: the previous punch must exist.
   const previous = PUNCH_ORDER[PUNCH_ORDER.indexOf(type) - 1]
   return has(punches, previous)
 }
@@ -339,7 +348,6 @@ export function ineligibilityReason(punches: Punch[], isTravelDay: boolean, type
   if (!has(punches, previous)) {
     return previous === 'start' ? 'Not Started Yet' : `${PUNCH_LABELS[previous]} Not Set`
   }
-  if (has(punches, 'end')) return 'Already Wrapped'
   if (has(punches, type)) return 'Already Punched'
   return 'Excluded'
 }
