@@ -1486,7 +1486,10 @@ Show is required), then a roster whose header is `Name, Role, Room, Day Rate, Ph
 one column per date; an optional `Day` row under the header says what the SHOW does each day
 ("Travel + Load-in"); a crew cell is that PERSON's day — blank off, `W` works, `T` travel day,
 `TI` travels in and works, `TO` works and travels out. Download template on the page writes the
-example. **Built to survive Excel**: `M/D/YYYY` dates, padded commas and quoted `"Dallas, TX"`
+example, and **the key is in the file**: rows starting with `#` are ignored by the parser, and the
+template ends with four of them explaining the Day words and the cell codes (Dan, 2026-11-06: "How
+do I explain the day type options?" — in the spreadsheet, where the typing happens, not on the
+page). **Built to survive Excel**: `M/D/YYYY` dates, padded commas and quoted `"Dallas, TX"`
 all parse (`lib/csv.ts` is a real reader; the Directory importer's `split(',')` is not).
 
 `lib/showImport.ts` is PURE and judges the whole file before anything is written: every error

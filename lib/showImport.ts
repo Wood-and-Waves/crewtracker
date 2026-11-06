@@ -220,7 +220,12 @@ const ROSTER_COLUMNS: Record<string, string[]> = {
 export function parseShowImport(text: string, ctx: ImportContext): ImportResult {
   const errors: ImportIssue[] = []
   const warnings: ImportIssue[] = []
-  const records = parseCsv(text).filter(r => r.cells.some(c => c.trim() !== ''))
+  // Blank rows are nothing, and a row starting with # is a note to the person
+  // filling the file in — the template ends with a key written that way, so
+  // the explanation lives where the typing happens rather than on a screen.
+  const records = parseCsv(text)
+    .filter(r => r.cells.some(c => c.trim() !== ''))
+    .filter(r => !(r.cells[0] ?? '').trim().startsWith('#'))
 
   // The header is the first row that has a Name column AND a date: the two
   // things no detail row has. Columns may come in any order.
@@ -413,6 +418,11 @@ export function buildTemplateCsv(start: string): string {
     csvLine(['Alex Reyes', 'A1', 'Ballroom', 650, '(214) 555-0101', 'alex@example.com', 'T', 'W', 'W', 'TO']),
     csvLine(['Nina Brennan', 'Stagehand', 'Ballroom', 350, '', '', '', 'W', 'W', 'W']),
     csvLine(['Theo Lindqvist', 'Camera Operator', 'Breakout A', 500, '', '', 'TI', 'W', 'W', '']),
+    '',
+    csvLine(['# Rows starting with # are ignored. Delete these once you know the codes.']),
+    csvLine(['# Day row: what the SHOW does that day. Travel, Load-in, Rehearsal, Show, Load-out, joined with +']),
+    csvLine(['# Crew cells: W works · T travel day, no work · TI travels in and works · TO works and travels out · blank = not on that day']),
+    csvLine(['# Dates can be 2026-11-10 or 11/10/2026 and must run every day from first to last. Timezone: Eastern, Central, Mountain, Pacific, Alaska or Hawaii.']),
   ].join('\n') + '\n'
 }
 

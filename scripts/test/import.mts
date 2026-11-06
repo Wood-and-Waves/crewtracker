@@ -74,6 +74,8 @@ const tpl = buildTemplateCsv('2026-11-10')
 const t = parseShowImport(tpl, ctx)
 check('no errors', t.errors, [])
 check('no warnings', t.warnings, [])
+check('the key at the foot of the template is ignored, not read as crew', t.plan?.crew.length, 3)
+check('the template carries the key', tpl.includes('# Crew cells: W works'), true)
 check('show details', t.plan?.show, {
   name: 'Example Sales Kickoff', venue: 'Hilton Anatole', cityState: 'Dallas, TX', clientCompany: 'Example Client',
   jobNumber: '2611-04', notes: 'Dock B for load-in', timezone: 'America/Chicago', confirmed: true, financials: true,
@@ -148,6 +150,10 @@ check('a known name without it is fine', parseShowImport('Show,S\nName,Role,Room
 const noRates = { ...ctx, canEditRates: false }
 check('rates without the pay-rate permission warn', parseShowImport('Show,S\nName,Role,Room,Rate,2026-11-10\nAlex Reyes,A1,R,500,W', noRates).warnings[0].message,
   'Your account cannot set pay rates, so every day rate in the file lands as 0.')
+
+console.log('\n# notes')
+check('a # row anywhere is skipped', bad(['# my notes', 'Show,S', '# more', 'Name,Role,Room,2026-11-10', '# between', 'A,A1,R,W', '#last']).plan?.crew.map(c => c.name), ['A'])
+check('a # row is skipped even with leading spaces', bad(['Show,S', 'Name,Role,Room,2026-11-10', '  # note', 'A,A1,R,W']).errors, [])
 
 console.log('\nrooms')
 check('rooms are matched case-insensitively, first spelling kept',
