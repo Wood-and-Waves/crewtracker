@@ -107,7 +107,7 @@ export default function BatchTimeModal({
           )}
 
           {!markTravel && (
-            <div className="flex gap-3">
+            <div className="flex gap-3 mb-4">
               <input
                 type="date"
                 value={dateStr}
