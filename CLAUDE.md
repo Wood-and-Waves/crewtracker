@@ -298,6 +298,7 @@ app/
                                   position with its answer; the strip, and the definitions editor under it
     shows/[id]/reports/page.tsx — By Day / By Crew, Master Summary, CSV/PDF export, Send Hours, Final Report
     shows/new/page.tsx          — create a show: details, payroll preset, and the rooms×days positions grid
+    shows/import/page.tsx       — IMPORT A SHOW FROM A CSV: details, days, rooms and crew with their travel legs, in one file (see "Importing a show" below)
     schedule/page.tsx           — the scheduler's work queue: shows sent to scheduling that still
                                   need hands. The shows x dates chart that used to sit under it was
                                   deleted 2026-09-08; see "Already built" below.
@@ -342,6 +343,7 @@ components/
   DayActivitiesGrid.tsx          — one row per day, five toggles, the derived label; New Show holds it in state, Edit Show saves each toggle
   CrewDirectoryClient.tsx / EditCrewMemberClient.tsx — Directory goes to a real data table on desktop
   TeamListClient.tsx / EditMemberClient.tsx / PermissionsEditor.tsx / InviteTeammateModal.tsx — org member admin
+  ImportShowClient.tsx           — the import page: parse in the browser, preview, then write through the caller's session in New Show's order
   EditShowClient.tsx             — all Edit Show fields batched into one Save button; Crew & Rates $ display respects Shoulder Surfer Mode; two-column on desktop
   RulesetFields.tsx              — the shared payroll-rule form, used by Edit Show and the presets editor
   PayrollPresetsEditor.tsx       — named org-level payroll presets (Settings)
@@ -388,6 +390,8 @@ lib/
                   the profile + ALL its memberships read in parallel (2026-10-04); tested in
                   schedule.mts. session.ts is server-only and cannot be imported by a test
   timezones.ts  — the one shared timezone list (New Show and Edit Show used to disagree)
+  csv.ts        — a real RFC 4180 reader (quoted commas and line breaks, CRLF, BOM); the Directory's split(',') importer is NOT one
+  showImport.ts — PURE: the CSV → a plan of show, days, rooms and crew, with errors and warnings by row; buildTemplateCsv()
   crew.ts       — crew-member helpers
   phone.ts      — phone formatting/normalisation
   invite.ts     — acceptInvite(): finalizes invite, seeds default av_roles for new orgs
@@ -430,12 +434,14 @@ scripts/
                   no old password — which is why it refuses the production ref, no override.
   test/         — `npm test` runs all four in order; each is plain Node with a tiny check()
                   helper, no framework. 764 assertions as of 2026-10-28
-                  (payroll 42 + schedule 464 + clock 127 + rls 131).
+                  (payroll 42 + schedule 464 + clock 127 + rls 131), plus import 67 since 2026-11-06.
     payroll.mts   — the calculator, against the Swift original (npm run test:payroll)
     schedule.mts  — date arithmetic, the call grid, canUseScheduling, the scheduling queue,
                     the ready email, and the crew-days-changed copy (npm run test:schedule)
     clock.mts     — crew clock URLs/expiry, the Slack list, roundWallTime, and the
                     two-check punch guard (npm run test:clock)
+    import.mts    — the CSV reader and the show-import planner against hand-written files,
+                    including Excel's re-saved shape (npm run test:import)
     rls.mts       — real anon/authenticated sessions against DEV; the ONLY test that can
                     catch an RLS bug, since db:sql bypasses RLS (npm run test:rls). Since
                     2026-09-06 it has a non-admin ASSIGNED PM fixture (dave) — before that,
@@ -1469,6 +1475,33 @@ by a test that says so out loud.
 
 **Hours, never money** — the loader does not even select `day_rate` — and it never reads
 `punches.source`: a crew-entered hour is worth exactly what a PM-entered one is.
+
+## Importing a show from a CSV (2026-11-06)
+
+Dan: *"a way to import a full crew and rooms and dates into a show without manually adding."*
+`/dashboard/shows/import`, reached from **Import CSV** beside + New Show, same `can_create_shows`
+gate. One file, two parts: `Key,Value` rows for the show details (Show, Venue, City, Client, Job
+Number, Timezone, Confirmed, Financials, Contact Name, Contact Phone, Notes, Payroll Preset — only
+Show is required), then a roster whose header is `Name, Role, Room, Day Rate, Phone, Email` plus
+one column per date; an optional `Day` row under the header says what the SHOW does each day
+("Travel + Load-in"); a crew cell is that PERSON's day — blank off, `W` works, `T` travel day,
+`TI` travels in and works, `TO` works and travels out. Download template on the page writes the
+example. **Built to survive Excel**: `M/D/YYYY` dates, padded commas and quoted `"Dallas, TX"`
+all parse (`lib/csv.ts` is a real reader; the Directory importer's `split(',')` is not).
+
+`lib/showImport.ts` is PURE and judges the whole file before anything is written: every error
+names the spreadsheet row, and the Create button does not exist while there is one. The client
+then writes in New Show's order through the caller's own session — shows (with `created_by`),
+the preset copied into `payroll_rulesets`, `work_days`, every room on EVERY day (a travel-day
+timecard still needs a room), new `crew_members` and `rate_cards` (a read then a plain insert,
+never StaffRoomModal's `onConflict` upsert, which has no matching index), new `av_roles`, then
+`timecards` with the three travel flags and `booking_status = 'confirmed'` — the sheet is a roster
+of people already booked, and a Not Asked chip on sixty rows would be noise. Not transactional,
+like New Show: the created id is kept and pressing again RESUMES, reading what landed before
+writing. No positions, no punches, no migration, no service role. Shoulder-surfer-shaped rules
+hold: a caller without `can_manage_crew_directory` is refused on an unknown name in the preview,
+and one without `can_edit_pay_rates` is told the rates will land as 0 (the trigger drops them
+silently otherwise).
 
 ## Show access: PM-side and crew-side (2026-09-06)
 

@@ -192,9 +192,14 @@ export default async function DashboardPage({
       <div className={cn(BAND, '-mx-6 mb-6 flex items-center justify-between gap-4 px-6 py-4 md:-mx-10 md:px-10')}>
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Shows</h1>
         {user.can('can_create_shows') && (
-          <Link href="/dashboard/shows/new">
-            <Button>+ New Show</Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/shows/import">
+              <Button variant="ghost" className="bg-transparent text-band-ink border-band-ink hover:bg-band-ink/10">Import CSV</Button>
+            </Link>
+            <Link href="/dashboard/shows/new">
+              <Button>+ New Show</Button>
+            </Link>
+          </div>
         )}
       </div>
 
