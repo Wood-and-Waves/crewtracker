@@ -106,6 +106,10 @@ export default function ImportShowClient({
           end_date: plan.days[plan.days.length - 1].date,
           timezone_identifier: plan.show.timezone,
           confirmed_at: plan.show.confirmed ? new Date().toISOString() : null,
+          // Stamped as already told: the sheet is a roster of people who are
+          // booked and know it, so a "Tell the crew" button would only invite
+          // an email nobody needs (Dan, 2026-11-12). See migration 0043.
+          confirmed_notice_sent_at: plan.show.confirmed ? new Date().toISOString() : null,
           created_by: userId,
         })
         .select('id')
