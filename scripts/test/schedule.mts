@@ -41,6 +41,7 @@ import { buildDigestEmail, describeEvent } from '../../lib/digestEmail.ts'
 import { buildDaysChangedEmail } from '../../lib/daysChangedEmail.ts'
 import { buildPmDeclinedEmail, buildPmInviteEmail } from '../../lib/pmInviteEmail.ts'
 import { routeEmail, isProductionData } from '../../lib/sendEmail.ts'
+import { groupDayRuns, formatDayRun, buildSubjects, shortDay } from '../../lib/preSendIssues.ts'
 import {
   addRole, removeRole, clearDay, copyDayTo, cellLines, cellCount,
   roomDayIndices, roomHasAnyCall, peakPerDay, plannedPositions, validateRooms,
@@ -1692,6 +1693,28 @@ console.log('\n--- days changed email ---')
   check('and is not on the switcher', foreign.organizations.length, 0)
   const mixed = r(A, [row({ profile_id: 'someone-else', can_manage_users: true }), row({ can_manage_users: false })])
   check('with both present, only the caller\'s own row counts', [mixed.organizationId, mixed.permissions.can_manage_users], [A, false])
+}
+
+// ---- Final Report pre-send checks name their days (2026-11-18) ----
+console.log('\npre-send checks name their days')
+{
+  const d = (n: number, date: string) => ({ dayNumber: n, date })
+  const d1 = d(1, '2026-11-16'), d2 = d(2, '2026-11-17'), d3 = d(3, '2026-11-18'), d5 = d(5, '2026-11-20')
+  check('a weekday and the date, read as the calendar date', shortDay('2026-11-16'), 'Mon 16')
+  check('a timestamp still names its own date', shortDay('2026-11-16T05:00:00.000Z'), 'Mon 16')
+  check('one day', formatDayRun({ from: d1, to: d1 }), 'Day 1 (Mon 16)')
+  check('a run', formatDayRun({ from: d1, to: d3 }), 'Days 1–3 (Mon 16 – Wed 18)')
+  check('consecutive days collapse, a gap starts a new run',
+    groupDayRuns([d3, d1, d2, d5]).map(formatDayRun), ['Days 1–3 (Mon 16 – Wed 18)', 'Day 5 (Fri 20)'])
+  check('the same day twice is one day', groupDayRuns([d2, d2]).length, 1)
+  const room = buildSubjects([{ name: 'Registration', day: d5 }, { name: 'Registration', day: d(4, '2026-11-19') }])
+  check('one room empty on two days is ONE subject with its days',
+    room.subjects.map(s => [s.name, s.runs.map(formatDayRun)]), [['Registration', ['Days 4–5 (Thu 19 – Fri 20)']]])
+  const many = buildSubjects(['A', 'B', 'C', 'D', 'E', 'F'].map(name => ({ name, day: d1 })))
+  check('four names, then a count of the rest', [many.subjects.map(s => s.name), many.more], [['A', 'B', 'C', 'D'], 2])
+  check('subjects keep the order they first appear in',
+    buildSubjects([{ name: 'Zed', day: d1 }, { name: 'Amy', day: d1 }, { name: 'Zed', day: d2 }]).subjects.map(s => s.name), ['Zed', 'Amy'])
+  check('a subject with no day carries no runs', buildSubjects([{ name: 'Alex', day: null }]).subjects[0].runs, [])
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`)

@@ -15,7 +15,8 @@ import { siteOrigin } from '@/lib/siteOrigin'
 import ExportCSVButton from '@/components/ExportCSVButton'
 import ExportPDFButton from '@/components/ExportPDFButton'
 import SendHoursButton from '@/components/SendHoursButton'
-import SendFinalReportButton, { type PreSendIssue } from '@/components/SendFinalReportButton'
+import SendFinalReportButton from '@/components/SendFinalReportButton'
+import { buildSubjects, type PreSendIssue, type IssueDay } from '@/lib/preSendIssues'
 import Chip from '@/components/ui/Chip'
 import SectionHead from '@/components/ui/SectionHead'
 import { BAND, RULE_MAJOR } from '@/lib/panel'
@@ -316,24 +317,30 @@ export default async function ShowReportPage({
       punchesFor(t.id).some(p => p.punch_type === 'start') &&
       !punchesFor(t.id).some(p => p.punch_type === 'end'))
 
-    const nameList = (rows: any[]) => {
-      const names = [...new Set(rows.map(r => r.crew_member_name))]
-      return names.slice(0, 4).join(', ') + (names.length > 4 ? ` and ${names.length - 4} more` : '')
+    // Every check names its DAYS (Dan, 2026-11-18: "it doesn't tell me the
+    // days it is having issues with"); the dialog links each run of days to
+    // the tracker. lib/preSendIssues.ts groups and formats them.
+    const roomById = new Map((rooms || []).map(r => [r.id, r]))
+    const issueDay = (workDayId: string | undefined): IssueDay | null => {
+      const d = workDayId ? workDayById.get(workDayId) : undefined
+      return d ? { dayNumber: d.day_number, date: d.date } : null
     }
+    const dayOfTimecard = (t: any) => issueDay(roomById.get(t.room_id)?.work_day_id)
+    const crewPairs = (rows: any[]) => rows.map(t => ({ name: t.crew_member_name, day: dayOfTimecard(t) }))
 
     if (noStart.length) out.push({
       label: `${noStart.length} not started`,
-      detail: nameList(noStart),
+      ...buildSubjects(crewPairs(noStart)),
     })
     if (noWrap.length) out.push({
       label: `${noWrap.length} never wrapped`,
-      detail: nameList(noWrap),
+      ...buildSubjects(crewPairs(noWrap)),
     })
 
     const emptyRooms = (rooms || []).filter(r => !(timecards || []).some(t => t.room_id === r.id))
     if (emptyRooms.length) out.push({
       label: `${emptyRooms.length} empty ${emptyRooms.length === 1 ? 'room' : 'rooms'}`,
-      detail: [...new Set(emptyRooms.map(r => r.name))].join(', '),
+      ...buildSubjects(emptyRooms.map(r => ({ name: r.name, day: issueDay(r.work_day_id) }))),
     })
 
     const emptyDays = (workDays || []).filter(d => {
@@ -342,7 +349,8 @@ export default async function ShowReportPage({
     })
     if (emptyDays.length) out.push({
       label: `${emptyDays.length} ${emptyDays.length === 1 ? 'day' : 'days'} with no crew`,
-      detail: emptyDays.map(d => `Day ${d.day_number}`).join(', '),
+      // One nameless subject: the days are the whole story.
+      ...buildSubjects(emptyDays.map(d => ({ name: '', day: issueDay(d.id) }))),
     })
 
     // Crew-entered times. NOT a problem — the whole point of clock links is
@@ -357,7 +365,7 @@ export default async function ShowReportPage({
       )]
       out.push({
         label: `${crewEntered.length} ${crewEntered.length === 1 ? 'time' : 'times'} entered by crew`,
-        detail: people.slice(0, 4).join(', ') + (people.length > 4 ? ` and ${people.length - 4} more` : ''),
+        ...buildSubjects(people.map(name => ({ name: name as string, day: null }))),
       })
     }
 

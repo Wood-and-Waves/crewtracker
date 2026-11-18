@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Button from '@/components/ui/Button'
+import { formatDayRun, type PreSendIssue } from '@/lib/preSendIssues'
 
 // The PM's end-of-show sign-off. Everything of substance happens in
 // /api/reports/final: this component sends nothing but a show id and shows
@@ -11,7 +13,6 @@ import Button from '@/components/ui/Button'
 // The pre-send checks are deliberately NON-FINANCIAL. The PM is asserting that
 // times are complete, so they get told what looks incomplete — never an amount.
 
-export type PreSendIssue = { label: string; detail: string }
 
 export default function SendFinalReportButton({
   showId,
@@ -99,7 +100,29 @@ export default function SendFinalReportButton({
                 <ul className="text-xs text-muted space-y-1">
                   {issues.map((i, n) => (
                     <li key={n}>
-                      <span className="text-ink">{i.label}</span> — {i.detail}
+                      <span className="text-ink">{i.label}</span> —{' '}
+                      {i.subjects.map((s, k) => (
+                        <Fragment key={k}>
+                          {k > 0 && (s.runs.length ? ' · ' : ', ')}
+                          {s.name}
+                          {s.name && s.runs.length > 0 && ', '}
+                          {s.runs.map((r, j) => (
+                            <Fragment key={j}>
+                              {j > 0 && ', '}
+                              {/* Each run of days opens its first day on the
+                                  tracker, so a missed punch is one tap away. */}
+                              <Link
+                                prefetch={false}
+                                href={`/dashboard/shows/${showId}?day=${r.from.dayNumber}`}
+                                className="text-accent underline underline-offset-2 hover:opacity-80"
+                              >
+                                {formatDayRun(r)}
+                              </Link>
+                            </Fragment>
+                          ))}
+                        </Fragment>
+                      ))}
+                      {i.more > 0 && ` and ${i.more} more`}
                     </li>
                   ))}
                 </ul>
