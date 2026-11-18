@@ -105,7 +105,7 @@ export async function POST(request: Request) {
   const { data: ruleset } = await admin
     .from('payroll_rulesets').select('*').eq('show_id', showId).single()
   if (!ruleset) {
-    return NextResponse.json({ error: 'This show has no payroll ruleset.' }, { status: 400 })
+    return NextResponse.json({ error: 'This show has no pay rules.' }, { status: 400 })
   }
 
   const { data: workDays } = await admin
@@ -203,7 +203,7 @@ export async function POST(request: Request) {
       html: mail.html,
       attachments: [
         { filename: `${safeName}_Report.pdf`, content: pdfBuffer.toString('base64') },
-        { filename: `${safeName}_Payroll.csv`, content: Buffer.from(csv, 'utf8').toString('base64') },
+        { filename: `${safeName}_Report.csv`, content: Buffer.from(csv, 'utf8').toString('base64') },
       ],
     })
     if (sendError) {

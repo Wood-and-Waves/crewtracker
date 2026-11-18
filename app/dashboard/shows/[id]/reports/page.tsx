@@ -223,7 +223,7 @@ export default async function ShowReportPage({
       <div className="p-6 md:p-10">
         <ShowNav showId={id} current="reports" schedulingOn={schedulingOn} />
         <h1 className="text-2xl font-bold mt-4">{show.name}</h1>
-        <p className="text-muted mt-2">No payroll ruleset found for this show.</p>
+        <p className="text-muted mt-2">No pay rules found for this show.</p>
       </div>
     )
   }

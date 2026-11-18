@@ -278,7 +278,7 @@ export default function EditShowClient({
 
     if (error) { setSaveError(error.message); return }
     if (!data || data.length === 0) {
-      setSaveError("Couldn't save the payroll rules — you may not have permission.")
+      setSaveError("Couldn't save the pay rules — you may not have permission.")
       return
     }
     noteSaved()
@@ -552,7 +552,7 @@ export default function EditShowClient({
           something a PM needs to know about. */}
       {canEditRates && (
         <section className="mb-6">
-          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Rates &amp; Payroll Calculation</p>
+          <p className="mb-3 border-b-[3px] border-ink pb-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-ink">Rates &amp; Pay Calculation</p>
           <FieldRow label="Show Dollar Amounts">
             <Toggle
               checked={showFinancials}

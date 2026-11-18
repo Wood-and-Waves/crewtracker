@@ -74,7 +74,7 @@ export default async function SettingsPage() {
   if (user.can('can_manage_rulesets')) {
     sections.push({
       id: 'presets',
-      label: 'Payroll presets',
+      label: 'Pay rule presets',
       description: 'Named rule sets, copied into a show when it is created.',
       node: <PayrollPresetsEditor organizationId={user.organizationId} initialPresets={(presets || []) as any} />,
     })

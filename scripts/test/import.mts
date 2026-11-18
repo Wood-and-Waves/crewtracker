@@ -127,7 +127,7 @@ check('no show name', bad(['Venue,V', 'Name,Role,Room,2026-11-10', 'A,A1,R,W']).
   'The show needs a name: a row reading Show,<name> above the roster.')
 check('an unknown detail key', bad(['Show,S', 'Colour,Blue', 'Name,Role,Room,2026-11-10', 'A,A1,R,W']).errors.map(e => e.row), [2])
 check('an unknown preset', bad(['Show,S', 'Payroll Preset,Gold', 'Name,Role,Room,2026-11-10', 'A,A1,R,W']).errors[0].message,
-  'No payroll preset called "Gold". Leave it blank for the default.')
+  'No pay rule preset called "Gold". Leave it blank for the default.')
 check('a known preset, any case', bad(['Show,S', 'Preset,union', 'Name,Role,Room,2026-11-10', 'A,A1,R,W']).plan?.show.presetName, 'Union')
 check('same person twice in one room on one day', bad(['Show,S', 'Name,Role,Room,2026-11-10', 'A,A1,R,W', 'A,A2,R,W']).errors[0].message,
   'A is already in R on 2026-11-10 (row 3). One person is in a room once a day.')

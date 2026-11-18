@@ -37,7 +37,7 @@ export default function ExportCSVButton({
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `${showName.replace(/ /g, '_')}_Payroll.csv`
+    a.download = `${showName.replace(/ /g, '_')}_Report.csv`
     a.click()
     URL.revokeObjectURL(url)
   }

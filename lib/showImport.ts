@@ -107,7 +107,7 @@ const KEY_ALIASES: Record<DetailKey, string[]> = {
   contactName: ['contactname', 'onsitecontact', 'contact', 'onsitecontactname'],
   contactPhone: ['contactphone', 'onsitephone', 'phone', 'onsitecontactphone'],
   notes: ['notes', 'shownotes'],
-  presetName: ['payrollpreset', 'preset', 'payrollrules', 'rules'],
+  presetName: ['payrollpreset', 'preset', 'payrollrules', 'rules', 'payrules', 'payrulepreset'],
 }
 
 function keyFor(cell: string): DetailKey | null {
@@ -262,7 +262,7 @@ export function parseShowImport(text: string, ctx: ImportContext): ImportResult 
       case 'presetName': {
         if (!value) break
         const found = ctx.presetNames.find(p => p.trim().toLowerCase() === value.toLowerCase())
-        if (!found) errors.push({ row: r.line, message: `No payroll preset called "${value}". Leave it blank for the default.` })
+        if (!found) errors.push({ row: r.line, message: `No pay rule preset called "${value}". Leave it blank for the default.` })
         else show.presetName = found
         break
       }

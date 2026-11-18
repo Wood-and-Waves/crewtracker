@@ -28,7 +28,7 @@ function escapeHtml(s: string) {
 }
 
 export function buildFinalReportEmail(input: FinalReportEmailInput) {
-  const subject = `Final Payroll Report: ${input.showName}`
+  const subject = `Final Report: ${input.showName}`
   const subtitle = [input.clientCompany, input.jobNumber].filter(Boolean).join(' — ')
   const where = input.cityState ? ` · ${input.cityState}` : ''
 
@@ -37,8 +37,8 @@ export function buildFinalReportEmail(input: FinalReportEmailInput) {
     subtitle,
     `${input.dates}${where}`,
     '',
-    'This show is closed out and its times are final. Attached are the payroll',
-    'timesheets (PDF) and the payroll data (CSV).',
+    'This show is closed out and its times are final. Attached are the timesheets',
+    '(PDF) and the same hours as a spreadsheet (CSV).',
     '',
     `${input.finalizedNote}.`,
     '',
@@ -51,8 +51,8 @@ export function buildFinalReportEmail(input: FinalReportEmailInput) {
   ${subtitle ? `<p style="font-size:14px;color:#52525b;margin:0 0 2px">${escapeHtml(subtitle)}</p>` : ''}
   <p style="font-size:14px;color:#52525b;margin:0 0 20px">${escapeHtml(input.dates)}${escapeHtml(where)}</p>
   <p style="font-size:15px;line-height:1.5;margin:0 0 16px">
-    This show is closed out and its times are final. Attached are the payroll timesheets (PDF) and
-    the payroll data (CSV).
+    This show is closed out and its times are final. Attached are the timesheets (PDF) and
+    the same hours as a spreadsheet (CSV).
   </p>
   <p style="font-size:14px;color:#52525b;margin:0 0 24px">${escapeHtml(input.finalizedNote)}.</p>
   <p style="font-size:12px;color:#a1a1aa;margin:0">Sent from CrewTracker.app</p>

@@ -131,7 +131,7 @@ export default function ImportShowClient({
       const { error: e } = await supabase
         .from('payroll_rulesets')
         .insert(preset ? { show_id: showId, ...pickRulesetValues(preset) } : { show_id: showId })
-      if (e) return fail(`Created the show, but the payroll rules did not land: ${e.message}`)
+      if (e) return fail(`Created the show, but the pay rules did not land: ${e.message}`)
     }
 
     // 3. Work days.
@@ -352,7 +352,7 @@ export default function ImportShowClient({
                 ['Confirmed', plan.show.confirmed ? 'Yes' : 'No'],
                 ['Financials', plan.show.financials ? 'Yes' : 'No'],
                 ['On-site contact', [plan.show.contactName, plan.show.contactPhone].filter(Boolean).join(' · ')],
-                ['Payroll rules', plan.show.presetName ?? (presets.find(p => p.is_default)?.name ? `${presets.find(p => p.is_default)!.name} (default)` : 'Database defaults')],
+                ['Pay rules', plan.show.presetName ?? (presets.find(p => p.is_default)?.name ? `${presets.find(p => p.is_default)!.name} (default)` : 'Database defaults')],
                 ['Notes', plan.show.notes],
               ] as [string, string][]).filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="contents">

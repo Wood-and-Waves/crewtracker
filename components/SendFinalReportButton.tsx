@@ -81,8 +81,8 @@ export default function SendFinalReportButton({
           <>
             <h2 className="text-lg font-bold text-ink mb-1">Send Final Report</h2>
             <p className="text-sm text-muted mb-4">
-              Signs off <span className="text-ink">{showName}</span> as complete and emails the full
-              payroll report to the {recipientCount} {recipientCount === 1 ? 'address' : 'addresses'} an
+              Signs off <span className="text-ink">{showName}</span> as complete and emails the final
+              report to the {recipientCount} {recipientCount === 1 ? 'address' : 'addresses'} an
               admin has configured. This locks the show.
             </p>
 

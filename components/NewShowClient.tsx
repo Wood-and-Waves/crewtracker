@@ -462,9 +462,9 @@ export default function NewShowClient({
       </section>
 
       <section className="mb-9">
-        <NumberedHead n="2" title="Payroll Rules" className="mb-4" />
+        <NumberedHead n="2" title="Pay Rules" className="mb-4" />
         <Select
-          ariaLabel="Payroll preset"
+          ariaLabel="Pay rule preset"
           value={presetId}
           onChange={setPresetId}
           options={[
